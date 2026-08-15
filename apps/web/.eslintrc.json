@@ -1,0 +1,13 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]",
+        "message": "No hex colors outside tokens.css (Part I, BOARD constraint 3). Use var(--token)."
+      }
+    ]
+  },
+  "ignorePatterns": ["node_modules/", ".next/", "public/graph.json"]
+}

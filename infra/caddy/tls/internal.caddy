@@ -1,0 +1,9 @@
+# TLS_MODE=internal (the default).
+#
+# Caddy's own internal CA issues the cert. Zero secrets, zero external network, boots on a
+# fresh clone — which is why it is the default: nobody should be blocked on a Tailscale
+# auth key to see the app.
+#
+# Cost: the browser does not trust Caddy's root CA until you install it. On the phone that
+# means one "install profile" step. When that becomes annoying, switch to TLS_MODE=tailscale.
+tls internal

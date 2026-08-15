@@ -1,0 +1,25 @@
+node_modules/
+.next/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+# runner scratch workspaces (per-run cwd, §3.2)
+.runs/
+apps/runner/.workspaces/
+
+# generated layout (ADR-003 — build artifact, never committed)
+apps/web/public/graph.json
+
+# local volumes
+.volumes/
+
+.DS_Store
+Thumbs.db
+*.log

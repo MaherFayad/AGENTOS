@@ -1,0 +1,232 @@
+/* =============================================================================
+ * tokens.css — spec Part I (§1.1–§1.6)
+ *
+ * THIS IS THE ONLY FILE IN THE REPOSITORY PERMITTED TO CONTAIN A COLOR LITERAL.
+ * Every other file references var(--token) or, preferably, the Tailwind utility
+ * that maps to it (bg-bg-2, text-ink-2, border-line, rounded-pill, …).
+ * `node scripts/check-tokens.mjs` fails the build on any hex / rgb() / rgba() /
+ * named CSS color found anywhere else under apps/web.
+ *
+ * The values in §1.1 and §1.2 are transcribed VERBATIM from the spec of record.
+ * They were extracted from the live site's stylesheet — they are not
+ * approximations and must not be "improved". Changing one requires an ADR.
+ *
+ * THE RULE THAT CARRIES THE LOOK (§1.3):
+ *   Chrome is monochrome. Color is data ink.
+ *   Surfaces, borders, tabs, icons and labels use ivory / ink / line on
+ *   near-black. Color appears ONLY where it carries a value — status, delta,
+ *   chart series — plus the single copper accent for "alive" things.
+ *   Before coloring anything, answer: what value is this communicating?
+ *   No answer → --ivory / --ivory-2 / --ink-2 / --ink-3 / --line.
+ *
+ * Owner: design-system-guardian · Contract: comms/contracts/design-tokens.md
+ * ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+ * §1.1 Color — dark theme (:root, the product default)   [VERBATIM]
+ * -------------------------------------------------------------------------- */
+:root {
+  --bg:        #111114;   /* app background */
+  --bg-2:      #1B1B21;   /* raised surfaces */
+  --bg-3:      #060608;   /* deepest wells (map canvas edge, hero frame) */
+  --ivory:     #ECECEE;   /* primary text + node fill */
+  --ivory-2:   #B2B2B9;   /* secondary text */
+  --ink-2:     #84848C;   /* tertiary text / labels */
+  --ink-3:     #6B6B73;   /* faint text / disabled */
+  --copper:    #ECECEE;   /* accent (dark mode maps copper→ivory for CTAs) */
+  --copper-ink:#131315;   /* text on copper */
+  --line:      rgba(255,255,255,.10);  /* hairlines */
+  --line-2:    rgba(255,255,255,.16);  /* stronger hairlines */
+  --card:      rgba(255,255,255,.025); /* card fill */
+  --card-2:    rgba(255,255,255,.05);  /* card hover / raised */
+  --glass:     rgba(13,13,15,.72);     /* floating nav / drawers (with backdrop-blur) */
+  --screen:    #101013;   /* embedded "screen" panels */
+  --screen-2:  #16161A;
+}
+
+/* -----------------------------------------------------------------------------
+ * §1.2 Color — light theme (body.light, marketing default)   [VERBATIM]
+ *
+ * The theme switch is exactly this: toggle class `light` on <body>.
+ * Identical variable names in both themes. NO COMPONENT MAY BRANCH ON THEME —
+ * no `dark:` / `light:` Tailwind variants, no `theme === 'light' ? … : …`.
+ * -------------------------------------------------------------------------- */
+body.light {
+  --bg: #F4F4F5;  --bg-2: #ECECEE;  --bg-3: #FFFFFF;
+  --ivory: #161618;  --ivory-2: #4C4C54;  --ink-2: #6E6E76;  --ink-3: #8D8D95;
+  --copper: #18181B;  --copper-ink: #FFFFFF;
+  --line: rgba(20,20,24,.10);  --line-2: rgba(20,20,24,.17);
+  --card: #FFFFFF;  --card-2: #EBEBED;
+  --glass: rgba(244,244,245,.80);
+  --screen: #FFFFFF;  --screen-2: #F4F4F6;
+}
+
+/* -----------------------------------------------------------------------------
+ * §1.3 Data ink — the ONLY color permitted outside monochrome chrome.
+ *
+ * Named `--ink-*` on purpose: the name is the enforcement. A data-ink token on
+ * a chrome background or border is a review failure and check-tokens.mjs flags
+ * it. Legitimate homes: chart series, status chips, delta numerals, progress
+ * bars, the live-node ring, the LIVE counter numeral, the NAVIGATION eyebrow.
+ *
+ * Data ink does NOT swap with the theme — a "green means on-track" that changes
+ * hue between themes is a lie about the data. Same values in body.light.
+ *
+ * Note the collision hazard, and read it twice:
+ *   --copper      is the monochrome CTA accent (ivory in dark, near-black in light)
+ *   --ink-copper  is the DATA-INK copper for "alive" things
+ *   --ink-2/--ink-3 are CHROME text greys, not data ink.
+ * -------------------------------------------------------------------------- */
+:root {
+  --ink-copper:    #C9784A;  /* live-node ring, edge pulse dots, orange satellites */
+  --ink-copper-2:  #E08A50;  /* LIVE counter numeral, NAVIGATION eyebrow (lighter end) */
+  --ink-teal:      #4ECDB0;  /* success, "On track", positive deltas, check chips */
+  --ink-coral:     #E5484D;  /* "At risk", stalled deals, pipeline-by-stage bars */
+  --ink-coral-2:   #F06A6D;  /* content area-chart stroke (lighter end) */
+  --ink-lavender:  #8B8DF0;  /* Meta Ads area fill */
+  --ink-lavender-2:#A5A7F5;  /* demo-card chips (lighter end) */
+  --ink-amber:     #E5A13C;  /* signal warnings, "Limited build slots" chip */
+  --ink-blue:      #6AA1F0;  /* links, HubSpot tint — sparse */
+
+  /* Derived tints. Chips and bars need a hairline and a wash of the same hue;
+     these exist so a component never writes an alpha literal. */
+  --ink-copper-line:   color-mix(in srgb, var(--ink-copper) 34%, transparent);
+  --ink-copper-fill:   color-mix(in srgb, var(--ink-copper) 12%, transparent);
+  --ink-teal-line:     color-mix(in srgb, var(--ink-teal) 34%, transparent);
+  --ink-teal-fill:     color-mix(in srgb, var(--ink-teal) 12%, transparent);
+  --ink-coral-line:    color-mix(in srgb, var(--ink-coral) 34%, transparent);
+  --ink-coral-fill:    color-mix(in srgb, var(--ink-coral) 12%, transparent);
+  --ink-lavender-line: color-mix(in srgb, var(--ink-lavender) 34%, transparent);
+  --ink-lavender-fill: color-mix(in srgb, var(--ink-lavender) 12%, transparent);
+  --ink-amber-line:    color-mix(in srgb, var(--ink-amber) 34%, transparent);
+  --ink-amber-fill:    color-mix(in srgb, var(--ink-amber) 12%, transparent);
+  --ink-blue-line:     color-mix(in srgb, var(--ink-blue) 34%, transparent);
+  --ink-blue-fill:     color-mix(in srgb, var(--ink-blue) 12%, transparent);
+}
+
+/* -----------------------------------------------------------------------------
+ * §1.4 Type — family tokens.
+ * Sizes, weights and tracking live in tailwind.config.ts as the named scale
+ * (text-display, text-h1-accent, text-h2, text-body, text-small, text-label,
+ * text-kpi) so a component never types a px value.
+ *
+ * All three families are self-hosted through @fontsource — see
+ * apps/web/src/styles/fonts.ts. Zero external font requests at runtime.
+ * Instrument Serif is ITALIC-ONLY in this product: headline accent words,
+ * watermarks, rail caps. Never body copy. Never Arabic.
+ * -------------------------------------------------------------------------- */
+:root {
+  --font-sans:   'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif:  'Instrument Serif', ui-serif, Georgia, serif;
+  --font-arabic: 'IBM Plex Sans Arabic', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* The four wide-tracked rungs (§1.4: +0.25em…+0.45em). These are tokens and
+     not raw values in the Tailwind scale for one reason: Arabic must never be
+     tracked — the letters connect — so the RTL layer overrides these four in
+     one place and every `tracking-wider-*` in the product un-tracks with it.
+     The override lives in styles/rtl.css (rtl-arabic-pdpl-specialist); the
+     values live here.
+       1 = segmented tabs (§2.0)   2 = eyebrows, department names
+       3 = shell eyebrow (§2.0)    4 = rail labels */
+  --track-1: .25em;
+  --track-2: .3em;
+  --track-3: .35em;
+  --track-4: .45em;
+}
+
+/* -----------------------------------------------------------------------------
+ * §1.5 Shape, depth, texture
+ * -------------------------------------------------------------------------- */
+:root {
+  /* Radii */
+  --r-pill:     999px;  /* pills, buttons, search input, segmented control */
+  --r-chip:       6px;  /* status chips */
+  --r-kpi:       12px;  /* KPI tiles */
+  --r-card-sm:   12px;  /* cards, lower bound of the 12–16 range */
+  --r-card:      14px;  /* cards, default */
+  --r-card-lg:   16px;  /* cards, upper bound */
+  --r-panel:     18px;  /* drawers/panels, inside the 16–20 range */
+  --r-panel-lg:  20px;  /* drawers/panels, upper bound */
+
+  /* Borders — 1px hairline on every card; --line-2 on hover. */
+  --border-w: 1px;
+
+  /* Depth — dark mode has NO shadow except drawers. --shadow-soft is `none`
+     here and only becomes real in body.light. */
+  --shadow-drawer: 0 8px 40px rgba(0,0,0,.5);
+  --shadow-soft:   none;
+
+  /* Glass */
+  --blur-glass: 14px;
+
+  /* Dotted-grid canvas texture — map bg, dashboards carousel bg. */
+  --dot-color: rgba(255,255,255,.04);
+  --dot-pitch: 22px;
+  --dot-size:  1px;
+
+  /* Starfield + central galaxy glow (§1.5, consumed by map-galaxy-engineer). */
+  --star-color: #FFFFFF;
+  --star-opacity-min: .05;
+  --star-opacity-max: .15;
+  --star-count: 200;
+  --galaxy-glow-blur: 60px;
+  --galaxy-glow: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--ink-copper) 30%, transparent) 0%,
+    transparent 70%
+  );
+
+  /* Scrim behind drawers (§1.6). */
+  --scrim: rgba(0,0,0,.4);
+}
+
+body.light {
+  --shadow-drawer: 0 8px 40px rgba(20,20,24,.18);
+  --shadow-soft:   0 1px 3px rgba(20,20,24,.06);
+  --dot-color:     rgba(20,20,24,.05);
+  --star-color:    #161618;
+}
+
+/* -----------------------------------------------------------------------------
+ * §1.6 Motion — durations and easings.
+ * The JS-side twins live in apps/web/src/components/primitives/motion.ts and
+ * are the ONLY place a duration number may be typed. Everything CSS-side uses
+ * these tokens through Tailwind (duration-reveal, ease-reveal, …).
+ * -------------------------------------------------------------------------- */
+:root {
+  --dur-reveal:  500ms;  /* section/panel reveal: opacity 0→1 + translateY 12→0 */
+  --dur-drawer:  320ms;  /* drawer slide-in (left for map, right for chart) */
+  --dur-relax:   600ms;  /* map edges relax after a d3-force drag */
+  --dur-zoom:    700ms;  /* department transition, d3-zoom + label cross-fade */
+  --dur-count:   300ms;  /* KPI count-up, progress-bar width on mount */
+  --dur-hover:   160ms;  /* NOT IN §1.6 — added by the owner so hover states are
+                            not a magic number. See contract §6a. */
+
+  --ease-reveal: cubic-bezier(.2,.7,.2,1);
+  --ease-zoom:   ease-in-out;
+  --ease-drawer: cubic-bezier(.2,.7,.2,1);
+
+  --reveal-y: 12px;
+
+  /* Dashboards carousel (§1.6 / §2.4). */
+  --carousel-perspective:      1400px;
+  --carousel-rotate:           35deg;
+  --carousel-rear-scale:       .82;
+  --carousel-rear-brightness:  .5;
+}
+
+/* Reduced motion is enforced at the token layer, so any component using
+ * duration-* / ease-* utilities inherits the guard for free. JS-driven motion
+ * (count-ups, d3, framer) additionally calls useReducedMotion() from motion.ts.
+ * End states remain; only the travel time disappears. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-reveal: 1ms;
+    --dur-drawer: 1ms;
+    --dur-relax:  1ms;
+    --dur-zoom:   1ms;
+    --dur-count:  1ms;
+    --dur-hover:  1ms;
+    --reveal-y:   0px;
+  }
+}

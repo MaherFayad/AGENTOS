@@ -1,0 +1,37 @@
+# Build context hygiene. Both Dockerfiles use the REPO ROOT as context (ADR-002 —
+# npm workspaces need the root lockfile), so without this every image build would ship
+# node_modules and .next from the host and stop being reproducible.
+
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+build
+out
+coverage
+*.tsbuildinfo
+
+.git
+.github
+.claude
+
+# Secrets never enter a build context — they would be readable in the image history.
+.env
+.env.*
+!.env.example
+
+# Generated / local
+apps/web/public/graph.json
+.runs
+.volumes
+backups
+apps/runner/.workspaces
+
+# Prose: not needed to build anything, and copying it invalidates layer caches on every
+# comms message.
+comms
+audit
+*.log
+.DS_Store
+Thumbs.db

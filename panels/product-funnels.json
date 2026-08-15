@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "id": "product-funnels",
+  "title": "Amplitude · Product Funnels",
+  "caption": "Signup → activation → retention, without opening another tab",
+  "railTitle": "PRODUCT",
+  "provider": "amplitude",
+  "department": ["intelligence"],
+  "order": 5,
+  "buildPrompt": "the product command center for the intelligence branch: the signup-to-activation funnel as a bar list, weekly active users as an area chart, and the events that move activation — sourced by the amplitude-sync agent into Postgres, never queried from the browser",
+  "filters": { "type": "range", "options": ["7d", "14d", "28d"], "default": "28d" },
+  "kpis": [
+    {
+      "label": "New signups",
+      "icon": "users",
+      "format": "number",
+      "query": { "source": "sql", "name": "product_signups", "range": "$range" },
+      "caption": "in this window"
+    },
+    {
+      "label": "Activated",
+      "icon": "check",
+      "format": "number",
+      "query": { "source": "sql", "name": "product_activated", "range": "$range" },
+      "caption": "hit the activation event"
+    },
+    {
+      "label": "Activation rate",
+      "icon": "target",
+      "format": "percent",
+      "query": { "source": "sql", "name": "product_activation_rate", "range": "$range" },
+      "caption": "activated over signups"
+    },
+    {
+      "label": "D7 retention",
+      "icon": "chart",
+      "format": "percent",
+      "query": { "source": "sql", "name": "product_retention_d7", "range": "$range" },
+      "caption": "returned on day seven"
+    },
+    {
+      "label": "Time to activate",
+      "icon": "timer",
+      "format": "duration",
+      "query": { "source": "sql", "name": "product_time_to_activate_p50" },
+      "caption": "median, signup to activation"
+    },
+    {
+      "label": "Weekly active",
+      "icon": "activity",
+      "format": "number",
+      "query": { "source": "sql", "name": "product_weekly_active" },
+      "caption": "last full week"
+    }
+  ],
+  "signals": [
+    {
+      "tone": "warn",
+      "lead": "{value} of signups never reach activation",
+      "detail": "The drop-off step is the one worth an agent — the funnel below names it as soon as there is data.",
+      "query": { "source": "sql", "name": "product_dropoff_share", "range": "$range" },
+      "format": "percent",
+      "hideWhenZero": true,
+      "pending": "Funnel analysis appears once the amplitude-sync agent lands its first extract."
+    },
+    {
+      "tone": "wait",
+      "lead": "Amplitude is read by an agent, not by this dashboard",
+      "detail": "The amplitude-sync agent pulls the funnel on a schedule and writes rows to Postgres, so the browser never holds a product-analytics key."
+    }
+  ],
+  "widgets": [
+    {
+      "id": "funnel",
+      "type": "bar-list",
+      "title": "Funnel steps",
+      "subtitle": "Users reaching each step",
+      "tone": "coral",
+      "format": "number",
+      "span": 1,
+      "query": { "source": "sql", "name": "product_funnel_steps", "shape": "list", "range": "$range" },
+      "emptyState": "No funnel yet — the amplitude-sync agent writes each step on its first extract."
+    },
+    {
+      "id": "signup-sources",
+      "type": "source-bar-list",
+      "title": "Signups by source",
+      "tone": "grey",
+      "format": "number",
+      "span": 1,
+      "query": { "source": "sql", "name": "product_signups_by_source", "shape": "list", "range": "$range" },
+      "emptyState": "No sources yet — attribution lands with the first extract."
+    },
+    {
+      "id": "weekly-active",
+      "type": "area-chart",
+      "title": "Weekly active users",
+      "tone": "lavender",
+      "format": "number",
+      "span": 2,
+      "query": { "source": "sql", "name": "product_active_series", "shape": "series", "range": "$range" },
+      "emptyState": "No activity series yet — this chart is the first thing the sync agent fills."
+    },
+    {
+      "id": "top-events",
+      "type": "data-table",
+      "title": "Events that move activation",
+      "subtitle": "Click a row to peek inside",
+      "sortable": true,
+      "rowAction": "peek",
+      "span": 2,
+      "columns": [
+        { "key": "event", "label": "Event", "type": "text" },
+        { "key": "trend", "label": "Trend", "type": "chip" },
+        { "key": "users", "label": "Users", "type": "number", "format": "number", "align": "right" },
+        { "key": "lift", "label": "Lift on activation", "type": "number", "format": "percent", "align": "right" }
+      ],
+      "query": { "source": "sql", "name": "product_top_events", "shape": "list", "limit": 20, "range": "$range" },
+      "emptyState": "No events yet — event names come from the project, never guessed."
+    }
+  ]
+}

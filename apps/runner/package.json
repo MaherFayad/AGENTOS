@@ -1,0 +1,21 @@
+{
+  "name": "@agnetos/runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent runner — /api/run (SSE), /api/schedule, approvals, repo watcher (Part V, §3.2).",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agnetos/contracts": "*",
+    "fastify": "^5.2.1",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

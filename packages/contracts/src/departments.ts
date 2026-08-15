@@ -1,0 +1,100 @@
+/**
+ * The seven canonical departments — ADR-001, spec §2.1 (7 radial branches),
+ * §2.6.1 (CHART tab bar), Part IV (frontmatter enum).
+ *
+ * This file is the ONLY place a department slug, label, angle or neighbour may be
+ * written down. The MAP's forceRadial angles, the CHART tab order, the frontmatter
+ * validator, the panel `department` field and the rail labels all read from here.
+ * ADR-001: "packages/contracts/departments.ts exports the ordered array; nothing else
+ * may hardcode a department name or angle."
+ */
+
+/** Order is significant: it is the CHART tab order and the MAP branch angle order. */
+const ORDERED = [
+  ['sales', 'Sales'],
+  ['deals', 'Deals'],
+  ['marketing', 'Marketing'],
+  ['operations', 'Operations'],
+  ['intelligence', 'Intelligence'],
+  ['customer', 'Customer'],
+  ['back-office', 'Back Office'],
+] as const;
+
+export type DepartmentSlug = (typeof ORDERED)[number][0];
+
+/**
+ * One row of the department table.
+ *
+ * Named `DepartmentInfo`, not `Department`, on purpose: `frontmatter.ts` uses
+ * `Department` for the *slug union* (the value that appears in a SKILL.md field), and one
+ * name meaning two things inside one package is how a cast silently lies. Here:
+ *   `Department`      — the slug, e.g. `'sales'`            (frontmatter.ts)
+ *   `DepartmentSlug`  — the same union, from this file
+ *   `DepartmentInfo`  — this record: slug + label + angle + neighbours
+ */
+export interface DepartmentInfo {
+  /** Path segment and frontmatter value. `agents/<slug>/<agent>/SKILL.md`. */
+  readonly slug: DepartmentSlug;
+  /** Human label. Rendered in the CHART tab bar and the MAP rail. */
+  readonly label: string;
+  /** Position in the canonical order. 0 = sales. */
+  readonly index: number;
+  /**
+   * Radial branch angle in degrees, `-90 + index * 360 / 7`, so `sales` sits at twelve
+   * o'clock and the branches run clockwise (ADR-001 table, rounded to 1dp there).
+   * Kept unrounded here — rounding is a display concern.
+   */
+  readonly angleDeg: number;
+  /** Same angle in radians, for d3 `forceRadial` / trig without a conversion at each site. */
+  readonly angleRad: number;
+  /**
+   * Rail neighbours as `[previous, next]`, cyclic over the canonical order.
+   * §2.2's department rail steps through these; `back-office` wraps to `sales`.
+   */
+  readonly neighbours: readonly [DepartmentSlug, DepartmentSlug];
+}
+
+const COUNT = ORDERED.length;
+
+/** The ordered department table. Iterate this; never re-declare it. */
+export const DEPARTMENTS: readonly DepartmentInfo[] = ORDERED.map(([slug, label], index) => {
+  const angleDeg = -90 + (index * 360) / COUNT;
+  return {
+    slug,
+    label,
+    index,
+    angleDeg,
+    angleRad: (angleDeg * Math.PI) / 180,
+    neighbours: [
+      ORDERED[(index - 1 + COUNT) % COUNT][0],
+      ORDERED[(index + 1) % COUNT][0],
+    ] as const,
+  };
+});
+
+/** The seven slugs in canonical order. Use for enum validation and tab rendering. */
+export const DEPARTMENT_SLUGS: readonly DepartmentSlug[] = DEPARTMENTS.map((d) => d.slug);
+
+const BY_SLUG = new Map<string, DepartmentInfo>(DEPARTMENTS.map((d) => [d.slug, d]));
+
+/** Type guard. An unknown department is a validation error, never a silent default. */
+export function isDepartment(value: unknown): value is DepartmentSlug {
+  return typeof value === 'string' && BY_SLUG.has(value);
+}
+
+/** Throws on an unknown slug — callers that have already validated should use this. */
+export function getDepartment(slug: DepartmentSlug): DepartmentInfo {
+  const found = BY_SLUG.get(slug);
+  if (!found) throw new Error(`Unknown department "${slug}" (ADR-001 fixes the enum at seven).`);
+  return found;
+}
+
+/** Non-throwing lookup for parser paths that must report rather than crash. */
+export function findDepartment(slug: string): DepartmentInfo | undefined {
+  return BY_SLUG.get(slug);
+}
+
+/** Display label for a slug. `back-office` -> `Back Office`. */
+export function departmentLabel(slug: DepartmentSlug): string {
+  return getDepartment(slug).label;
+}

@@ -1,0 +1,142 @@
+# Caddy — the one entry point (spec Part V, §3.6).
+#
+#   /        -> web       (Next.js)
+#   /api/*   -> runner    (SSE, schedule, approvals — §3.2)
+#   /ws/*    -> runner    (WebSocket graph deltas — Part V watcher)
+#   /relay/* -> happy     (E2E session relay — §3.1)
+#   /traces  -> langfuse  (see ADR-006 — it redirects, and why)
+#
+# ---------------------------------------------------------------------------
+# WHERE THE BIND ADDRESS ACTUALLY LIVES
+# ---------------------------------------------------------------------------
+# Not here. Caddy listens on all interfaces INSIDE ITS OWN CONTAINER namespace, which is
+# unavoidable (Caddy must be reachable from the compose bridge) and harmless. What decides
+# whether the world can reach it is the PUBLISHED PORT BIND ADDRESS in infra/compose.yaml:
+#
+#     - '${TAILSCALE_IP:-127.0.0.1}:443:443'
+#
+# Binding that to 0.0.0.0 is the single mistake that turns "no auth by design" into "no
+# auth" (§3.6). Adding a `bind` directive in this file would NOT protect you and would
+# read like it did — which is worse than nothing. Verify with `node infra/check-bind.mjs`.
+# ---------------------------------------------------------------------------
+
+{
+	# Admin API on container-loopback only. It is the healthcheck target and nothing else.
+	admin 127.0.0.1:2019
+
+	# No external network at runtime (BOARD constraint 7): never reach out to Let's Encrypt.
+	# TLS comes from `tls internal` (Caddy's own CA) or from Tailscale-issued certs.
+	auto_https disable_redirects
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}
+
+# Shared proxy behaviour for the runner. Split out because SSE is the whole point of
+# §3.2's drawer console and buffering it silently would look like "the runner is slow".
+(runner_upstream) {
+	reverse_proxy runner:8787 {
+		# -1 = flush immediately. text/event-stream must not be buffered, and neither must
+		# the token-by-token output the console renders.
+		flush_interval -1
+		transport http {
+			# A run can legitimately take minutes. Do not time it out mid-stream.
+			response_header_timeout 5m
+			read_timeout 30m
+		}
+	}
+}
+
+# =============================================================================
+# The app — https://{$CC_HOST}
+# =============================================================================
+{$CC_HOST:localhost} {
+	# `internal` (default) = Caddy's own CA: boots with zero secrets so nobody is blocked
+	# on a Tailscale auth key. `tailscale` = the real MagicDNS cert, written into /certs by
+	# the `tailscale` service (compose profile: tls). One token, two files, no branching.
+	import tls/{$TLS_MODE:internal}.caddy
+
+	log {
+		output stdout
+		format console
+	}
+
+	# --- web: the §3.1 half of /api ----------------------------------------
+	# ORDER IS LOAD-BEARING. `handle` blocks are first-match, and ADR-005 requires these
+	# two to be matched BEFORE the general /api/* rule below, because two owners share the
+	# /api prefix: `runner-engineer` owns §3.2/§3.3, `sessions-relay-engineer` owns §3.1
+	# and serves it from `web` as a thin, credential-free proxy. Moving these underneath
+	# /api/* silently hands the sessions routes to the runner, which has no relay code —
+	# and the symptom would be a 404 on the phone, not an error here.
+	handle /api/sessions* {
+		reverse_proxy web:3000 {
+			flush_interval -1
+			transport http {
+				read_timeout 30m
+			}
+		}
+	}
+	handle /api/push* {
+		reverse_proxy web:3000
+	}
+
+	# --- runner: §3.2 run/schedule/approvals + all /api reads --------------
+	# NOT handle_path: api-contracts.md declares the routes as `/api/run`, `/api/schedule`
+	# etc., so the runner owns the prefix. Stripping it here would silently move every
+	# route and make the prose contract wrong.
+	handle /api/* {
+		import runner_upstream
+	}
+
+	# --- runner: WebSocket layout deltas (Part V watcher) ------------------
+	handle /ws/* {
+		import runner_upstream
+	}
+
+	# --- happy: E2E session relay (§3.1) -----------------------------------
+	# handle_path STRIPS /relay, because happy-server serves its API at the root and we
+	# are namespacing it ourselves. The relay carries ciphertext end to end; Caddy is a
+	# dumb pipe here and must never be given a key.
+	handle_path /relay/* {
+		reverse_proxy happy:3005 {
+			flush_interval -1
+			transport http {
+				read_timeout 30m
+			}
+		}
+	}
+
+	# --- langfuse: observability (§3.5) ------------------------------------
+	# Langfuse is a Next.js app with no basePath support: its assets are absolute
+	# (/_next/...) and would collide with web's. So /traces is an honest redirect to a
+	# second tailnet hostname served by this same Caddy. ADR-006 has the full reasoning.
+	redir /traces /traces/
+	handle_path /traces/* {
+		redir https://{$TRACES_HOST:traces.localhost}{uri} permanent
+	}
+
+	# --- web: everything else ----------------------------------------------
+	handle {
+		# Compression here only. It is deliberately absent from the SSE/WS handlers above.
+		encode zstd gzip
+		reverse_proxy web:3000
+	}
+}
+
+# =============================================================================
+# Langfuse — https://{$TRACES_HOST}   (§3.5, ADR-006)
+# =============================================================================
+{$TRACES_HOST:traces.localhost} {
+	import tls/{$TLS_MODE:internal}.caddy
+
+	log {
+		output stdout
+		format console
+	}
+
+	encode zstd gzip
+	reverse_proxy langfuse:3000
+}

@@ -1,0 +1,29 @@
+{
+  "name": "agnetos",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Command Center — a self-hosted SkillTree with remote control.",
+  "workspaces": [
+    "apps/web",
+    "apps/runner",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "validate:frontmatter": "node scripts/validate-frontmatter.mjs",
+    "validate:tokens": "node scripts/check-tokens.mjs",
+    "validate:panels": "node scripts/validate-panels.mjs",
+    "validate:comms": "node scripts/check-comms.mjs",
+    "validate:coverage": "node scripts/check-spec-coverage.mjs",
+    "graph:build": "node scripts/build-graph.mjs",
+    "test": "node --test scripts/__tests__/*.test.mjs",
+    "test:web": "npm run test --workspace=apps/web --if-present",
+    "verify": "npm run validate:frontmatter && npm run validate:panels && npm run validate:tokens && npm run validate:comms && npm run validate:coverage && npm run test"
+  }
+}

@@ -1,0 +1,37 @@
+# Line endings. The human develops on Windows 11 with core.autocrlf=true, so without
+# this file every shell script, Dockerfile and config that gets copied into a Linux
+# container would arrive with CRLF and fail with "no such file or directory" on the
+# shebang — the single most confusing Windows/Docker failure there is.
+
+* text=auto eol=lf
+
+# Anything a container executes or parses MUST be LF, no exceptions.
+*.sh            text eol=lf
+*.mjs           text eol=lf
+*.js            text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.json          text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.ini           text eol=lf
+*.css           text eol=lf
+*.md            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+Caddyfile       text eol=lf
+.env.example    text eol=lf
+
+# Windows-only helpers stay CRLF, otherwise PowerShell/cmd can mis-handle them.
+*.ps1           text eol=crlf
+*.cmd           text eol=crlf
+*.bat           text eol=crlf
+
+# Binary — never touched.
+*.png binary
+*.jpg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ico binary
+*.pdf binary

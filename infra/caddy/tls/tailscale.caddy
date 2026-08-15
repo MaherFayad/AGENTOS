@@ -1,0 +1,11 @@
+# TLS_MODE=tailscale — the real deployment mode (M0 deliverable 1: "TLS via Tailscale
+# certs").
+#
+# The cert is issued by Tailscale for the MagicDNS name and written into the shared
+# `ts_certs` volume by the `tailscale` service:
+#
+#   docker compose -f infra/compose.yaml --env-file .env --profile tls --profile obs up -d
+#
+# Requires TS_AUTHKEY and CC_HOST=<machine>.<tailnet>.ts.net in .env. Certs are 90-day;
+# the tailscale service re-runs `tailscale cert` on restart.
+tls /certs/tailnet.crt /certs/tailnet.key

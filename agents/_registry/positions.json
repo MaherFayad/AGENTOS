@@ -1,0 +1,170 @@
+{
+  "version": "sha256:47b804801ff74ec420c9c35d0f10c8a6eec71ccd395a29a938adca35cc941e46",
+  "computedAt": "2026-08-15T16:03:32.599Z",
+  "positions": {
+    "back-office/_anchor": {
+      "x": -252.3,
+      "y": -201.4
+    },
+    "customer/_anchor": {
+      "x": -315.5,
+      "y": 72
+    },
+    "deals/_anchor": {
+      "x": 293.9,
+      "y": -229.5
+    },
+    "deals/deal-reactivation": {
+      "x": 438.7,
+      "y": -372
+    },
+    "deals/deal-reactivation/last-touch-summariser": {
+      "x": 502.3,
+      "y": -409
+    },
+    "deals/deal-reactivation/reactivation-drafter": {
+      "x": 481.6,
+      "y": -426.8
+    },
+    "deals/deal-reactivation/stall-detector": {
+      "x": 512.8,
+      "y": -383.7
+    },
+    "deals/proposal-drafter": {
+      "x": 500.2,
+      "y": -338.4
+    },
+    "deals/proposal-drafter/pricing-applier": {
+      "x": 567,
+      "y": -377.5
+    },
+    "deals/proposal-drafter/scope-assembler": {
+      "x": 574.8,
+      "y": -351.1
+    },
+    "deals/proposal-drafter/terms-checker": {
+      "x": 549,
+      "y": -395.9
+    },
+    "intelligence/_anchor": {
+      "x": -140.4,
+      "y": 291.5
+    },
+    "marketing/_anchor": {
+      "x": 350.4,
+      "y": 80.1
+    },
+    "marketing/brand-voice-guard": {
+      "x": 539.7,
+      "y": 166.5
+    },
+    "marketing/brand-voice-guard/red-line-checker": {
+      "x": 603.9,
+      "y": 196.1
+    },
+    "marketing/brand-voice-guard/register-checker": {
+      "x": 608.9,
+      "y": 171.9
+    },
+    "marketing/brand-voice-guard/tone-scorer": {
+      "x": 585.9,
+      "y": 216.5
+    },
+    "marketing/content-repurposer": {
+      "x": 565.3,
+      "y": 90.2
+    },
+    "marketing/content-repurposer/angle-extractor": {
+      "x": 629.7,
+      "y": 119.7
+    },
+    "marketing/content-repurposer/channel-adapter": {
+      "x": 635,
+      "y": 96.2
+    },
+    "marketing/content-repurposer/hook-writer": {
+      "x": 630.9,
+      "y": 71.8
+    },
+    "operations/_anchor": {
+      "x": 152.3,
+      "y": 317.5
+    },
+    "operations/agent-auditor": {
+      "x": 233.2,
+      "y": 551.4
+    },
+    "operations/agent-auditor/connector-checker": {
+      "x": 227.5,
+      "y": 622.2
+    },
+    "operations/agent-auditor/error-rate-ranker": {
+      "x": 251.4,
+      "y": 620.6
+    },
+    "operations/agent-auditor/frontmatter-gap-finder": {
+      "x": 202.4,
+      "y": 611.2
+    },
+    "operations/agent-auditor/orphan-skill-finder": {
+      "x": 274.6,
+      "y": 614.5
+    },
+    "operations/agent-auditor/stale-agent-finder": {
+      "x": 289.2,
+      "y": 595.4
+    },
+    "operations/follow-up-coordinator": {
+      "x": 272.9,
+      "y": 484.8
+    },
+    "operations/follow-up-coordinator/action-item-extractor": {
+      "x": 336.6,
+      "y": 511.4
+    },
+    "operations/follow-up-coordinator/owner-assigner": {
+      "x": 326.5,
+      "y": 533.2
+    },
+    "operations/follow-up-coordinator/recap-writer": {
+      "x": 307,
+      "y": 547.2
+    },
+    "sales/_anchor": {
+      "x": 0,
+      "y": -379.5
+    },
+    "sales/account-enrichment": {
+      "x": -30.2,
+      "y": -587.7
+    },
+    "sales/account-enrichment/firmographic-appender": {
+      "x": -30.8,
+      "y": -661.2
+    },
+    "sales/account-enrichment/growth-signal-scorer": {
+      "x": -55.3,
+      "y": -660.3
+    },
+    "sales/account-enrichment/tech-stack-detector": {
+      "x": -78.3,
+      "y": -645.8
+    },
+    "sales/database-mining": {
+      "x": 41.1,
+      "y": -597
+    },
+    "sales/database-mining/contact-resolver": {
+      "x": 77.6,
+      "y": -656.7
+    },
+    "sales/database-mining/icp-filter": {
+      "x": 52.4,
+      "y": -668.6
+    },
+    "sales/database-mining/list-deduper": {
+      "x": 27,
+      "y": -668.6
+    }
+  }
+}

@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "id": "mission-control",
+  "title": "Mission Control · Agent Ops",
+  "caption": "Every run, every dollar, every failure · one screen",
+  "railTitle": "MISSION CONTROL",
+  "provider": "langfuse",
+  "department": ["operations"],
+  "order": 1,
+  "buildPrompt": "the agent-ops command center: run volume, spend, p50 latency and error rate across every agent in the tree, plus the live feed of runs — all Langfuse-backed, nothing static",
+  "filters": { "type": "range", "options": ["7d", "14d", "28d"], "default": "7d" },
+  "kpis": [
+    {
+      "label": "Runs",
+      "icon": "activity",
+      "format": "number",
+      "query": { "source": "langfuse", "metric": "runs", "range": "$range" },
+      "delta": {
+        "query": { "source": "langfuse", "metric": "runs", "range": "$range", "compare": "previous-period" },
+        "goodDirection": "up"
+      },
+      "caption": "vs the previous window",
+      "sparkline": {
+        "query": { "source": "langfuse", "metric": "runs", "shape": "series", "groupBy": "day", "range": "$range" },
+        "tone": "teal"
+      }
+    },
+    {
+      "label": "Agent spend",
+      "icon": "wallet",
+      "format": "currency",
+      "query": { "source": "langfuse", "metric": "cost", "range": "$range" },
+      "delta": {
+        "query": { "source": "langfuse", "metric": "cost", "range": "$range", "compare": "previous-period" },
+        "goodDirection": "down"
+      },
+      "caption": "against the runner's monthly cap",
+      "sparkline": {
+        "query": { "source": "langfuse", "metric": "cost", "shape": "series", "groupBy": "day", "range": "$range" },
+        "tone": "coral"
+      }
+    },
+    {
+      "label": "Median latency",
+      "icon": "timer",
+      "format": "duration",
+      "query": { "source": "langfuse", "metric": "latency_p50", "range": "$range" },
+      "delta": {
+        "query": { "source": "langfuse", "metric": "latency_p50", "range": "$range", "compare": "previous-period" },
+        "goodDirection": "down"
+      },
+      "caption": "p50 across all agents"
+    },
+    {
+      "label": "Error rate",
+      "icon": "alert",
+      "format": "percent",
+      "query": { "source": "langfuse", "metric": "error_rate", "range": "$range" },
+      "delta": {
+        "query": { "source": "langfuse", "metric": "error_rate", "range": "$range", "compare": "previous-period" },
+        "goodDirection": "down"
+      },
+      "caption": "runs that ended in error",
+      "sparkline": {
+        "query": {
+          "source": "langfuse",
+          "metric": "error_rate",
+          "shape": "series",
+          "groupBy": "day",
+          "range": "$range"
+        },
+        "tone": "coral"
+      }
+    },
+    {
+      "label": "Failed runs",
+      "icon": "alert",
+      "format": "number",
+      "query": { "source": "langfuse", "metric": "runs", "filter": { "status": "error" }, "range": "$range" },
+      "caption": "each one has a trace"
+    },
+    {
+      "label": "Runs today",
+      "icon": "clock",
+      "format": "number",
+      "query": { "source": "langfuse", "metric": "runs", "range": "24h" },
+      "caption": "rolling 24 hours"
+    }
+  ],
+  "signals": [
+    {
+      "tone": "warn",
+      "lead": "{value} runs ended in error",
+      "detail": "Open the trace before the next schedule fires — a failing agent on a cron repeats its failure on a cron.",
+      "query": { "source": "langfuse", "metric": "runs", "filter": { "status": "error" }, "range": "$range" },
+      "format": "number",
+      "hideWhenZero": true,
+      "pending": "No failed runs in this window."
+    },
+    {
+      "tone": "ok",
+      "lead": "{value} of model spend in this window",
+      "detail": "The runner refuses to start a run once the hard monthly cap is hit, and says so in the error hint.",
+      "query": { "source": "langfuse", "metric": "cost", "range": "$range" },
+      "format": "currency",
+      "pending": "No spend recorded yet — the runner writes cost to Langfuse on its first run."
+    },
+    {
+      "tone": "wait",
+      "lead": "Mission Control is the only center that is real today",
+      "detail": "The other five name the agent that owes them rows; they fill in as those agents start running, not before."
+    }
+  ],
+  "widgets": [
+    {
+      "id": "activity",
+      "type": "activity-feed",
+      "title": "This morning, run by agents",
+      "subtitle": "Every row is a Langfuse trace",
+      "span": 2,
+      "limit": 12,
+      "query": { "source": "langfuse", "metric": "runs", "shape": "list", "limit": 12 },
+      "emptyState": "No runs yet — the feed fills the moment you press ▶ Run now in any drawer."
+    },
+    {
+      "id": "runs-per-day",
+      "type": "area-chart",
+      "title": "Runs per day",
+      "tone": "coral",
+      "format": "number",
+      "span": 1,
+      "query": { "source": "langfuse", "metric": "runs", "shape": "series", "groupBy": "day", "range": "$range" },
+      "emptyState": "No runs in this window."
+    },
+    {
+      "id": "spend-by-agent",
+      "type": "cost-table",
+      "title": "Spend by agent",
+      "format": "currency",
+      "showTotal": true,
+      "totalLabel": "Window total",
+      "span": 1,
+      "query": { "source": "langfuse", "metric": "cost", "shape": "list", "groupBy": "agent", "range": "$range" },
+      "emptyState": "No spend in this window."
+    },
+    {
+      "id": "runs-by-department",
+      "type": "bar-list",
+      "title": "Runs by department",
+      "tone": "coral",
+      "format": "number",
+      "span": 1,
+      "query": {
+        "source": "langfuse",
+        "metric": "runs",
+        "shape": "list",
+        "groupBy": "department",
+        "range": "$range"
+      },
+      "emptyState": "No runs in this window."
+    },
+    {
+      "id": "last-runs",
+      "type": "data-table",
+      "title": "Last runs",
+      "subtitle": "Click a row to peek inside",
+      "sortable": true,
+      "rowAction": "peek",
+      "span": 1,
+      "columns": [
+        { "key": "agent", "label": "Agent", "type": "text" },
+        { "key": "status", "label": "Status", "type": "chip" },
+        { "key": "cost", "label": "Cost", "type": "number", "format": "currency", "align": "right" },
+        { "key": "duration", "label": "Took", "type": "number", "format": "duration", "align": "right" },
+        { "key": "at", "label": "When", "type": "text" }
+      ],
+      "query": { "source": "langfuse", "metric": "runs", "shape": "list", "limit": 10, "range": "$range" },
+      "emptyState": "No runs in this window."
+    }
+  ],
+  "footer": {
+    "lead": "This is the actual product.",
+    "detail": "Your delivery ops, running like this · agents doing the work, you approving it.",
+    "cta": { "label": "Get this deployed →", "href": "/approvals" }
+  }
+}

@@ -1,0 +1,695 @@
+/* =============================================================================
+ * drawer.module.css — §2.3 (MAP job drawer) and §2.6.5 (CHART detail drawer).
+ *
+ * One stylesheet for both drawers, because they are one component set with a `side`
+ * prop (§2.6.5 calls the chart drawer a mirror of the map drawer, and a mirror that
+ * lives in a second file stops being one by M8).
+ *
+ * RULES OBSERVED HERE
+ *  - No color literal. Every colour is var(--token) from styles/tokens.css.
+ *  - No duration literal. Every timing is var(--dur-*) / var(--ease-*), which also
+ *    inherits the prefers-reduced-motion guard from the token layer.
+ *  - No physical direction. `inset-inline-*`, `padding-inline`, `border-inline-*`,
+ *    `text-align: start`, logical border radii. The M8 RTL pass is a `dir` attribute.
+ *    The one place direction is unavoidable is the slide transform, and that reads
+ *    --slide, which :dir(rtl) flips below.
+ *
+ * Owner: drawer-engineer
+ * ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+ * Scrim (§1.6: scrim var(--scrim), fades with the drawer)
+ * -------------------------------------------------------------------------- */
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity var(--dur-drawer) var(--ease-drawer);
+  z-index: 40;
+}
+
+.scrim[data-state='open'] {
+  opacity: 1;
+}
+
+/* -----------------------------------------------------------------------------
+ * The drawer shell. ~300px on the map, a little wider on the chart (its SKILLS
+ * cards carry two lines of copy and a three-button row).
+ * -------------------------------------------------------------------------- */
+.drawer {
+  --drawer-w: 300px;
+  --slide: -100%;
+
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: min(var(--drawer-w), 100vw);
+  z-index: 41;
+  transform: translateX(var(--slide));
+  transition: transform var(--dur-drawer) var(--ease-drawer);
+  will-change: transform;
+}
+
+.drawer[data-side='end'] {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  --slide: 100%;
+}
+
+.drawer[data-view='chart'] {
+  --drawer-w: 360px;
+}
+
+.drawer[data-state='open'] {
+  --slide: 0%;
+}
+
+/* The transform is the one physical property CSS gives us no logical form for, so the
+ * direction is flipped here rather than in a component. */
+.drawer:dir(rtl) {
+  --slide: 100%;
+}
+
+.drawer[data-side='end']:dir(rtl) {
+  --slide: -100%;
+}
+
+.drawer[data-state='open']:dir(rtl) {
+  --slide: 0%;
+}
+
+/* -----------------------------------------------------------------------------
+ * The glass surface inside it. GlassPanel supplies --glass + backdrop-blur; this
+ * only adds the shape and the scroll behaviour.
+ * -------------------------------------------------------------------------- */
+.panel {
+  position: relative;
+  block-size: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-drawer);
+  border-inline-end: var(--border-w) solid var(--line);
+  border-start-end-radius: var(--r-panel);
+  border-end-end-radius: var(--r-panel);
+}
+
+.drawer[data-side='end'] .panel {
+  border-inline-end: 0;
+  border-inline-start: var(--border-w) solid var(--line);
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-start-start-radius: var(--r-panel);
+  border-end-start-radius: var(--r-panel);
+}
+
+/* Monochrome focus ring, never the browser's blue (§1.3). */
+.panel :focus-visible {
+  outline: 2px solid var(--ivory);
+  outline-offset: 2px;
+  border-radius: var(--r-chip);
+}
+
+.body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline: 20px;
+  padding-block: 18px 32px;
+  text-align: start;
+}
+
+/* -----------------------------------------------------------------------------
+ * 1. Eyebrow row — autonomy state + close
+ * -------------------------------------------------------------------------- */
+.eyebrowRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.close {
+  flex: 0 0 auto;
+  inline-size: 26px;
+  block-size: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-hover) var(--ease-reveal), background var(--dur-hover) var(--ease-reveal);
+}
+
+.close:hover {
+  color: var(--ivory);
+  background: var(--card-2);
+}
+
+/* -----------------------------------------------------------------------------
+ * 2–3. Title, breadcrumb, description
+ * -------------------------------------------------------------------------- */
+.title {
+  margin-block: 12px 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--ivory);
+}
+
+.breadcrumb {
+  margin-block-start: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.description {
+  margin-block-start: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ivory-2);
+}
+
+/* -----------------------------------------------------------------------------
+ * Sections — hairline, wide-tracked cap label, content
+ * -------------------------------------------------------------------------- */
+.section {
+  margin-block-start: 20px;
+  padding-block-start: 18px;
+  border-block-start: var(--border-w) solid var(--line);
+}
+
+.sectionLabel {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: var(--ink-2);
+}
+
+.sectionNote {
+  margin-block-start: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.empty {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* -----------------------------------------------------------------------------
+ * 4. Skill-file card + our two buttons
+ * -------------------------------------------------------------------------- */
+.skillCard {
+  margin-block-start: 16px;
+  padding: 14px;
+  background: var(--card);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card-sm);
+  transition: border-color var(--dur-hover) var(--ease-reveal);
+}
+
+.skillCard:hover {
+  border-color: var(--line-2);
+}
+
+.skillCardLine {
+  font-size: 12px;
+  color: var(--ivory-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+ * 5 / 7. Chips
+ * -------------------------------------------------------------------------- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 5px 9px;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--ivory-2);
+  cursor: pointer;
+  text-align: start;
+  transition: background var(--dur-hover) var(--ease-reveal), color var(--dur-hover) var(--ease-reveal);
+}
+
+.chip:hover {
+  background: var(--card-2);
+  color: var(--ivory);
+}
+
+.chipStatic {
+  cursor: default;
+}
+
+.chipStatic:hover {
+  background: transparent;
+  color: var(--ivory-2);
+}
+
+.chipDashed {
+  border-style: dashed;
+}
+
+/* -----------------------------------------------------------------------------
+ * 6. WIRED INTO — plain text list
+ * -------------------------------------------------------------------------- */
+.plainList {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ivory-2);
+}
+
+/* -----------------------------------------------------------------------------
+ * 8. WHAT IT REPLACES — quote box
+ * -------------------------------------------------------------------------- */
+.quote {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--card);
+  border: var(--border-w) solid var(--line);
+  border-inline-start: 2px solid var(--line-2);
+  border-radius: var(--r-card-sm);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ivory-2);
+}
+
+.quoteCost {
+  color: var(--ivory);
+}
+
+/* -----------------------------------------------------------------------------
+ * 9. THE LADDER (and §2.6.5 FROM MANUAL TO AUTONOMOUS, with the NOW badge)
+ * -------------------------------------------------------------------------- */
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ladderRow {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.ladderLabel {
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+.ladderText {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+.ladderRow[data-active='true'] .ladderLabel {
+  color: var(--ivory);
+}
+
+.ladderRow[data-active='true'] .ladderText {
+  color: var(--ivory-2);
+}
+
+.nowBadge {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 1px 5px;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-pill);
+  color: var(--ivory);
+  vertical-align: 1px;
+}
+
+/* -----------------------------------------------------------------------------
+ * 10. THE HUMAN
+ * -------------------------------------------------------------------------- */
+.paragraph {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ivory-2);
+}
+
+/* -----------------------------------------------------------------------------
+ * Our addition — LAST RUNS
+ * -------------------------------------------------------------------------- */
+.runs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.runRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  padding: 7px 8px;
+  margin-inline: -8px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-chip);
+  color: var(--ivory-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-reveal);
+}
+
+.runRow:hover {
+  background: var(--card-2);
+}
+
+.runRow[disabled] {
+  cursor: default;
+}
+
+.runTime {
+  flex: 1 1 auto;
+  color: var(--ivory-2);
+}
+
+.runMeta {
+  flex: 0 0 auto;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status is a value, so it gets data ink (§1.3). */
+.dot {
+  flex: 0 0 auto;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--r-pill);
+  background: var(--ink-3);
+}
+
+.dot[data-status='ok'] {
+  background: var(--ink-teal);
+}
+
+.dot[data-status='error'] {
+  background: var(--ink-coral);
+}
+
+.dot[data-status='running'] {
+  background: var(--ink-copper);
+}
+
+.dot[data-status='awaiting-approval'] {
+  background: var(--ink-amber);
+}
+
+/* -----------------------------------------------------------------------------
+ * Our addition — INPUTS (generated from frontmatter)
+ * -------------------------------------------------------------------------- */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fieldBlock {
+  margin-block-start: 12px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.required {
+  color: var(--ivory-2);
+}
+
+.control {
+  inline-size: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ivory);
+  background: var(--card);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-chip);
+  transition: border-color var(--dur-hover) var(--ease-reveal);
+}
+
+.control::placeholder {
+  color: var(--ink-3);
+}
+
+.control:hover {
+  border-color: var(--line-2);
+}
+
+.control[aria-invalid='true'] {
+  border-color: var(--ink-coral-line);
+}
+
+.textarea {
+  min-block-size: 68px;
+  resize: vertical;
+}
+
+.fieldError {
+  font-size: 11px;
+  color: var(--ink-coral);
+}
+
+/* -----------------------------------------------------------------------------
+ * §2.6.5 — autonomy toggle row and SKILLS cards
+ * -------------------------------------------------------------------------- */
+.toggleRow {
+  display: flex;
+  gap: 6px;
+  margin-block-start: 14px;
+}
+
+.toggle {
+  flex: 1 1 0;
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  background: transparent;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-pill);
+  cursor: default;
+}
+
+.toggle[data-active='true'] {
+  color: var(--copper-ink);
+  background: var(--copper);
+  border-color: var(--copper);
+}
+
+.skillCards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skillEntry {
+  padding: 12px;
+  background: var(--card);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card-sm);
+}
+
+.skillName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ivory);
+}
+
+.skillDescription {
+  margin-block-start: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ivory-2);
+}
+
+.skillActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block-start: 10px;
+}
+
+/* -----------------------------------------------------------------------------
+ * Our addition — the live run console, sliding up over the drawer
+ * -------------------------------------------------------------------------- */
+.console {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  block-size: 62%;
+  display: flex;
+  flex-direction: column;
+  background: var(--screen);
+  border-block-start: var(--border-w) solid var(--line);
+  transform: translateY(100%);
+  transition: transform var(--dur-drawer) var(--ease-drawer);
+  z-index: 1;
+}
+
+.console[data-state='open'] {
+  transform: translateY(0);
+}
+
+.consoleHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-block-end: var(--border-w) solid var(--line);
+}
+
+.consoleTitle {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: var(--ink-2);
+}
+
+.consoleLines {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ivory-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* The console is machine output: it reads left-to-right even in an Arabic UI. */
+  direction: ltr;
+  text-align: start;
+}
+
+.consoleLine[data-tone='ok'] {
+  color: var(--ink-teal);
+}
+
+.consoleLine[data-tone='error'] {
+  color: var(--ink-coral);
+}
+
+.consoleLine[data-tone='pending'] {
+  color: var(--ink-amber);
+}
+
+.consoleLine[data-kind='notice'] {
+  color: var(--ink-2);
+}
+
+.consoleTrimmed {
+  padding-block-end: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.consoleFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-block-start: var(--border-w) solid var(--line);
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Approval gate (§3.2) — the one place the console stops being a log. */
+.approval {
+  margin: 10px 12px;
+  padding: 12px;
+  background: var(--card-2);
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-card-sm);
+}
+
+.approvalLabel {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: var(--ink-amber);
+}
+
+.approvalPlan {
+  margin-block-start: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ivory);
+}
+
+.approvalActions {
+  display: flex;
+  gap: 8px;
+  margin-block-start: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+ * States that are sentences, not spinners (Part VII.3)
+ * -------------------------------------------------------------------------- */
+.status {
+  padding-block: 24px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ivory-2);
+}
+
+.statusHint {
+  margin-block-start: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}

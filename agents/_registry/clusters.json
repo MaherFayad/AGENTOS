@@ -1,0 +1,51 @@
+{
+  "sales": [
+    { "slug": "lead-sourcing", "label": "LEAD SOURCING" },
+    { "slug": "enrichment", "label": "ENRICHMENT" },
+    { "slug": "outreach-writing", "label": "OUTREACH WRITING" },
+    { "slug": "targeting", "label": "TARGETING" },
+    { "slug": "sequencing-and-send", "label": "SEQUENCING & SEND" }
+  ],
+  "deals": [
+    { "slug": "pipeline-hygiene", "label": "PIPELINE HYGIENE" },
+    { "slug": "proposals", "label": "PROPOSALS" },
+    { "slug": "forecasting", "label": "FORECASTING" },
+    { "slug": "negotiation", "label": "NEGOTIATION" },
+    { "slug": "handover", "label": "HANDOVER" }
+  ],
+  "marketing": [
+    { "slug": "content", "label": "CONTENT" },
+    { "slug": "brand", "label": "BRAND" },
+    { "slug": "distribution", "label": "DISTRIBUTION" },
+    { "slug": "paid-acquisition", "label": "PAID ACQUISITION" },
+    { "slug": "campaign-analytics", "label": "CAMPAIGN ANALYTICS" }
+  ],
+  "operations": [
+    { "slug": "delivery", "label": "DELIVERY" },
+    { "slug": "automation", "label": "AUTOMATION" },
+    { "slug": "quality-and-audit", "label": "QUALITY & AUDIT" },
+    { "slug": "scheduling", "label": "SCHEDULING" },
+    { "slug": "internal-comms", "label": "INTERNAL COMMS" }
+  ],
+  "intelligence": [
+    { "slug": "company-research", "label": "COMPANY RESEARCH" },
+    { "slug": "market-signals", "label": "MARKET SIGNALS" },
+    { "slug": "second-brain", "label": "SECOND BRAIN" },
+    { "slug": "competitive", "label": "COMPETITIVE" },
+    { "slug": "reporting", "label": "REPORTING" }
+  ],
+  "customer": [
+    { "slug": "onboarding", "label": "ONBOARDING" },
+    { "slug": "support", "label": "SUPPORT" },
+    { "slug": "retention", "label": "RETENTION" },
+    { "slug": "voice-of-customer", "label": "VOICE OF CUSTOMER" },
+    { "slug": "success-reviews", "label": "SUCCESS REVIEWS" }
+  ],
+  "back-office": [
+    { "slug": "finance", "label": "FINANCE" },
+    { "slug": "contracts-and-legal", "label": "CONTRACTS & LEGAL" },
+    { "slug": "people", "label": "PEOPLE" },
+    { "slug": "procurement", "label": "PROCUREMENT" },
+    { "slug": "compliance", "label": "COMPLIANCE" }
+  ]
+}

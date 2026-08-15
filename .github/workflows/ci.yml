@@ -1,0 +1,95 @@
+name: CI
+
+# Fast on purpose. A gate people skip is not a gate — the whole verify+typecheck+lint pass
+# is one job on one checkout with a warm npm cache, so there is never a reason to push with
+# `--no-verify` and "fix CI later".
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # One install for the whole workspace (ADR-002: one root lockfile).
+      - name: Install
+        run: npm ci
+
+      # ---------------------------------------------------------------------
+      # The token grep from cc-fidelity-check §1. It runs BEFORE the slower checks
+      # because it is the cheapest possible failure and the most common one:
+      # "no hex outside tokens.css" (Part I, BOARD constraint 3).
+      #
+      # The PowerShell form in the skill is the local equivalent:
+      #   Select-String -Path apps/web/src -Include *.tsx,*.ts,*.css -Pattern '#[0-9a-fA-F]{3,8}' -Recurse |
+      #     Where-Object { $_.Path -notmatch 'tokens\.css' }
+      # ---------------------------------------------------------------------
+      - name: Token audit — no hex outside tokens.css
+        run: |
+          if [ ! -d apps/web/src ]; then echo "apps/web/src not present yet — skipping."; exit 0; fi
+          hits=$(grep -rInE '#[0-9a-fA-F]{3,8}\b' apps/web/src \
+                   --include='*.ts' --include='*.tsx' --include='*.css' \
+                   --exclude='tokens.css' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::Hex color outside tokens.css. Every color is var(--token) (Part I)."
+            echo "$hits"
+            exit 1
+          fi
+          echo "No hex literals outside tokens.css."
+
+      # `verify` = frontmatter + panels + tokens + comms + spec coverage + unit tests.
+      # It is the single gate defined in the root package.json, so CI and a local
+      # `npm run verify` can never disagree about what "green" means.
+      - name: Verify
+        run: npm run verify
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  # Separate job: it needs Docker, is slower, and a broken compose file must not be
+  # confused with a broken app. Runs in parallel with `verify`.
+  infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Proves the compose file parses and every ${VAR} has a usable default, on a clone
+      # with no .env — which is exactly the state a new agent starts in.
+      - name: Compose config is valid
+        run: docker compose -f infra/compose.yaml config --quiet
+
+      # §3.6 — the check that matters. Binding 0.0.0.0 is the single mistake that turns
+      # "no auth by design" into "no auth". This lints the port specs' bind addresses;
+      # with a running stack it also asks Docker what it actually bound.
+      - name: No public port bindings
+        run: node infra/check-bind.mjs

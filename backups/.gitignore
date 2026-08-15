@@ -1,0 +1,5 @@
+# Encrypted Postgres dumps land here (infra/BACKUP.md, Part VII.4).
+# Self-contained rather than a line in the root .gitignore, so this directory carries its
+# own guarantee wherever it is copied.
+*
+!.gitignore

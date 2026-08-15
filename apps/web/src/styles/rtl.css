@@ -1,0 +1,297 @@
+/* =============================================================================
+ * rtl.css — direction and Arabic typography.
+ *
+ * Owner: rtl-arabic-pdpl-specialist · Spec §1.4, §2.0, §2.2, §2.3, §2.6.5.
+ * Sibling of tokens.css, which is owned by design-system-guardian. This file
+ * contains NO color and NO token values — if a rule here needs a color, it is
+ * in the wrong file.
+ *
+ * WIRING (one line, owned by design-system-guardian):
+ *     apps/web/src/app/globals.css →  @import './styles/rtl.css';   (after tokens.css)
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE THREE RULES THIS FILE ENFORCES SO NO COMPONENT HAS TO REMEMBER THEM
+ *
+ * 1. NO ITALIC IN ARABIC (§1.4). Arabic has no italic form. A browser asked for
+ *    italic with no italic face will synthesise one by shearing the glyphs, and
+ *    sheared Arabic is the single most obvious tell that a design was translated
+ *    rather than made. `font-synthesis` is switched off globally and the accent
+ *    role is re-expressed as WEIGHT contrast under :lang(ar).
+ *
+ * 2. NO LETTER-SPACING ON ARABIC (§1.4). The design is full of +0.25em–0.45em
+ *    wide-tracked caps. Arabic is a connected script: tracking pulls the joins
+ *    apart and the word stops being a word. Under :lang(ar) tracking is reset
+ *    and the same emphasis is rebuilt from size, weight and WORD-spacing.
+ *
+ * 3. LOGICAL PROPERTIES ONLY. Nothing here says left or right except where the
+ *    thing being positioned genuinely has a physical side — and those carry an
+ *    `rtl-exempt:` comment, which `scripts/check-rtl.mjs` reports so the list
+ *    of exemptions stays short and visible.
+ * ========================================================================== */
+
+/* -----------------------------------------------------------------------------
+ * The direction sign.
+ *
+ * Framer Motion and d3 take numbers, not logical properties. So does
+ * `translateX`. This custom property is the CSS twin of `inlineSign()` in
+ * i18n/direction.ts, and it is the only sanctioned way for a transform to know
+ * which way "forward" is:
+ *
+ *     transform: translateX(calc(var(--dir) * -100%));   slides off the inline-start edge
+ * -------------------------------------------------------------------------- */
+[dir='ltr'] { --dir: 1; }
+[dir='rtl'] { --dir: -1; }
+:root { --dir: 1; }
+
+/* Wide-tracked label tracking, restated as a token so the Arabic override has
+ * something to override. Latin keeps §1.4's +0.25em–0.45em; Arabic gets word
+ * spacing instead of letter spacing. */
+:root {
+  --track-label: .3em;
+  --track-eyebrow: .35em;
+  --track-tab: .25em;
+  --word-space-label-ar: .22em;
+}
+
+/* -----------------------------------------------------------------------------
+ * RULE 1 — Arabic body face, and no synthesised styles anywhere.
+ *
+ * `font-synthesis: none` is the actual enforcement of "no italics in Arabic".
+ * Without it, any `font-style: italic` that slips through — from a reset, a
+ * markdown renderer, a third-party embed — silently produces obliqued Arabic.
+ * With it, the browser simply renders upright and the mistake is invisible to
+ * the reader instead of glaring.
+ *
+ * Latin faces are unaffected: Instrument Serif ships a real italic and
+ * Plus Jakarta Sans ships real weights, so nothing here ever needed synthesis.
+ * -------------------------------------------------------------------------- */
+html {
+  font-synthesis: none;
+  font-synthesis-weight: none;
+  font-synthesis-style: none;
+  font-synthesis-small-caps: none;
+}
+
+:lang(ar) {
+  font-family: var(--font-arabic);
+  /* Arabic renders optically smaller than Latin at the same px size; the
+   * ascender/descender band is shorter and the counters are tighter. A touch
+   * more leading is the standard compensation, not a preference. */
+  line-height: 1.75;
+}
+
+/* Instrument Serif is a LATIN-ONLY face in this product (§1.4). Any element
+ * that asks for the serif inside Arabic content falls back to the Arabic
+ * family, upright, and carries its emphasis in weight. */
+:lang(ar) em,
+:lang(ar) i,
+:lang(ar) cite,
+:lang(ar) address,
+:lang(ar) .u-accent,
+:lang(ar) [style*='italic'] {
+  font-family: var(--font-arabic);
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* -----------------------------------------------------------------------------
+ * RULE 2 — tracking does not transfer.
+ *
+ * `!important` is load-bearing and deliberate. The wide-tracked look arrives
+ * through Tailwind utilities (`tracking-label`, `text-label`) owned by
+ * design-system-guardian, and through inline `letter-spacing` in components
+ * owned by ten other agents. This rule has to win against all of them without
+ * any of them knowing it exists — that is the entire point of putting the
+ * script rule in the script's own selector.
+ *
+ * `scripts/check-rtl.mjs` still flags new `letter-spacing` on translatable
+ * text, because a rule that silently cleans up after people stops teaching
+ * them anything.
+ * -------------------------------------------------------------------------- */
+:lang(ar),
+:lang(ar) * {
+  letter-spacing: normal !important;
+}
+
+/* The replacement emphasis for wide-tracked labels: bigger, heavier, and spaced
+ * BETWEEN words rather than between letters. Reads as the same "quiet, formal,
+ * architectural" label the Latin tracking produces, without severing a single
+ * join. */
+:lang(ar) .u-label,
+:lang(ar) .u-eyebrow,
+:lang(ar) .u-tab {
+  word-spacing: var(--word-space-label-ar);
+  font-weight: 600;
+  font-size: 1.08em;
+  /* text-transform: uppercase is a no-op in Arabic — harmless, left in place so
+   * components do not need a locale branch. */
+}
+
+/* -----------------------------------------------------------------------------
+ * The label roles themselves (Latin). Declared here rather than duplicated in
+ * ten components, and declared as classes rather than utilities so that the
+ * :lang(ar) overrides above have something stable to hook onto.
+ * -------------------------------------------------------------------------- */
+.u-label {
+  text-transform: uppercase;
+  /* rtl-exempt: Latin tracking (§1.4). The :lang(ar) rule above already resets it to
+     normal and rebuilds the emphasis from size, weight and word-spacing. */
+  letter-spacing: var(--track-label);
+  font-weight: 500;
+}
+
+.u-eyebrow {
+  text-transform: uppercase;
+  /* rtl-exempt: Latin tracking (§1.4), neutralised under :lang(ar) above. */
+  letter-spacing: var(--track-eyebrow);
+  font-weight: 500;
+}
+
+.u-tab {
+  text-transform: uppercase;
+  /* rtl-exempt: Latin tracking (§1.4), neutralised under :lang(ar) above. */
+  letter-spacing: var(--track-tab);
+  font-weight: 500;
+}
+
+/* The headline accent phrase — `[[double brackets]]` in the string catalogue,
+ * rendered by <Accented> (i18n/provider.tsx).
+ * Latin: the serif italic that is the brand signature (§1.4).
+ * Arabic: overridden to upright weight contrast by RULE 1 above. */
+.u-accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  /* rtl-exempt: §1.4 gives the accent serif −0.01em. Latin only — the :lang(ar)
+     rule above makes this element upright, heavier and untracked. */
+  letter-spacing: -.01em;
+}
+
+/* -----------------------------------------------------------------------------
+ * RULE 3 — numerals, and the LTR islands.
+ * -------------------------------------------------------------------------- */
+
+/* KPI numerals, counters, cost tickers, durations, table figures.
+ * `unicode-bidi: isolate` is what stops "$12.40" from rendering as "12.40$"
+ * when it sits next to Arabic. The JS twin is isolate() in i18n/format.ts, for
+ * numbers that end up inside a sentence rather than in their own element. */
+.u-nums {
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* rtl-exempt: charts, axes, canvases and program output do not mirror.
+ * A time axis running right-to-left is not an Arabic convention, it is a
+ * misread chart; a galaxy has no reading direction (§2.1); and a stack trace
+ * reordered by bidi is unreadable. Apply to the element that owns the
+ * coordinate system — the <canvas>, the <svg>, the console <pre>. Text INSIDE
+ * these that is prose (a tooltip, an empty state) opts back in with .u-rtl. */
+.u-ltr-island {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: start;
+}
+
+/* Opt a prose island back into the page direction — tooltips and empty states
+ * that live inside a .u-ltr-island chart. */
+.u-rtl { direction: rtl; }
+.u-auto { direction: inherit; unicode-bidi: isolate; }
+
+/* -----------------------------------------------------------------------------
+ * Drawers (§2.3 map, §2.6.5 chart).
+ *
+ * Two classes, no `left`, no `right`, no locale branch. The map drawer is
+ * anchored to the inline-start edge and the chart drawer to the inline-end
+ * edge; under dir="rtl" the browser swaps both, which is exactly the "map
+ * drawer moves right, chart drawer left" behaviour §1.4 asks for.
+ *
+ * The slide animation reads its direction from --dir, so the drawer always
+ * enters from the edge it is anchored to.
+ * -------------------------------------------------------------------------- */
+.u-drawer-start {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-inline-end: var(--border-w) solid var(--line);
+}
+
+.u-drawer-end {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  border-inline-start: var(--border-w) solid var(--line);
+}
+
+/* Closed states, for the CSS-driven case. Framer-driven drawers use
+ * inlineSign() from i18n/direction.ts instead — same sign, same source. */
+.u-drawer-start[data-open='false'] { transform: translateX(calc(var(--dir) * -100%)); }
+.u-drawer-end[data-open='false']   { transform: translateX(calc(var(--dir) * 100%)); }
+
+.u-drawer-start,
+.u-drawer-end {
+  transition: transform var(--dur-drawer) var(--ease-drawer);
+}
+
+/* -----------------------------------------------------------------------------
+ * Directional glyphs (§2.0 breadcrumb arrow, §2.2 rail chevrons, §2.4 carousel
+ * arrows, disclosure carets).
+ *
+ * Opt-in, never blanket. A blanket `[dir=rtl] svg { transform: scaleX(-1) }`
+ * would also flip the logo, the play triangle, the clock badge and every
+ * lucide icon that means a thing rather than a direction.
+ * -------------------------------------------------------------------------- */
+[dir='rtl'] .u-mirror { transform: scaleX(-1); }
+[dir='rtl'] .u-mirror-inline { scale: -1 1; }
+
+/* -----------------------------------------------------------------------------
+ * Rail labels (§2.2 — adjacent departments on the screen edges).
+ *
+ * Latin rails use vertical writing-mode, which is how the reference frame
+ * renders BACK OFFICE / DEALS. Arabic does not set vertically: the joins run
+ * along the baseline and vertical-rl breaks the word into stacked glyphs. So
+ * Arabic rails keep horizontal text and rotate the whole box instead.
+ *
+ * Flagged for a native eye during the M8 RTL pass — rotation sense is a
+ * judgement a screenshot settles faster than a paragraph.
+ * -------------------------------------------------------------------------- */
+.u-rail {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+:lang(ar) .u-rail {
+  writing-mode: horizontal-tb;
+  transform: rotate(calc(var(--dir) * -90deg));
+  transform-origin: center;
+  white-space: nowrap;
+}
+
+/* -----------------------------------------------------------------------------
+ * Small logical-property helpers, so a component never reaches for `margin-left`
+ * because the logical name was three characters longer.
+ * -------------------------------------------------------------------------- */
+.u-start   { text-align: start; }
+.u-end     { text-align: end; }
+.u-float-start { float: inline-start; }
+.u-float-end   { float: inline-end; }
+
+/* Scroll shadows, gradients and masks are the other place physical directions
+ * hide. `to right` in a gradient does not follow `dir`. Use these. */
+/* rtl-exempt: these two lines ARE the mapping — the physical keyword has to be
+   written down exactly once, here, so that no gradient anywhere else does. */
+[dir='ltr'] { --to-inline-end: to right; --to-inline-start: to left; }
+[dir='rtl'] { --to-inline-end: to left;  --to-inline-start: to right; }
+
+/* -----------------------------------------------------------------------------
+ * Reduced motion (§1.6) — the drawer transition declared above is the one piece
+ * of motion this file owns, so it is the one piece this file must switch off.
+ * Duration tokens already collapse to 1ms in tokens.css; this is belt and
+ * braces for the transform, whose end state must remain exact.
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .u-drawer-start,
+  .u-drawer-end {
+    transition: none;
+  }
+}

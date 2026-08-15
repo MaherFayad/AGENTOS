@@ -1,0 +1,395 @@
+# Command Center — the whole stack (spec Part V).
+#
+#   web        Next.js 15 — MAP / DASHBOARDS / CHART / SESSIONS, PWA
+#   runner     Node + @anthropic-ai/claude-agent-sdk — /api/run (SSE), /api/schedule
+#   happy      slopus/happy-server — E2E session relay (§3.1)
+#   langfuse   + postgres — traces, cost, run history (§3.5)
+#   ofelia     cron — fires runner from frontmatter schedules (§3.2)
+#   caddy      one entry point, routes / /api /traces /relay
+#
+# PORTABILITY (Part V: "later: identical compose on a VPS"). Nothing here may depend on
+# this machine: no absolute host paths, no host-installed tools, no manually-created
+# containers. Every path below is relative to THIS FILE. If it isn't in this file, it
+# doesn't exist.
+#
+# RUN IT (from the repo root, so --env-file finds the real .env):
+#   docker compose -f infra/compose.yaml --env-file .env --profile dev  up -d --build
+#   docker compose -f infra/compose.yaml --env-file .env --profile obs  up -d --build
+#   docker compose -f infra/compose.yaml --env-file .env --profile full up -d --build
+#
+# Profiles, and why there are three:
+#   dev   web + runner only. Front-end agents are not blocked on the full stack (M0 #3).
+#   obs   dev + postgres + langfuse + ofelia + caddy. Every image here is known-good.
+#   full  obs + happy. Split out because the happy-server image is unverified until
+#         `sessions-relay-engineer` files the Happy-vs-Omnara ADR at M4 — a bad pull
+#         would otherwise take the whole stack down with it.
+#
+# `docker compose up` with NO profile starts nothing. That is deliberate: booting six
+# services should be a sentence you meant to type.
+
+name: agnetos
+
+# ---------------------------------------------------------------------------
+# Reusable fragments
+# ---------------------------------------------------------------------------
+x-env: &env
+  # `required: false` so `docker compose config` works on a fresh clone with no secrets.
+  # The real .env is gitignored and never printed — not into logs, traces or comms.
+  env_file:
+    - path: ../.env
+      required: false
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+# The read-only agent library (Part IV, Part V "chokidar on /agents (ro mount)").
+# `:ro` is load-bearing, not decoration: the watcher and the prompt loader read it, and a
+# prompt-injected agent must not be able to rewrite the library it was loaded from.
+x-agents-ro: &agents-ro
+  - ../agents:/agents:ro
+
+services:
+  # =========================================================================
+  # web — Next.js 15 (Part V)
+  # =========================================================================
+  web:
+    <<: [*env, *logging]
+    profiles: [dev, obs, full]
+    build:
+      context: ..
+      dockerfile: infra/web.Dockerfile
+    image: agnetos/web:local
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+      # Browser-side base URL. Empty means "same origin", which is what Caddy gives us.
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-}
+      # Server-side, over the compose network — never through Caddy.
+      RUNNER_INTERNAL_URL: http://runner:8787
+    volumes:
+      # Read-only content mounts. web PROJECTS this data (BOARD constraint 4); it never
+      # owns or writes it.
+      - ../agents:/agents:ro
+      - ../company:/company:ro
+      - ../panels:/panels:ro
+    ports:
+      # Loopback only, and only as a developer convenience so `--profile dev` is usable
+      # without Caddy. Caddy is the sole tailnet-facing binding (see its `ports:`).
+      - '${DEV_BIND_ADDR:-127.0.0.1}:${WEB_PORT:-3000}:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:3000/']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks: [cc]
+
+  # =========================================================================
+  # runner — agent SDK service (Part V, §3.2)
+  # =========================================================================
+  runner:
+    <<: [*env, *logging]
+    profiles: [dev, obs, full]
+    build:
+      context: ..
+      dockerfile: infra/runner.Dockerfile
+    image: agnetos/runner:local
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      RUNNER_PORT: '8787'
+      RUNNER_HOST: 0.0.0.0
+      # BILLING SPLIT (Part V). This is the runner's OWN capped API-key workspace. It is
+      # NOT the human's Claude subscription — that pays for interactive sessions through
+      # happy, which wraps the CLI and never sees this key.
+      ANTHROPIC_API_KEY: ${RUNNER_ANTHROPIC_API_KEY:-}
+      RUNNER_MONTHLY_CAP_USD: ${RUNNER_MONTHLY_CAP_USD:-50}
+      # Observability (§3.5). Traces stay on this box (Part VII.4).
+      LANGFUSE_HOST: http://langfuse:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      # Business rows agents write (§3.5). Same server, separate database from Langfuse's.
+      APP_DATABASE_URL: postgresql://${POSTGRES_USER:-agnetos}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${APP_DB:-agnetos}
+      HAPPY_INTERNAL_URL: http://happy:3005
+      # git identity for §3.2 schedule commits — set here so commits are attributable to
+      # the runner and not to whoever last ran docker.
+      GIT_AUTHOR_NAME: ${RUNNER_GIT_NAME:-agnetos-runner}
+      GIT_AUTHOR_EMAIL: ${RUNNER_GIT_EMAIL:-runner@agnetos.local}
+      GIT_COMMITTER_NAME: ${RUNNER_GIT_NAME:-agnetos-runner}
+      GIT_COMMITTER_EMAIL: ${RUNNER_GIT_EMAIL:-runner@agnetos.local}
+      REPO_WRITE_ROOT: /repo/agents
+    volumes:
+      # 1. THE READ PATH — chokidar watcher + prompt loader. Read-only (M0 deliverable 4).
+      - ../agents:/agents:ro
+      - ../company:/company:ro
+      - ../panels:/panels:ro
+      # 2. THE GIT PATH — the ONLY writable view of the repo, and the only way anything
+      #    reaches /agents. ADR-002: "The runner's git writes (§3.2 schedule commits)
+      #    touch agents/ only — a path check in the runner enforces that, so a
+      #    prompt-injected agent cannot commit to apps/." That check reads REPO_WRITE_ROOT
+      #    above and is `runner-engineer`'s to implement at M7. A run's own cwd is a fresh
+      #    scratch workspace (below), never /repo.
+      - ..:/repo
+      # 3. Per-run scratch workspaces (§3.2) and audit output (§3.4).
+      - runner_workspaces:/workspaces
+      - ../audit:/audit
+    ports:
+      # Loopback only — developer convenience. Caddy serves /api on the tailnet.
+      - '${DEV_BIND_ADDR:-127.0.0.1}:${RUNNER_PORT:-8787}:8787'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8787/healthz']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [cc]
+
+  # =========================================================================
+  # postgres — Langfuse's store + the agent-output rows (Part V, §3.5)
+  # =========================================================================
+  postgres:
+    <<: [*env, *logging]
+    profiles: [obs, full]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agnetos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-langfuse}
+      # Deterministic collation so a dump restores identically on the VPS.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      # PDPL / Part VII.4: "keep the Postgres volume local, encrypt backups". A NAMED,
+      # driver:local volume — not a bind mount to a host path (which would break the
+      # portability rule) and not a cloud volume driver. Backups: see infra/BACKUP.md.
+      - langfuse_pgdata:/var/lib/postgresql/data
+    ports:
+      # Loopback, and 5433 so it cannot collide with a Postgres already on the host.
+      - '${DEV_BIND_ADDR:-127.0.0.1}:${POSTGRES_HOST_PORT:-5433}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-agnetos} -d ${POSTGRES_DB:-langfuse}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [cc]
+
+  # =========================================================================
+  # langfuse — traces, cost, run history (§3.5)
+  # =========================================================================
+  langfuse:
+    <<: [*env, *logging]
+    profiles: [obs, full]
+    # Pinned to v2 on purpose: v2 is the "langfuse + postgres" topology Part V describes.
+    # v3 additionally requires ClickHouse, Redis and S3/MinIO — three more services and
+    # three more volumes to keep local under Part VII.4. Moving to v3 is an ADR, not an
+    # image bump.
+    image: ${LANGFUSE_IMAGE:-langfuse/langfuse:2}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agnetos}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-langfuse}
+      NEXTAUTH_URL: ${LANGFUSE_PUBLIC_URL:-http://127.0.0.1:3001}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-dev-only-change-me}
+      SALT: ${LANGFUSE_SALT:-dev-only-change-me}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      HOSTNAME: 0.0.0.0
+      # PDPL (Part VII.4): no telemetry leaves the box, no US SaaS traces.
+      TELEMETRY_ENABLED: 'false'
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'false'
+      NEXT_PUBLIC_SIGN_UP_DISABLED: ${LANGFUSE_SIGNUP_DISABLED:-false}
+    ports:
+      - '${DEV_BIND_ADDR:-127.0.0.1}:${LANGFUSE_HOST_PORT:-3001}:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:3000/api/public/health']
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks: [cc]
+
+  # =========================================================================
+  # happy — E2E session relay (§3.1)
+  # =========================================================================
+  happy:
+    <<: [*env, *logging]
+    profiles: [full]
+    # Image is env-overridable because Happy-vs-Omnara is an open M4 decision owned by
+    # `sessions-relay-engineer`. Swapping it must not require editing this file.
+    image: ${HAPPY_IMAGE:-ghcr.io/slopus/happy-server:latest}
+    init: true
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: '3005'
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agnetos}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${HAPPY_DB:-happy}
+      # ADR-005: "Compose gains one service with a Postgres database and a master secret."
+      # This secret signs the relay's own tokens. It is NOT a decryption key.
+      HANDY_MASTER_SECRET: ${HAPPY_MASTER_SECRET:-}
+      # §3.1 / ADR-005 constraint 1: the relay stores ciphertext and CANNOT decrypt it. The
+      # user's key is a non-extractable CryptoKey in the browser. If a future env var here
+      # would let the server read a transcript, the answer is no — that is the threat
+      # model, not a setting.
+    volumes:
+      - happy_data:/data
+    ports:
+      - '${DEV_BIND_ADDR:-127.0.0.1}:${HAPPY_HOST_PORT:-3005}:3005'
+    healthcheck:
+      # Path unverified until the M4 ADR picks the relay. `sessions-relay-engineer` owns
+      # correcting this; a healthcheck that always passes would be worse than a wrong one.
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3005/ || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks: [cc]
+
+  # =========================================================================
+  # ofelia — cron (Part V, §3.2)
+  # =========================================================================
+  ofelia:
+    <<: *logging
+    profiles: [obs, full]
+    image: ${OFELIA_IMAGE:-mcuadros/ofelia:v0.3.16}
+    restart: unless-stopped
+    depends_on:
+      runner:
+        condition: service_healthy
+    command: daemon --config=/etc/ofelia/config.ini
+    volumes:
+      - ./ofelia/config.ini:/etc/ofelia/config.ini:ro
+      # ofelia's job-run type starts containers, which needs the daemon socket. :ro limits
+      # it to what the API allows read-side; it is still a privileged mount, which is why
+      # ofelia runs no user code — it only POSTs to the runner.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # No healthcheck: the image has no HTTP surface and no shell utilities to probe a PID
+    # with. A healthcheck that cannot fail is a lie, so there isn't one. Liveness is
+    # observed through the runner's run history instead (§3.5).
+    networks: [cc]
+
+  # =========================================================================
+  # caddy — the one entry point (Part V, §3.6)
+  # =========================================================================
+  caddy:
+    <<: [*env, *logging]
+    profiles: [obs, full]
+    image: ${CADDY_IMAGE:-caddy:2.9-alpine}
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+    environment:
+      CC_HOST: ${CC_HOST:-localhost}
+      TRACES_HOST: ${TRACES_HOST:-traces.localhost}
+      TLS_MODE: ${TLS_MODE:-internal}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/tls:/etc/caddy/tls:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      # Tailscale-issued cert + key, populated by the `tailscale` service (profile: tls).
+      - ts_certs:/certs:ro
+    ports:
+      # ==================================================================
+      # THE BIND ADDRESS. This is the single most important line in the file.
+      #
+      # Binding 0.0.0.0 is the single mistake that turns "no auth by design" into
+      # "no auth" (§3.6). The app has no authentication in v1 because it is
+      # unreachable off the tailnet — that sentence stops being true the moment
+      # this binds to a public interface.
+      #
+      # TAILSCALE_IP is the host's 100.x.y.z tailnet address. The fallback is
+      # 127.0.0.1 (loopback — still not public) so that a fresh clone with no .env
+      # fails closed rather than open.
+      #
+      # NEVER write 0.0.0.0, '::', or a bare '443:443' here.
+      # Verify with `node infra/check-bind.mjs`, not by re-reading this comment.
+      # ==================================================================
+      - '${TAILSCALE_IP:-127.0.0.1}:443:443'
+      - '${TAILSCALE_IP:-127.0.0.1}:80:80'
+      - '${TAILSCALE_IP:-127.0.0.1}:443:443/udp'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:2019/config/']
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks: [cc]
+
+  # =========================================================================
+  # tailscale — mesh membership + MagicDNS TLS certs (M0 deliverable 1)
+  # =========================================================================
+  # In its own profile because the default TLS_MODE=internal boots with zero secrets, so
+  # the other twelve agents are not blocked on an auth key existing. Switch to real
+  # tailnet certs with:  TLS_MODE=tailscale  +  --profile tls
+  #
+  # It is IN compose (not a host install) because of the portability rule: the same
+  # `docker compose up` must work on the VPS.
+  tailscale:
+    <<: *logging
+    profiles: [tls]
+    image: ${TAILSCALE_IMAGE:-tailscale/tailscale:stable}
+    hostname: ${TS_HOSTNAME:-agnetos}
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: 'true'
+      TS_EXTRA_ARGS: --accept-dns=false
+    volumes:
+      - ts_state:/var/lib/tailscale
+      - ts_certs:/certs
+    # `tailscale cert` writes the MagicDNS cert into the shared ts_certs volume, which
+    # caddy mounts read-only. Re-run on a schedule; Tailscale certs are 90-day.
+    command: >
+      sh -c 'containerboot &
+             until tailscale status >/dev/null 2>&1; do sleep 2; done;
+             tailscale cert --cert-file /certs/tailnet.crt --key-file /certs/tailnet.key "$${CC_HOST}";
+             wait'
+    networks: [cc]
+
+# ---------------------------------------------------------------------------
+networks:
+  cc:
+    name: agnetos_cc
+    driver: bridge
+
+volumes:
+  # PDPL / Part VII.4 — traces and Postgres stay LOCAL. `driver: local` is explicit so a
+  # future edit to a cloud volume driver is a visible diff, not a default.
+  langfuse_pgdata:
+    name: agnetos_langfuse_pgdata
+    driver: local
+  happy_data:
+    name: agnetos_happy_data
+    driver: local
+  runner_workspaces:
+    name: agnetos_runner_workspaces
+    driver: local
+  caddy_data:
+    name: agnetos_caddy_data
+    driver: local
+  caddy_config:
+    name: agnetos_caddy_config
+    driver: local
+  ts_state:
+    name: agnetos_ts_state
+    driver: local
+  ts_certs:
+    name: agnetos_ts_certs
+    driver: local
