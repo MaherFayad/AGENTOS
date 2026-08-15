@@ -19,12 +19,12 @@ export function ChartEmptyState({
     <div
       data-testid="chart-empty-state"
       style={HATCH_STYLE}
-      className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-[14px] border border-line px-6 py-12 text-center"
+      className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-card border border-line px-6 py-12 text-center"
     >
-      <p className="text-[13px] font-semibold text-ivory">
+      <p className="text-small font-semibold text-ivory">
         {error ? 'The agent library could not be read.' : `No jobs mapped in ${departmentLabel} yet.`}
       </p>
-      <p className="max-w-[46ch] text-[12px] leading-[1.6] text-ink-2">
+      <p className="max-w-[46ch] text-meta text-ink-2">
         {error ? (
           <>
             {error} · CHART shows nothing rather than a plausible grid — the numbers on this

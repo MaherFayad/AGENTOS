@@ -6,9 +6,11 @@
  * 1. **Secrets are read, never echoed.** `ANTHROPIC_API_KEY` is loaded into memory and
  *    reported only as a boolean (`configured`). It is never logged, never traced, never
  *    written to `comms/`, and never returned by a route (Part V billing).
- * 2. **Writes are confined to `agents/**`** (ADR-002). The runner commits schedule changes
- *    into the agent library and nothing else, so a prompt-injected agent that talks the
- *    runner into a write cannot reach `apps/`, `infra/` or `comms/`.
+ * 2. **Writes are confined to two roots, one code path each.** `agents/**` for schedule
+ *    commits (ADR-002) and `company/**` for the Second Brain write-back (ADR-007). There
+ *    is no general "write a file" helper and deliberately no third root, so a
+ *    prompt-injected agent that talks the runner into a write cannot reach `apps/`,
+ *    `infra/` or `comms/`.
  */
 import { resolve, join, relative, isAbsolute, sep } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -142,11 +144,33 @@ export function agentSkillPath(config: RunnerConfig, slug: string): string {
  * plausible.
  */
 export function assertInsideAgents(config: RunnerConfig, targetPath: string): void {
+  assertInsideRoot(config, config.agentsDir, targetPath, 'agents/');
+}
+
+/**
+ * The second write boundary (ADR-007): the Second Brain write-back.
+ *
+ * §3.3 requires COMPANY.md to be committed — "git history is brain versioning" — and
+ * COMPANY.md is not under `agents/`. Rather than widen the ADR-002 rule to "the repo", a
+ * second, equally narrow root exists, reachable from exactly one code path
+ * (`writeBackBrain`, gated on the interview agent's slug). Two named doors beat one wide
+ * one: each is greppable, and neither is a general-purpose write.
+ */
+export function assertInsideCompany(config: RunnerConfig, targetPath: string): void {
+  assertInsideRoot(config, config.companyDir, targetPath, 'company/');
+}
+
+function assertInsideRoot(
+  config: RunnerConfig,
+  root: string,
+  targetPath: string,
+  label: string,
+): void {
   const abs = isAbsolute(targetPath) ? resolve(targetPath) : resolve(config.repoRoot, targetPath);
-  const rel = relative(resolve(config.agentsDir), abs);
+  const rel = relative(resolve(root), abs);
   if (rel === '' || rel.startsWith('..') || isAbsolute(rel) || rel.split(sep).includes('..')) {
-    throw new ApiError('git_write_refused', 'The runner may only write inside agents/.', {
-      hint: 'This is a safety limit, not a bug: schedules live in agent frontmatter, and nothing the runner does may touch app or infra files.',
+    throw new ApiError('git_write_refused', `The runner may only write inside ${label} here.`, {
+      hint: 'This is a safety limit, not a bug: the runner writes agent frontmatter and the company brain, and nothing else. Nothing was changed.',
     });
   }
 }

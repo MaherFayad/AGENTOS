@@ -43,7 +43,6 @@ export function InputsForm({
           required: field.required,
           'aria-invalid': error ? ('true' as const) : undefined,
           'aria-describedby': error ? errorId : undefined,
-          placeholder: field.placeholder,
         };
 
         return (
@@ -60,7 +59,7 @@ export function InputsForm({
                 onChange={(event) => onChange(field.key, event.target.value)}
               />
             ) : field.control === 'select' ? (
-              <select {...shared} placeholder={undefined} onChange={(event) => onChange(field.key, event.target.value)}>
+              <select {...shared} onChange={(event) => onChange(field.key, event.target.value)}>
                 {field.options.map((option) => (
                   <option key={option} value={option}>
                     {option}

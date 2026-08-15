@@ -58,7 +58,7 @@ export function DepartmentTabs({ departments, active, onSelect, counts }: Depart
             tabIndex={isActive ? 0 : -1}
             data-active={isActive}
             onClick={() => onSelect(department.slug)}
-            className={`relative -mb-px shrink-0 whitespace-nowrap pb-3 pt-1 text-[11px] font-medium uppercase tracking-[.3em] outline-none transition-colors focus-visible:text-ivory ${
+            className={`relative -mb-px shrink-0 whitespace-nowrap pb-3 pt-1 text-label uppercase tracking-wider-2 outline-none transition-colors focus-visible:text-ivory ${
               isActive ? 'text-ivory' : staffed ? 'text-ink-2 hover:text-ivory-2' : 'text-ink-3 hover:text-ink-2'
             }`}
           >

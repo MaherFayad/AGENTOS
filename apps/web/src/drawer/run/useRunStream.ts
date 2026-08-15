@@ -68,6 +68,10 @@ export function useRunStream(options: UseRunStreamOptions = {}): UseRunStream {
       try {
         await transport(request, {
           lastEventId: lastEventIdRef.current,
+          // Present only after `start`: a retry before that is a run that never began, so
+          // re-POSTing is correct. After it, this forces the GET re-attach and there is
+          // never a second run. See run/transport.ts.
+          runId: runIdRef.current,
           signal: controller.signal,
           onFrame: (frame) => {
             if (frame.id) lastEventIdRef.current = frame.id;

@@ -46,41 +46,51 @@ function docker(args) {
 }
 
 // --- 1. what is actually listening ------------------------------------------------
+// `docker ps`, not `docker compose ps`. Compose only reports containers carrying THIS
+// project's labels, and the failure this check exists to catch is precisely the one that
+// escapes those labels: a container left over from an older compose file, a different
+// project name, or a `docker run` someone typed by hand (which Part V forbids, and which
+// is therefore exactly the thing nobody is looking for). If something on this host is
+// listening on a public interface, the tailnet-only claim is false no matter who started
+// it — so the probe asks about every running container.
 let checkedContainers = 0;
+let probedHost = false;
 try {
-  const out = docker([
-    'compose',
-    '-f',
-    COMPOSE,
-    'ps',
-    '--format',
-    '{{.Service}}\t{{.Publishers}}',
-  ]);
+  const out = docker(['ps', '--format', '{{.Names}}\t{{.Ports}}']);
+  probedHost = true;
 
   for (const line of out.split(/\r?\n/).filter(Boolean)) {
-    const [service, publishers = ''] = line.split('\t');
-    // Publishers render as `0.0.0.0:443->443/tcp, 100.90.1.2:80->80/tcp`.
-    for (const pub of publishers.split(/,\s*/).filter(Boolean)) {
-      const m = /^(.*?):(\d+)->(\d+)\/(tcp|udp)$/.exec(pub.trim());
+    const [name, ports = ''] = line.split('\t');
+    // Ports render as `0.0.0.0:443->443/tcp, 100.90.1.2:80->80/tcp, 3000/tcp`.
+    // A bare `3000/tcp` is an EXPOSE with no published port — not reachable from the
+    // host at all, so it is not a finding and must not be counted as a checked bind.
+    for (const pub of ports.split(/,\s*/).filter(Boolean)) {
+      const m = /^(\[?[0-9a-fA-F.:*]+\]?):(\d+)->(\d+)\/(tcp|udp)$/.exec(pub.trim());
       if (!m) continue;
       checkedContainers++;
-      const [, host, hostPort, , proto] = m;
+      const [, rawHost, hostPort, , proto] = m;
+      const host = rawHost.replace(/^\[|\]$/g, '');
       const verdict = classify(host);
       if (verdict === 'PUBLIC') {
         errors.push(
-          `${service}: published on ${host}:${hostPort}/${proto} — that is every interface. ` +
-            `No auth exists in v1 by design (§3.6); this makes the stack reachable by anyone ` +
-            `who can route to this host.`,
+          `container "${name}": published on ${host}:${hostPort}/${proto} — that is every ` +
+            `interface. No auth exists in v1 by design (§3.6); this makes it reachable by ` +
+            `anyone who can route to this host.`,
         );
       } else {
-        notes.push(`  ok   ${service.padEnd(10)} ${host}:${hostPort}/${proto}  (${verdict})`);
+        notes.push(`  ok   running  ${name.padEnd(24)} ${host}:${hostPort}/${proto}  (${verdict})`);
       }
     }
   }
+  if (checkedContainers === 0) notes.push('  ok   running  no container publishes a host port.');
 } catch (err) {
+  // The daemon being down is not a pass. Say so loudly, because the rest of this script
+  // only lints intent — it cannot see a stale container that is listening right now.
   notes.push(
-    `  skip running-container check — docker not reachable (${String(err.message).split('\n')[0]})`,
+    `  SKIP running-container probe — docker daemon not reachable ` +
+      `(${String(err.message).split('\n')[0].slice(0, 120)}).`,
   );
+  notes.push('        Start Docker Desktop and re-run before trusting this result.');
 }
 
 // --- 2. what the compose file WILL bind on the next `up` --------------------------
@@ -175,5 +185,6 @@ if (errors.length) {
 }
 console.log(
   `\n${linted} declared + ${checkedContainers} running port(s) bound to loopback or the ` +
-    `tailnet. No public listeners.\n`,
+    `tailnet. No public listeners.` +
+    (probedHost ? '\n' : '\n(Declared ports only — no running container was inspected.)\n'),
 );

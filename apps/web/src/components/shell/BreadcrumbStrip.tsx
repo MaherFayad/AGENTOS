@@ -24,14 +24,14 @@ export function BreadcrumbStrip(): React.JSX.Element | null {
     <div className="pointer-events-none flex items-start justify-between px-5 pt-2 sm:px-6">
       <Link
         href={crumb.href}
-        className="pointer-events-auto text-[11px] uppercase tracking-[0.25em] text-ink-2 transition-colors hover:text-ivory focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-line-2"
+        className="pointer-events-auto text-label uppercase tracking-wider-1 text-ink-2 transition-colors hover:text-ivory focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-line-2"
       >
         <span aria-hidden="true">← </span>
         {crumb.label}
       </Link>
 
       {showCounter && (
-        <div className="pointer-events-auto flex items-center gap-2 text-[11px] uppercase tracking-[0.25em]">
+        <div className="pointer-events-auto flex items-center gap-2 text-label uppercase tracking-wider-1">
           {liveCounts === null ? (
             <span className="text-ink-2" title={liveCountsMessage ?? undefined}>
               NO LIVE COUNT YET
@@ -57,7 +57,7 @@ export function BreadcrumbStrip(): React.JSX.Element | null {
                 ? 'Showing only agents that are installed and live.'
                 : 'Filter this view to the agents you have installed and running.'
             }
-            className={`uppercase tracking-[0.25em] transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-line-2 ${
+            className={`uppercase tracking-wider-1 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-line-2 ${
               yourTree ? 'text-ivory' : 'text-ink-2 hover:text-ivory-2'
             }`}
           >

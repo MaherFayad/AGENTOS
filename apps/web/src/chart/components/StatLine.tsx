@@ -10,7 +10,7 @@ import type { ChartStats } from '../types';
  */
 export function StatLine({ stats }: { stats: ChartStats }) {
   return (
-    <p data-testid="chart-stat-line" className="text-[16px] leading-[1.6] text-ivory-2">
+    <p data-testid="chart-stat-line" className="text-body text-ivory-2">
       {statLineSegments(stats).map((segment, i) =>
         segment.strong ? (
           <strong key={i} className="font-semibold tabular-nums text-ivory">

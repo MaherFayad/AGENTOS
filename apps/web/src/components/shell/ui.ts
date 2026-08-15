@@ -7,16 +7,19 @@
  * guardian's names differ, exactly one file fails to compile and exactly one file gets
  * fixed.
  *
- * Assumed surface (confirm with the owner, see comms/inbox/design-system-guardian/):
- *   Pill              — props: { variant?: 'primary' | 'secondary' | 'ghost'; as?; ... }
- *   Eyebrow           — wide-tracked caps label, props: { tone?: 'copper' | 'ink' }
- *   SegmentedControl  — props: { items: {value,label}[]; value; onChange; label }
- *   GlassPanel        — --glass + backdrop-blur surface
- *   motion            — { durations, easings } per contracts/design-tokens.md §6
+ * Surface, as shipped by the guardian (read from the files, not assumed):
+ *   Pill              — { variant?: 'primary'|'secondary'|'ghost'; size?: 'sm'|'md'; square? }
+ *   Eyebrow           — { size?: 'sm'|'md'; tone?: 'muted'|'strong'|'alive' }; `alive` is
+ *                       the copper one, and copper means "next to something running" (§1.3)
+ *   SegmentedControl  — { options: {value,label,badge?}[]; value; onChange; label }
+ *   GlassPanel        — { radius?: 'md'|'lg'|'pill'; shadow?: 'drawer'|'none'; bordered? }
+ *   motion            — DURATION / EASE / withReducedMotion (§1.6). The shell needs the
+ *                       JS numbers because the fly-to duration travels over the event bus
+ *                       to a canvas that animates imperatively.
  */
 
 export { Pill } from '../primitives/Pill';
 export { Eyebrow } from '../primitives/Eyebrow';
 export { SegmentedControl } from '../primitives/SegmentedControl';
 export { GlassPanel } from '../primitives/GlassPanel';
-export { durations, easings } from '../primitives/motion';
+export { DURATION, EASE, withReducedMotion } from '../primitives/motion';

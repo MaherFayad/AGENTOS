@@ -67,11 +67,11 @@ export function ConnectionStatus(): React.JSX.Element {
   return (
     <div
       title={sentence}
-      className="pointer-events-auto flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 text-[10px] uppercase leading-none tracking-[0.25em] text-ink-2"
+      className="pointer-events-auto flex items-center gap-2 rounded-pill border border-line bg-card px-3 py-1.5 text-label-sm uppercase tracking-wider-1 text-ink-2"
     >
       <span
         aria-hidden="true"
-        className={`h-[5px] w-[5px] shrink-0 rounded-full ${online ? 'bg-ivory' : 'border border-line-2 bg-transparent'}`}
+        className={`h-[5px] w-[5px] shrink-0 rounded-pill ${online ? 'bg-ivory' : 'border border-line-2 bg-transparent'}`}
       />
       <span>{label}</span>
       {queue !== null && (

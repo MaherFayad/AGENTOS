@@ -9,9 +9,15 @@
  * Owner: drawer-engineer · Consumes: contracts/frontmatter-schema.md (`inputs[]`)
  */
 
+import { INPUT_TYPES } from '@agnetos/contracts';
 import type { AgentInput, InputType } from './types';
 
-export const SUPPORTED_INPUT_TYPES: InputType[] = ['text', 'url', 'number', 'select', 'textarea', 'date'];
+/**
+ * Straight from the schema, not retyped. Adding a seventh type is an edit to
+ * `packages/contracts/src/frontmatter.ts` by its owner; this module then fails to compile
+ * until it grows a control for it, which is exactly the failure we want.
+ */
+export const SUPPORTED_INPUT_TYPES: readonly InputType[] = INPUT_TYPES;
 
 export interface InputField {
   key: string;
@@ -19,8 +25,7 @@ export interface InputField {
   type: InputType;
   required: boolean;
   options: string[];
-  placeholder?: string;
-  /** `<input type>` for the control, or null for textarea/select which are their own tags. */
+  /** Which tag renders it. `input` also carries `inputType`. */
   control: 'input' | 'textarea' | 'select';
   inputType?: 'text' | 'url' | 'number' | 'date';
 }
@@ -40,7 +45,7 @@ export interface InputPlan {
 }
 
 function isSupported(type: string): type is InputType {
-  return (SUPPORTED_INPUT_TYPES as string[]).includes(type);
+  return (SUPPORTED_INPUT_TYPES as readonly string[]).includes(type);
 }
 
 /**
@@ -87,7 +92,6 @@ export function planInputs(inputs: AgentInput[] | undefined | null): InputPlan {
       type: declared,
       required: raw.required === true,
       options,
-      placeholder: typeof raw.placeholder === 'string' ? raw.placeholder : undefined,
       control: declared === 'textarea' ? 'textarea' : declared === 'select' ? 'select' : 'input',
       inputType:
         declared === 'url' ? 'url' : declared === 'number' ? 'number' : declared === 'date' ? 'date' : declared === 'text' ? 'text' : undefined,

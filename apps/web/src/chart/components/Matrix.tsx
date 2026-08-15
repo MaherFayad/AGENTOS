@@ -86,7 +86,7 @@ export function Matrix({ matrix, departmentLabel, onOpenDrawer }: MatrixProps) {
         aria-label={`${departmentLabel} rollout matrix — autonomy tier by rollout phase`}
         aria-describedby="chart-grid-help"
         data-testid="chart-matrix"
-        className="overflow-hidden rounded-[14px] border-l border-t border-line"
+        className="overflow-hidden rounded-card border-l border-t border-line"
       >
         <div role="row" className="grid" style={{ gridTemplateColumns: GRID_COLUMNS }}>
           <MatrixCorner />

@@ -57,9 +57,13 @@ export function SkillFileCard({
 
       <div className={s.actions}>
         {capabilities.download ? (
-          <Pill variant="secondary" as="a" href={downloadHref} title="Download this agent’s folder as a zip">
+          // A real <a download>, not a button with a click handler: it must survive
+          // middle-click, right-click-save and a long-press on a phone. `Pill` is
+          // button-only today (design-system-guardian owns it — an `as` prop is requested
+          // in their inbox), so this borrows the pill's shape from the stylesheet.
+          <a className={s.linkPill} href={downloadHref} download title="Download this agent’s folder as a zip">
             Take it ↓
-          </Pill>
+          </a>
         ) : (
           <Pill
             variant="secondary"

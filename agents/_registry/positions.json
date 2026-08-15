@@ -1,14 +1,50 @@
 {
-  "version": "sha256:47b804801ff74ec420c9c35d0f10c8a6eec71ccd395a29a938adca35cc941e46",
-  "computedAt": "2026-08-15T16:03:32.599Z",
+  "version": "sha256:33ba6252a542bfce6859803ebaba49c1009126b4f9cbd0a3ed2dc2f89b1011ad",
+  "computedAt": "2026-08-15T16:42:36.290Z",
   "positions": {
     "back-office/_anchor": {
-      "x": -252.3,
-      "y": -201.4
+      "x": -262.4,
+      "y": -209.5
+    },
+    "back-office/invoice-chaser": {
+      "x": -436.2,
+      "y": -348.7
+    },
+    "back-office/invoice-chaser/ageing-builder": {
+      "x": -469.5,
+      "y": -411
+    },
+    "back-office/invoice-chaser/escalation-ladder": {
+      "x": -504.3,
+      "y": -369.3
+    },
+    "back-office/invoice-chaser/reminder-drafter": {
+      "x": -492.1,
+      "y": -394.4
     },
     "customer/_anchor": {
-      "x": -315.5,
-      "y": 72
+      "x": -329.9,
+      "y": 75.3
+    },
+    "customer/support-triage": {
+      "x": -557.2,
+      "y": 127.6
+    },
+    "customer/support-triage/escalation-router": {
+      "x": -623.5,
+      "y": 155.9
+    },
+    "customer/support-triage/intent-classifier": {
+      "x": -605.8,
+      "y": 176.8
+    },
+    "customer/support-triage/reply-drafter": {
+      "x": -623.3,
+      "y": 105.2
+    },
+    "customer/support-triage/severity-scorer": {
+      "x": -628.4,
+      "y": 131.6
     },
     "deals/_anchor": {
       "x": 293.9,
@@ -47,8 +83,48 @@
       "y": -395.9
     },
     "intelligence/_anchor": {
-      "x": -140.4,
-      "y": 291.5
+      "x": -150.1,
+      "y": 313.7
+    },
+    "intelligence/company-deep-dive": {
+      "x": -284.1,
+      "y": 511.6
+    },
+    "intelligence/company-deep-dive/claim-verifier": {
+      "x": -291.8,
+      "y": 583.1
+    },
+    "intelligence/company-deep-dive/org-mapper": {
+      "x": -333.9,
+      "y": 563.2
+    },
+    "intelligence/company-deep-dive/source-gatherer": {
+      "x": -346.9,
+      "y": 539.3
+    },
+    "intelligence/company-deep-dive/thesis-writer": {
+      "x": -315.4,
+      "y": 578.5
+    },
+    "intelligence/company-interview": {
+      "x": -163.4,
+      "y": 510.2
+    },
+    "intelligence/company-interview/answer-normaliser": {
+      "x": -164.8,
+      "y": 581.8
+    },
+    "intelligence/company-interview/brain-writer": {
+      "x": -207.8,
+      "y": 569.3
+    },
+    "intelligence/company-interview/gap-reporter": {
+      "x": -188.7,
+      "y": 583.9
+    },
+    "intelligence/company-interview/question-set": {
+      "x": -220.5,
+      "y": 548.9
     },
     "marketing/_anchor": {
       "x": 350.4,

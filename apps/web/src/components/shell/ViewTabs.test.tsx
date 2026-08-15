@@ -15,7 +15,7 @@ afterEach(() => {
 describe('ViewTabs (§2.0 segmented control)', () => {
   it('renders four tabs, SESSIONS last', () => {
     renderShell(<ViewTabs />);
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+    expect(screen.getAllByRole('tab').map((tab: HTMLElement) => tab.textContent)).toEqual([
       'MAP',
       'DASHBOARDS',
       'CHART',

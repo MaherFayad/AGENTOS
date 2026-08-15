@@ -42,7 +42,19 @@ export function isMetric(value: string): value is MetricName {
 export type MetricFilter = {
   agent?: string;
   department?: string;
+  /** `mission-control.json` has a "Failed runs" tile: `filter: {status: "error"}`. */
+  status?: string;
 };
+
+/** Columns a metric may be grouped by. A closed set — never a value from a request. */
+export const GROUP_BY = { agent: 'agent', department: 'department' } as const;
+export type GroupBy = keyof typeof GROUP_BY;
+export const isGroupBy = (v: string): v is GroupBy => Object.hasOwn(GROUP_BY, v);
+
+/** Buckets a series may use. Also closed. */
+export const BUCKETS = { hour: 'hour', day: 'day', week: 'week' } as const;
+export type Bucket = keyof typeof BUCKETS;
+export const isBucket = (v: string): v is Bucket => Object.hasOwn(BUCKETS, v);
 
 /**
  * Real runs only, everywhere. Dry runs are traced (you can still debug them) but they
@@ -50,6 +62,33 @@ export type MetricFilter = {
  * rehearsals.
  */
 const REAL_RUNS = `dry_run = false AND status <> 'awaiting-approval'`;
+
+/**
+ * The SQL expression behind each metric name. Selecting from this map is the only way a
+ * metric name reaches a query: the request supplies a key, never an expression.
+ */
+const EXPRESSION: Record<MetricName, string> = {
+  runs: 'count(*)::float8',
+  cost: 'sum(cost_usd)::float8',
+  latency_p50: 'percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms)::float8',
+  error_rate: `(count(*) FILTER (WHERE status = 'error'))::float8 / NULLIF(count(*), 0)`,
+};
+
+/**
+ * Window + filter predicate shared by every ops query. `$1` and `$2` are the window
+ * bounds in hours ago; `$3`–`$5` are the optional filters, each a no-op when null.
+ */
+const RUN_SCOPE = `
+    ${REAL_RUNS}
+      AND started_at >= now() - make_interval(hours => $1)
+      AND started_at <  now() - make_interval(hours => $2)
+      AND ($3::text IS NULL OR agent = $3)
+      AND ($4::text IS NULL OR department = $4)
+      AND ($5::text IS NULL OR status = $5)
+`;
+
+const scopeParams = (filter: MetricFilter, from: number, to: number) =>
+  [from, to, filter.agent ?? null, filter.department ?? null, filter.status ?? null] as const;
 
 /**
  * One metric over one window. The metric name selects a fixed SQL expression from a
@@ -62,34 +101,89 @@ export async function metric(
   fromHoursAgo: number,
   toHoursAgo = 0,
 ): Promise<{ value: number | null; runs: number; unpriced: number }> {
-  const expression: Record<MetricName, string> = {
-    runs: 'count(*)::float8',
-    cost: 'sum(cost_usd)::float8',
-    latency_p50: 'percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms)::float8',
-    error_rate: `(count(*) FILTER (WHERE status = 'error'))::float8 / NULLIF(count(*), 0)`,
-  };
-
   const sql = `
-    SELECT ${expression[name]} AS value,
+    SELECT ${EXPRESSION[name]} AS value,
            count(*)::int AS runs,
            (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced
     FROM ops.agent_runs
-    WHERE ${REAL_RUNS}
-      AND started_at >= now() - make_interval(hours => $1)
-      AND started_at <  now() - make_interval(hours => $2)
-      AND ($3::text IS NULL OR agent = $3)
-      AND ($4::text IS NULL OR department = $4)
+    WHERE ${RUN_SCOPE}
   `;
 
   const { rows } = await db.query<{ value: number | null; runs: number; unpriced: number }>(sql, [
-    fromHoursAgo,
-    toHoursAgo,
-    filter.agent ?? null,
-    filter.department ?? null,
+    ...scopeParams(filter, fromHoursAgo, toHoursAgo),
   ]);
 
   const row = rows[0] ?? { value: null, runs: 0, unpriced: 0 };
   return { value: row.value === null ? null : Number(row.value), runs: row.runs, unpriced: row.unpriced };
+}
+
+/**
+ * The same metric bucketed over time — KPI sparklines and the `area-chart` widget
+ * (`shape: "series", groupBy: "day"` in the panel contract).
+ *
+ * Buckets with no runs are absent rather than zero-filled: the chart draws what
+ * happened, and a day the runner was off is not a day of zero work. The renderer
+ * decides how to span a gap; inventing rows here would take that choice away from it.
+ */
+export async function metricSeries(
+  db: DbClient,
+  name: MetricName,
+  filter: MetricFilter,
+  fromHoursAgo: number,
+  bucket: Bucket,
+): Promise<{ t: string; v: number | null; runs: number }[]> {
+  const sql = `
+    SELECT date_trunc('${BUCKETS[bucket]}', started_at) AS t,
+           ${EXPRESSION[name]} AS v,
+           count(*)::int AS runs
+    FROM ops.agent_runs
+    WHERE ${RUN_SCOPE}
+    GROUP BY 1
+    ORDER BY 1
+  `;
+  const { rows } = await db.query<{ t: unknown; v: number | null; runs: number }>(sql, [
+    ...scopeParams(filter, fromHoursAgo, 0),
+  ]);
+  return rows.map((r) => ({
+    t: r.t instanceof Date ? r.t.toISOString() : String(r.t),
+    v: r.v === null ? null : Number(r.v),
+    runs: r.runs,
+  }));
+}
+
+/**
+ * The same metric split by agent or department — `cost-table` and `bar-list`
+ * (`shape: "list", groupBy: "agent"`), and the per-department live counts in §2.2.
+ */
+export async function metricBreakdown(
+  db: DbClient,
+  name: MetricName,
+  filter: MetricFilter,
+  fromHoursAgo: number,
+  groupBy: GroupBy,
+  limit: number,
+): Promise<{ label: string; value: number | null; runs: number; unpriced: number }[]> {
+  const sql = `
+    SELECT ${GROUP_BY[groupBy]} AS label,
+           ${EXPRESSION[name]} AS value,
+           count(*)::int AS runs,
+           (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced
+    FROM ops.agent_runs
+    WHERE ${RUN_SCOPE}
+    GROUP BY 1
+    ORDER BY value DESC NULLS LAST
+    LIMIT $6
+  `;
+  const { rows } = await db.query<{ label: string; value: number | null; runs: number; unpriced: number }>(
+    sql,
+    [...scopeParams(filter, fromHoursAgo, 0), limit],
+  );
+  return rows.map((r) => ({
+    label: r.label,
+    value: r.value === null ? null : Number(r.value),
+    runs: r.runs,
+    unpriced: r.unpriced,
+  }));
 }
 
 /**
@@ -113,17 +207,38 @@ export async function costToday(
   return { usd: Number(row.usd), runs: row.runs, unpricedRuns: row.unpriced_runs };
 }
 
-/** LAST RUNS — the drawer's five rows (§2.3). */
-export async function lastRuns(db: DbClient, agent: string | null, limit: number) {
+/**
+ * LAST RUNS — the drawer's five rows (§2.3) and Mission Control's `data-table`.
+ *
+ * `trace_url` is selected here rather than composed by the caller: the drawer row must
+ * deep-link to the trace of *that* run, and the only place that knows the trace id is
+ * the row the instrumentation wrote.
+ */
+export async function lastRuns(
+  db: DbClient,
+  filter: MetricFilter,
+  limit: number,
+  fromHoursAgo: number | null = null,
+) {
   const sql = `
-    SELECT run_id, agent, agent_name, status, started_at, duration_ms, cost_usd, cost_source, trace_url
+    SELECT run_id, agent, agent_name, department, status, started_at, duration_ms,
+           cost_usd, cost_source, tool_call_count, trace_url
     FROM ops.agent_runs
     WHERE ${REAL_RUNS}
       AND ($1::text IS NULL OR agent = $1)
+      AND ($2::text IS NULL OR department = $2)
+      AND ($3::text IS NULL OR status = $3)
+      AND ($4::float8 IS NULL OR started_at >= now() - make_interval(hours => $4))
     ORDER BY started_at DESC
-    LIMIT $2
+    LIMIT $5
   `;
-  const { rows } = await db.query(sql, [agent, limit]);
+  const { rows } = await db.query(sql, [
+    filter.agent ?? null,
+    filter.department ?? null,
+    filter.status ?? null,
+    fromHoursAgo,
+    limit,
+  ]);
   return rows;
 }
 

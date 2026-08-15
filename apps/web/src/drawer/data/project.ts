@@ -89,6 +89,12 @@ export interface DrawerModel {
   schedule: string | null;
   scheduleInWords: string | null;
   approvalRequired: boolean;
+  /**
+   * `wired_into` names with no connector wired, as the *runner* resolved them
+   * (`AgentDetail.runnable`). Empty when the runner did not say — never inferred, because
+   * an inferred empty list reads as "everything is wired", a claim we did not check.
+   */
+  missingConnectors: string[];
   deliverTo: string | null;
   status: string | null;
 }
@@ -150,6 +156,11 @@ export function projectAgent(doc: AgentDoc): DrawerModel {
     department,
     tier: fm.tier,
     eyebrow: TIER_LABEL[fm.tier],
+    // §2.6.5's eyebrow is the cluster (the video shows `COMPANIES`), because the chart
+    // already carries autonomy in its rows and repeating it there wastes the one line of
+    // context the panel has. With no cluster it falls back to the department — never to
+    // an empty strip.
+    clusterEyebrow: (clusterLabel ?? departmentLabel).toUpperCase(),
     title: fm.name,
     breadcrumb: [departmentLabel, clusterLabel].filter(Boolean).join(' · ') || null,
     description: trimmed(fm.description),
@@ -172,17 +183,20 @@ export function projectAgent(doc: AgentDoc): DrawerModel {
 }
 
 /**
- * §2.6.5 `HOW TO RUN IT`. The schema has no `how_to_run:` field yet (asked for — see
- * comms/inbox/agent-library-curator/). Until it does, the paragraph is assembled from
- * facts that ARE in the frontmatter: what it asks for, when it runs itself, whether it
- * waits for you, what it is allowed to touch, where the output goes. With none of those
- * facts the section collapses rather than saying something generic.
+ * §2.6.5 `HOW TO RUN IT`.
+ *
+ * The schema has no `how_to_run:` field and this file does not invent one. The paragraph
+ * is *assembled from facts that are already in the frontmatter* — what it asks you for,
+ * when it runs itself, whether it waits for you, what it is allowed to touch, where the
+ * output goes. Every noun in the sentence came out of the agent's own file; only the
+ * grammar joining them is authored, and that grammar is identical for all 150 agents, the
+ * same status as a column header (Part IV).
+ *
+ * With none of those facts present the section collapses rather than saying something
+ * generic and true of nothing.
  */
 export function composeHowToRun(doc: AgentDoc): string | null {
   const fm = doc.frontmatter;
-  const authored = trimmed(fm.how_to_run);
-  if (authored) return authored;
-
   const rest: string[] = [];
   const cron = describeCron(fm.schedule);
   if (cron) rest.push(`It also runs itself ${cron}.`);

@@ -3,7 +3,7 @@
  *
  *   computeLayout(agents, previousPositions, options) -> GraphPayload
  *
- * Pure. Deterministic. Dependency-free (ADR-004 — d3-force's `jiggle()` is
+ * Pure. Deterministic. Dependency-free (ADR-006 — d3-force's `jiggle()` is
  * `Math.random()`, which would make CI's run-twice-and-diff check flap). It implements the
  * four forces §2.1 names — link, manyBody, radial-per-department, collide — with the same
  * velocity-Verlet integration d3-force uses, so the resulting *feel* is d3's.
@@ -35,7 +35,7 @@ export const LAYOUT = {
   ringRadius: [0, 320, 560, 690],
   ringStrength: [0, 0.28, 0.1, 0.05],
   /** Lateral spring holding a branch on its ADR-001 ray. d3 has no such force; this is why
-   *  ADR-004 exists. Leaves are held loosest so clusters can fan out (§2.2). */
+   *  ADR-006 exists. Leaves are held loosest so clusters can fan out (§2.2). */
   branchStrength: [0, 0.6, 0.22, 0.07],
   /** manyBody. `distanceMax` is what makes distant departments provably unaffected by a
    *  new agent — see the stability test. */
@@ -155,6 +155,19 @@ function normalise(agents, departmentIds, warn) {
   return out;
 }
 
+/**
+ * A registry cluster is `{slug, label}` (owner: `agent-library-curator`), and §2.2 renders
+ * the caption **verbatim** — `SEQUENCING & SEND`, ampersand and all. So the sub-label is
+ * `label`, never the slug. A bare string is accepted too, because the contract's
+ * illustrative JSON showed strings and a registry that predates the object form must not
+ * silently produce `[object Object]` under seven department names.
+ */
+function clusterLabel(entry) {
+  if (typeof entry === 'string') return entry.trim();
+  if (entry && typeof entry === 'object') return String(entry.label ?? entry.slug ?? '').trim();
+  return '';
+}
+
 /* ── graph construction ────────────────────────────────────────────────────── */
 
 function buildGraph(normalised, departments, clusters) {
@@ -236,7 +249,7 @@ function buildGraph(normalised, departments, clusters) {
 
   // Cluster sub-labels: first three from the registry, padded honestly (§2.1).
   const departmentMeta = departments.map((d) => {
-    const registry = Array.isArray(clusters?.[d.id]) ? clusters[d.id] : [];
+    const registry = (Array.isArray(clusters?.[d.id]) ? clusters[d.id] : []).map(clusterLabel).filter(Boolean);
     const present = [...new Set(normalised.filter((a) => a.department === d.id).map((a) => a.cluster).filter(Boolean))];
     const source = registry.length ? registry : present;
     const sublabels = [source[0] ?? '', source[1] ?? '', source[2] ?? ''];
@@ -410,7 +423,7 @@ function simulate(nodes, edges, byId, departments, options) {
       }
     }
 
-    // ── manyBody (naive N², distance-capped — ~150 nodes, see ADR-004) ────
+    // ── manyBody (naive N², distance-capped — ~150 nodes, see ADR-006) ────
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
       for (let j = i + 1; j < nodes.length; j++) {

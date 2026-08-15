@@ -11,8 +11,11 @@
 
 §2.6 — CHART, the AI rollout matrix (items 1–6, plus the closing architectural line).
 
-Not claimed here and deliberately so: §2.6.5's drawer *body* is `drawer-engineer`'s
-(BOARD.md gives them §2.3 and §2.6.5's panel). CHART owns the selection that opens it.
+Boundary, and the reason it is worded without section numbers: the drawer *body* that
+item 5 opens belongs to `drawer-engineer` per BOARD.md, and CHART owns only the selection
+that opens it. `check-spec-coverage.mjs` treats every `§n.n` appearing under this heading
+as an ownership claim, so naming their sections here would claim their work. The precise
+citations live in Decision 9 and in "Interfaces we expose".
 
 ## Decisions
 
@@ -56,6 +59,12 @@ Not claimed here and deliberately so: §2.6.5's drawer *body* is `drawer-enginee
 8. **An unstaffed department gets an empty state, not an empty grid.** Twelve hatch
    blocks say "twelve deliberate gaps"; an unmapped department says "nobody has been here
    yet". Different statements, different screens.
+
+9. **Where CHART stops and the drawer starts.** §2.6.5's `More detail →` is ours; the
+   panel it opens is not. BOARD.md gives `drawer-engineer` §2.3 and the §2.6.5 panel, so
+   CHART emits `openDrawer(agentSlug, {side:'right'})` and renders nothing further. A
+   "temporary" chart-local drawer would mean a second copy of the agent projection, which
+   is exactly what Part IV constraint 4 forbids.
 
 ## Coverage
 

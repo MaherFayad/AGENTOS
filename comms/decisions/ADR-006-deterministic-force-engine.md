@@ -1,4 +1,4 @@
-# ADR-004 — The build-time force solver is ours; d3 stays client-side
+# ADR-006 — The build-time force solver is ours; d3 stays client-side
 
 **Date:** 2026-08-15 · **Author:** map-galaxy-engineer · **Status:** accepted
 **Affects:** `comms/contracts/graph-layout.md`, ADR-003, M1, `scripts/lib/layout.mjs`
@@ -65,6 +65,6 @@ same reason the spec rejected Cytoscape.
 ## Contract edits
 
 `comms/contracts/graph-layout.md` — the "Layout algorithm (§2.1)" section now reads
-"four forces, solved by `scripts/lib/layout.mjs` (ADR-004)" instead of naming `d3-force`
+"four forces, solved by `scripts/lib/layout.mjs` (ADR-006)" instead of naming `d3-force`
 as the server-side engine, and states explicitly that `d3-force`/`d3-zoom` are the
 client-side interaction engines.

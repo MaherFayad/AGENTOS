@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation';
 import { highlightSegments, search as runSearch, type SearchItem, type SearchResult } from '../../lib/search';
 import { emit } from '../../lib/shell-bus';
-import { durations, GlassPanel } from './ui';
+import { DURATION, GlassPanel, withReducedMotion } from './ui';
 import { searchPlaceholder } from './route';
 import { useShell } from './ShellContext';
 
@@ -59,7 +59,7 @@ export function SearchPill(): React.JSX.Element {
               ? { kind: 'node', id: item.id, department: item.department }
               : { kind: 'department', id: item.id },
           source: 'search',
-          durationMs: reducedMotion ? 0 : durations.departmentZoom,
+          durationMs: withReducedMotion(DURATION.zoom, reducedMotion),
         });
       }
       router.push(item.href);
@@ -125,9 +125,9 @@ export function SearchPill(): React.JSX.Element {
           onFocus={() => setOpen(true)}
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
           onKeyDown={onKeyDown}
-          className="w-full bg-transparent text-[13px] text-ivory placeholder:text-ink-3 focus:outline-none"
+          className="w-full bg-transparent text-small text-ivory placeholder:text-ink-3 focus:outline-none"
         />
-        <kbd className="hidden shrink-0 rounded-[4px] border border-line px-1 text-[10px] leading-4 text-ink-3 sm:block" aria-hidden="true">
+        <kbd className="hidden shrink-0 rounded-chip border border-line px-1 text-label-sm tracking-normal text-ink-3 sm:block" aria-hidden="true">
           /
         </kbd>
       </div>
@@ -137,8 +137,8 @@ export function SearchPill(): React.JSX.Element {
       </p>
 
       {showPanel && (
-        <div className="absolute left-0 top-[38px] z-50 w-[320px]">
-        <GlassPanel className="block overflow-hidden rounded-[14px] border border-line p-1">
+        <div className="absolute left-0 top-[38px] z-drawer w-[320px]">
+        <GlassPanel radius="md" shadow="drawer" className="block overflow-hidden p-1">
           <ul id={listId} role="listbox" aria-label={`${placeholder} results`} className="max-h-[320px] overflow-y-auto">
             {results.map((result, index) => (
               <li key={`${result.item.kind}:${result.item.id}`}>
@@ -154,21 +154,21 @@ export function SearchPill(): React.JSX.Element {
                     index === active ? 'bg-card-2' : 'bg-transparent'
                   }`}
                 >
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ivory-2">
+                  <span className="min-w-0 flex-1 truncate text-small text-ivory-2">
                     {highlightSegments(result.item.label, result.ranges).map((segment, segmentIndex) => (
                       <span key={segmentIndex} className={segment.matched ? 'text-ivory' : undefined}>
                         {segment.text}
                       </span>
                     ))}
                   </span>
-                  <span className="shrink-0 text-[10px] uppercase tracking-[0.25em] text-ink-3">
+                  <span className="shrink-0 text-label-sm uppercase tracking-wider-1 text-ink-3">
                     {result.item.kind === 'agent' ? (result.item.department ?? 'agent') : result.item.kind}
                   </span>
                 </button>
               </li>
             ))}
             {results.length === 0 && (
-              <li className="px-3 py-3 text-[12px] leading-[1.5] text-ink-2">
+              <li className="px-3 py-3 text-meta text-ink-2">
                 {search.message ?? `Nothing matches “${query.trim()}”. Try part of a job name — the match doesn't have to be contiguous.`}
               </li>
             )}

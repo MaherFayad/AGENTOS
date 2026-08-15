@@ -1,6 +1,7 @@
 import { render, type RenderResult } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
+import { DURATION, EASE, withReducedMotion } from '../primitives/motion';
 import { ShellProvider } from './ShellContext';
 
 /**
@@ -31,7 +32,15 @@ export function navigationMock(): Record<string, unknown> {
   };
 }
 
-/** A minimal stand-in for the design system, so shell tests don't wait on it. */
+/**
+ * A minimal stand-in for the design system, so shell tests assert shell behaviour and
+ * not the guardian's markup. The prop names mirror `components/primitives/**` exactly —
+ * if they drift, `tsc` fails on the real import in `ui.ts` and this mock is the next
+ * thing to fix.
+ *
+ * The motion values are re-exported from the real module rather than retyped: §1.6
+ * numbers live in exactly one file, tests included.
+ */
 export function uiMock(): Record<string, unknown> {
   return {
     Pill: ({ children, ...rest }: { children: ReactNode }) => <button {...rest}>{children}</button>,
@@ -40,31 +49,32 @@ export function uiMock(): Record<string, unknown> {
       <div className={className}>{children}</div>
     ),
     SegmentedControl: ({
-      items,
+      options,
       value,
       onChange,
       label,
     }: {
-      items: Array<{ value: string; label: string }>;
+      options: Array<{ value: string; label: string }>;
       value: string;
       onChange: (next: string) => void;
       label: string;
     }) => (
       <div role="tablist" aria-label={label}>
-        {items.map((item) => (
+        {options.map((option) => (
           <button
-            key={item.value}
+            key={option.value}
             role="tab"
-            aria-selected={item.value === value}
-            onClick={() => onChange(item.value)}
+            aria-selected={option.value === value}
+            onClick={() => onChange(option.value)}
           >
-            {item.label}
+            {option.label}
           </button>
         ))}
       </div>
     ),
-    durations: { reveal: 500, drawer: 320, departmentZoom: 700, edgeRelax: 600, countUp: 300 },
-    easings: { reveal: 'cubic-bezier(.2,.7,.2,1)', zoom: 'ease-in-out' },
+    DURATION,
+    EASE,
+    withReducedMotion,
   };
 }
 

@@ -236,6 +236,31 @@
   margin-block-start: 12px;
 }
 
+/* `Take it ↓` is a real <a download> — see SkillFileCard.tsx. This mirrors the secondary
+ * Pill's shape so the row reads as one set of controls. It is a stand-in for an `as` prop
+ * on Pill, requested from design-system-guardian; when that lands, this class goes. */
+.linkPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 32px;
+  padding-inline: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--ivory);
+  background: transparent;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-pill);
+  transition: background var(--dur-hover) var(--ease-reveal);
+}
+
+.linkPill:hover {
+  background: var(--card-2);
+}
+
 /* -----------------------------------------------------------------------------
  * 5 / 7. Chips
  * -------------------------------------------------------------------------- */

@@ -39,7 +39,7 @@ export function EmptyCell({
       onKeyDown={onKeyDown}
       aria-label={`No jobs yet · ${tierLabel} · ${phaseLabel}`}
       style={HATCH_STYLE}
-      className="h-full min-h-[64px] w-full rounded-[10px] opacity-60 outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-line-2"
+      className="h-full min-h-[64px] w-full rounded-card-sm opacity-60 outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-line-2"
     />
   );
 }

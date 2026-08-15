@@ -47,7 +47,7 @@ export function JobCard({
       data-testid="chart-job-card"
       data-slug={agent.slug}
       data-expanded={expanded}
-      className="group rounded-[10px] border border-line bg-card transition-colors hover:border-line-2 hover:bg-card-2 focus-within:border-line-2"
+      className="group rounded-card-sm border border-line bg-card transition-colors hover:border-line-2 hover:bg-card-2 focus-within:border-line-2"
     >
       <button
         type="button"
@@ -58,15 +58,15 @@ export function JobCard({
         onClick={onToggle}
         onFocus={onFocus}
         onKeyDown={onKeyDown}
-        className="flex w-full items-start gap-2 rounded-[10px] px-2 py-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-line-2"
+        className="flex w-full items-start gap-2 rounded-card-sm px-2 py-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-line-2"
       >
         <IconSquare name={agent.icon} />
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold leading-tight text-ivory">
+          <span className="block truncate text-small font-semibold leading-tight text-ivory">
             {agent.name}
           </span>
-          <span className="mt-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[.18em] text-ink-2">
+          <span className="mt-1 flex items-center gap-1.5 text-label-sm uppercase text-ink-2">
             <span>{phase.tag}</span>
             <PhaseDots ordinal={phase.ordinal} />
           </span>
@@ -84,11 +84,11 @@ export function JobCard({
           }}
           className="border-t border-line px-2 pb-2 pt-2"
         >
-          <p className="text-[12px] leading-[1.55] text-ivory-2">{agent.description}</p>
+          <p className="text-meta text-ivory-2">{agent.description}</p>
 
           {agent.skills.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-medium uppercase tracking-[.3em] text-ink-3">
+              <span className="text-label-sm uppercase text-ink-3">
                 Skills
               </span>
               {agent.skills.map((skill) => (
@@ -100,7 +100,7 @@ export function JobCard({
           <button
             type="button"
             onClick={onMoreDetail}
-            className="mt-2.5 text-[11px] font-semibold text-ivory underline-offset-4 outline-none hover:underline focus-visible:underline"
+            className="mt-2.5 text-chip font-semibold text-ivory underline-offset-4 outline-none hover:underline focus-visible:underline"
           >
             More detail →
           </button>

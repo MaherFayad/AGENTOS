@@ -43,13 +43,15 @@
 [dir='rtl'] { --dir: -1; }
 :root { --dir: 1; }
 
-/* Wide-tracked label tracking, restated as a token so the Arabic override has
- * something to override. Latin keeps §1.4's +0.25em–0.45em; Arabic gets word
- * spacing instead of letter spacing. */
+/* The Arabic replacement for tracking. Latin emphasis comes from the four
+ * `--track-*` rungs in tokens.css (§1.4, +0.25em…+0.45em); Arabic gets word
+ * spacing instead, and this is the only value in that pair that is mine.
+ *
+ * `--ar-label-scale` is a MULTIPLIER, not a rung on the type scale: IBM Plex
+ * Sans Arabic renders optically smaller than Plus Jakarta Sans at the same px,
+ * and the compensation has to apply to whichever of the four label sizes the
+ * element already has. A fixed px here would flatten four sizes into one. */
 :root {
-  --track-label: .3em;
-  --track-eyebrow: .35em;
-  --track-tab: .25em;
   --word-space-label-ar: .22em;
 }
 
@@ -108,21 +110,56 @@ html {
  * text, because a rule that silently cleans up after people stops teaching
  * them anything.
  * -------------------------------------------------------------------------- */
+/* 2a. THE MECHANISM. tokens.css publishes the four wide rungs as custom
+ * properties precisely so this file can re-point them in one place ("the RTL
+ * layer overrides these four in one place and every `tracking-wider-*` in the
+ * product un-tracks with it" — tokens.css, §1.4). Custom properties inherit, so
+ * every `tracking-wider-1…4` utility and every `letter-spacing: var(--track-N)`
+ * rule in the product flattens here, without any of them knowing. */
+:lang(ar) {
+  --track-1: normal;
+  --track-2: normal;
+  --track-3: normal;
+  --track-4: normal;
+}
+
+/* 2b. THE BELT. The rung override cannot reach a hardcoded `letter-spacing:
+ * .3em` or a `tracking-[.3em]` in a component written before this file existed.
+ * `!important` is load-bearing: this rule has to win against ten other agents'
+ * stylesheets without any of them knowing it exists, which is the entire point
+ * of putting the script rule in the script's own selector.
+ *
+ * `scripts/check-rtl.mjs` still FAILS on new hardcoded wide tracking, because a
+ * rule that silently cleans up after people stops teaching them anything — and
+ * because the reset alone leaves the label with no emphasis at all. */
 :lang(ar),
 :lang(ar) * {
   letter-spacing: normal !important;
 }
 
-/* The replacement emphasis for wide-tracked labels: bigger, heavier, and spaced
- * BETWEEN words rather than between letters. Reads as the same "quiet, formal,
- * architectural" label the Latin tracking produces, without severing a single
- * join. */
+/* 2c. THE COMPENSATION — what Arabic gets INSTEAD.
+ *
+ * Bigger, heavier, and spaced BETWEEN words rather than between letters. Reads
+ * as the same quiet, formal, architectural label the Latin tracking produces,
+ * without severing a single join.
+ *
+ * It hooks onto both the role classes below and the token utilities directly,
+ * so a component that already wrote `tracking-wider-2` gets the Arabic
+ * treatment without being touched. `:lang(ar)` + a class/attribute is
+ * specificity (0,2,0) — it beats a bare Tailwind utility whatever the source
+ * order, which a plain class selector would not. */
 :lang(ar) .u-label,
 :lang(ar) .u-eyebrow,
-:lang(ar) .u-tab {
+:lang(ar) .u-tab,
+:lang(ar) [class*='tracking-wider-'] {
   word-spacing: var(--word-space-label-ar);
   font-weight: 600;
-  font-size: 1.08em;
+  /* IBM Plex Sans Arabic sets optically smaller than Plus Jakarta Sans at the
+   * same px. This multiplies whichever of the four label sizes the element
+   * already carries; an absolute rung from the §1.4 scale would flatten all
+   * four into one. Retires the day tokens.css publishes --ar-label-scale. */
+  /* token-exempt: relative Arabic size compensation — a multiplier, not a rung on the §1.4 scale (see above) */
+  font-size: calc(1em * 1.08);
   /* text-transform: uppercase is a no-op in Arabic — harmless, left in place so
    * components do not need a locale branch. */
 }
@@ -131,26 +168,25 @@ html {
  * The label roles themselves (Latin). Declared here rather than duplicated in
  * ten components, and declared as classes rather than utilities so that the
  * :lang(ar) overrides above have something stable to hook onto.
+ *
+ * The tracking values are the tokens.css rungs, never local copies — that is
+ * what makes the flattening in 2a reach them.
  * -------------------------------------------------------------------------- */
 .u-label {
   text-transform: uppercase;
-  /* rtl-exempt: Latin tracking (§1.4). The :lang(ar) rule above already resets it to
-     normal and rebuilds the emphasis from size, weight and word-spacing. */
-  letter-spacing: var(--track-label);
+  letter-spacing: var(--track-2);
   font-weight: 500;
 }
 
 .u-eyebrow {
   text-transform: uppercase;
-  /* rtl-exempt: Latin tracking (§1.4), neutralised under :lang(ar) above. */
-  letter-spacing: var(--track-eyebrow);
+  letter-spacing: var(--track-3);
   font-weight: 500;
 }
 
 .u-tab {
   text-transform: uppercase;
-  /* rtl-exempt: Latin tracking (§1.4), neutralised under :lang(ar) above. */
-  letter-spacing: var(--track-tab);
+  letter-spacing: var(--track-1);
   font-weight: 500;
 }
 
@@ -162,8 +198,12 @@ html {
   font-family: var(--font-serif);
   font-style: italic;
   font-weight: 400;
-  /* rtl-exempt: §1.4 gives the accent serif −0.01em. Latin only — the :lang(ar)
-     rule above makes this element upright, heavier and untracked. */
+  /* §1.4 accent tracking — the value tailwind.config.ts names `tracking-accent`.
+   * A literal here only because tokens.css does not publish it as a custom
+   * property, and this class is emitted by <Accented>, not by a utility.
+   * Latin-only either way: the :lang(ar) rules above make this element upright,
+   * heavier and untracked. Retires when --track-accent exists. */
+  /* token-exempt: §1.4 accent tracking, the tracking-accent value; tokens.css publishes no --track-accent yet (see above) */
   letter-spacing: -.01em;
 }
 

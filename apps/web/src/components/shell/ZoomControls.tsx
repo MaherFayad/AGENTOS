@@ -6,7 +6,7 @@ import { viewHasZoom } from './route';
 import { useShell } from './ShellContext';
 
 const BUTTON =
-  'grid h-7 w-7 place-items-center rounded-full text-ivory-2 transition-colors hover:bg-card-2 hover:text-ivory disabled:cursor-not-allowed disabled:text-ink-3 disabled:hover:bg-transparent focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-line-2';
+  'grid h-7 w-7 place-items-center rounded-pill text-ivory-2 transition-colors hover:bg-card-2 hover:text-ivory disabled:cursor-not-allowed disabled:text-ink-3 disabled:hover:bg-transparent focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-line-2';
 
 /**
  * §2.0 bottom-left: `?` help pill, `−`/`+` zoom, zoom-level readout.
@@ -38,12 +38,12 @@ export function ZoomControls(): React.JSX.Element {
         onClick={() => setHelpOpen(true)}
         aria-label="Keyboard shortcuts and help"
         title="Keyboard shortcuts (?)"
-        className="grid h-7 w-7 place-items-center rounded-full border border-line bg-card text-[12px] text-ivory-2 transition-colors hover:border-line-2 hover:text-ivory focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-line-2"
+        className="grid h-7 w-7 place-items-center rounded-pill border border-line bg-card text-meta text-ivory-2 transition-colors hover:border-line-2 hover:text-ivory focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-line-2"
       >
         ?
       </button>
 
-      <div className="flex items-center gap-1 rounded-full border border-line bg-card px-1">
+      <div className="flex items-center gap-1 rounded-pill border border-line bg-card px-1">
         <button type="button" className={BUTTON} onClick={() => step('out')} disabled={!enabled} aria-label="Zoom out">
           <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
             <path d="M2.5 6h7" />
@@ -55,7 +55,7 @@ export function ZoomControls(): React.JSX.Element {
           disabled={!enabled || zoom === null}
           title={readoutTitle}
           aria-label={`Zoom level ${readout}`}
-          className="min-w-[42px] rounded-full px-1 text-center text-[11px] tabular-nums text-ink-2 transition-colors hover:text-ivory disabled:hover:text-ink-2"
+          className="min-w-[42px] rounded-pill px-1 text-center text-label tracking-normal tabular-nums text-ink-2 transition-colors hover:text-ivory disabled:hover:text-ink-2"
         >
           {readout}
         </button>

@@ -49,7 +49,7 @@ export function CostTicker(): React.JSX.Element {
   return (
     <div
       title={sentence}
-      className="pointer-events-auto rounded-full border border-line bg-card px-3 py-1.5 text-[10px] uppercase leading-none tracking-[0.25em] text-ink-2 tabular-nums"
+      className="pointer-events-auto rounded-pill border border-line bg-card px-3 py-1.5 text-label-sm uppercase tracking-wider-1 text-ink-2 tabular-nums"
     >
       <span>{text}</span>
       <span className="sr-only">{sentence}</span>

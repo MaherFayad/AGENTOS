@@ -21,8 +21,8 @@ export function TierRowHeader({ row, count }: { row: TierRow; count: number }) {
     >
       <IconSquare name={row.icon} />
       <span className="min-w-0 flex-1">
-        <span className="block text-[12px] font-semibold leading-tight text-ivory">{row.label}</span>
-        <span className="mt-0.5 block text-[11px] leading-tight text-ink-3">{row.gloss}</span>
+        <span className="block text-meta font-semibold leading-tight text-ivory">{row.label}</span>
+        <span className="mt-0.5 block text-chip font-normal leading-tight text-ink-3">{row.gloss}</span>
       </span>
       <Pill>
         <span className="tabular-nums">{count}</span>
@@ -45,12 +45,12 @@ export function PhaseColumnHeader({
       className="border-b border-r border-line px-3 py-2.5"
     >
       <span className="flex items-baseline gap-1.5">
-        <span className="text-[11px] font-medium tabular-nums text-ink-3">{column.ordinal}</span>
-        <span className="text-[11px] font-medium uppercase tracking-[.3em] text-ivory-2">
+        <span className="text-chip tabular-nums text-ink-3">{column.ordinal}</span>
+        <span className="text-label uppercase tracking-wider-2 text-ivory-2">
           {column.label}
         </span>
       </span>
-      <span className="mt-0.5 block truncate text-[11px] leading-tight text-ink-3">
+      <span className="mt-0.5 block truncate text-chip font-normal leading-tight text-ink-3">
         {column.gloss}
       </span>
       <ProgressDashes filled={progress.filled} phaseLabel={column.full} />
@@ -63,7 +63,7 @@ export function MatrixCorner() {
   return (
     <div
       role="columnheader"
-      className="border-b border-r border-line px-3 py-2.5 text-[10px] font-medium uppercase leading-tight tracking-[.3em] text-ink-3"
+      className="border-b border-r border-line px-3 py-2.5 text-label-sm uppercase leading-tight text-ink-3"
     >
       Tier
       <span className="mx-1 text-ink-3">/</span>

@@ -20,6 +20,11 @@ export interface RunRequest {
 export interface TransportContext {
   /** Sent as the `Last-Event-ID` header so the runner replays from its buffer. */
   lastEventId?: string;
+  /**
+   * Set once the run has announced itself with `start`. Its presence is what turns a
+   * retry into a RE-ATTACH instead of a second run — see `fetchRunTransport`.
+   */
+  runId?: string;
   signal: AbortSignal;
   onFrame: (frame: SseFrame) => void;
 }
@@ -40,24 +45,43 @@ export class TransportError extends Error {
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-export const fetchRunTransport: RunTransport = async (request, { lastEventId, signal, onFrame }) => {
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    accept: 'text/event-stream',
-  };
+/**
+ * Two routes, one function, and the difference matters more than it looks.
+ *
+ *   no runId yet   → `POST /api/run`                 start the run
+ *   runId in hand  → `GET  /api/run/:runId/stream`   re-attach to the run already going
+ *
+ * `EventSource` cannot POST, which is why the runner exposes a GET re-attach at all
+ * (contracts/api-contracts.md, "Replay"). Retrying the POST after a dropped connection
+ * would spawn a *second* billable run against the same inputs and show its output as if it
+ * were the first — the single most expensive bug this component could have.
+ */
+export const fetchRunTransport: RunTransport = async (request, { lastEventId, runId, signal, onFrame }) => {
+  const reattaching = typeof runId === 'string' && runId.length > 0;
+  const headers: Record<string, string> = { accept: 'text/event-stream' };
+  if (!reattaching) headers['content-type'] = 'application/json';
   if (lastEventId) headers['Last-Event-ID'] = lastEventId;
+
+  const url = reattaching
+    ? `${API_BASE}/api/run/${encodeURIComponent(runId)}/stream${lastEventId ? `?lastEventId=${encodeURIComponent(lastEventId)}` : ''}`
+    : `${API_BASE}/api/run`;
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}/api/run`, {
-      method: 'POST',
+    response = await fetch(url, {
+      method: reattaching ? 'GET' : 'POST',
       headers,
-      body: JSON.stringify(request),
+      ...(reattaching ? {} : { body: JSON.stringify(request) }),
       signal,
     });
-  } catch (cause) {
+  } catch {
     if (signal.aborted) return;
-    throw new TransportError('The runner did not answer. It may be offline — nothing was started.', true);
+    throw new TransportError(
+      reattaching
+        ? 'Lost the connection to a run that is still going. It is still running on the server.'
+        : 'The runner did not answer. It may be offline — nothing was started.',
+      true,
+    );
   }
 
   if (!response.ok || !response.body) {
@@ -85,7 +109,7 @@ export const fetchRunTransport: RunTransport = async (request, { lastEventId, si
       for (const frame of parser.push(decoder.decode(value, { stream: true }))) onFrame(frame);
     }
     for (const frame of parser.flush()) onFrame(frame);
-  } catch (cause) {
+  } catch {
     if (signal.aborted) return;
     throw new TransportError('The run stream was cut off.', true);
   } finally {

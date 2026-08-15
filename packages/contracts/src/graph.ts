@@ -2,7 +2,7 @@
  * Graph layout payload — the shape of `GET /api/graph` and `agents/_registry/positions.json`.
  *
  * Normative prose: `comms/contracts/graph-layout.md` (owner: `map-galaxy-engineer`).
- * Produced by: `scripts/lib/layout.mjs` (ADR-003 one engine, ADR-004 our solver).
+ * Produced by: `scripts/lib/layout.mjs` (ADR-003 one engine, ADR-006 our solver).
  * Consumed by: `apps/web/src/map/**`, the runner's `/api/graph` and `/ws/graph`.
  *
  * Spec: §2.1 (galaxy), §2.2 (department view), §3.2 (schedule/approval badges),

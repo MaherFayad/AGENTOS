@@ -109,6 +109,13 @@ const TW_PHYSICAL = [
   [/(?<![\w-])origin-(?:left|right)(?![\w-])/g, 'origin-start / origin-end'],
   [/(?<![\w-])scroll-m[lr]-(?=[\w[.])/g, 'scroll-ms-* / scroll-me-*'],
   [/(?<![\w-])scroll-p[lr]-(?=[\w[.])/g, 'scroll-ps-* / scroll-pe-*'],
+  // `space-x-*` and `divide-x-*` compile to margin-left / border-left-width in
+  // Tailwind v3 and do NOT follow `dir`. They look direction-neutral, which is
+  // what makes them the trap: the layout is quietly wrong in RTL and nothing in
+  // the class name says so. `gap-*` on a flex/grid parent is the fix in almost
+  // every case and is one class shorter.
+  [/(?<![\w-])space-x-(?=[\w[.])/g, 'gap-* on the flex/grid parent'],
+  [/(?<![\w-])divide-x(?![\w-])/g, 'gap-* + border-s-* on the children'],
 ];
 
 /* ---------------------------------------------------------------------------
@@ -126,19 +133,68 @@ const TW_PHYSICAL = [
  *     wrong anyway. So: silent, the reset in rtl.css already handles it.
  * ------------------------------------------------------------------------ */
 const TRACKING = [
-  [/(?<![-\w])letter-spacing\s*:\s*(?!-|normal|inherit|initial|unset|revert)/gi, 'css'],
-  [/(?<![\w$])letterSpacing\s*:\s*['"]?(?!-|normal)/g, 'js'],
-  [/(?<![\w-])tracking-(?:wide(?:r|st)?(?:-\d)?|\[\.?\d[^\]]*\])/g, 'tailwind'],
+  // Capture the VALUE, never a lookahead. `letter-spacing\s*:\s*(?!normal)` looks
+  // correct and is not: the engine backtracks `\s*` to zero width, the lookahead
+  // then reads " normal" instead of "normal", and `letter-spacing: normal` — the
+  // Arabic reset itself — reports as a violation. Read the value, then judge it.
+  [/(?<![-\w])letter-spacing\s*:([^;{}\n]+)/gi, 'css'],
+  [/(?<![\w$])letterSpacing\s*:\s*['"]?([^,'"}\n]+)/g, 'js'],
+  // Longest alternative first: `wide` would otherwise match the head of
+  // `wider-4` and judge a 0.45em label as 0.025em of optical relief.
+  [/(?<![\w-])tracking-(wider-[1-4]|widest|wider|wide|\[[^\]]+\])(?![\w-])/g, 'tailwind'],
 ];
 
-const TRACKING_FIX =
-  'Arabic is a connected script — tracking severs the joins (§1.4). rtl.css already resets ' +
-  'it under :lang(ar), so the label silently loses its emphasis. Add the role class ' +
-  '(.u-label / .u-eyebrow / .u-tab) so Arabic gets size + weight + word-spacing instead, ' +
-  'or scope the rule to :lang(en) if the text is genuinely Latin-only.';
+/** Tailwind's default rungs, in em, so one function can judge every source. */
+const TW_TRACK_EM = { wide: 0.025, wider: 0.05, widest: 0.1 };
+
+/**
+ * The four sanctioned rungs (§1.4, +0.25em…+0.45em). They carry their own Arabic
+ * branch: tokens.css publishes them as --track-1…4 and rtl.css re-points all four
+ * at `normal` under :lang(ar), then puts the emphasis back as size, weight and
+ * word-spacing. Using them IS the fix, so using them is not a finding.
+ */
+const TOKEN_RUNG = /tracking-wider-[1-4]\b|var\(\s*--track-[1-4]\s*\)/;
+
+/** The role classes, for text that carries tracking without a token utility. */
+const COMPENSATED = /\bu-(?:label|eyebrow|tab)\b/;
 
 /** A rule already scoped to Latin is fine — that is the sanctioned pattern. */
 const LATIN_SCOPED = /:lang\(en\)|\.u-latin\b|\[lang=['"]?en/i;
+
+/**
+ * Is this tracking WIDE — i.e. is the tracking itself the emphasis?
+ *
+ * The distinction is not pedantry, it is the whole rule:
+ *
+ *   +0.25em…+0.45em on a caps label → the emphasis IS the tracking. Under
+ *     :lang(ar) it resets to normal and the label is left with nothing. It needs
+ *     the compensation. REPORT IT.
+ *
+ *   −0.028em on an 86px display headline, or +0.025em of optical relief → the
+ *     emphasis is the SIZE. Arabic wants the reset and nothing else; tightening
+ *     Arabic display type is wrong anyway. SILENT — rtl.css already handles it.
+ */
+const WIDE_EM = 0.05;
+
+export function isWideTracking(value) {
+  const v = String(value).trim().replace(/!important/i, '').trim();
+  if (!v || /^(normal|inherit|initial|unset|revert)\b/i.test(v)) return false;
+  if (v in TW_TRACK_EM) return TW_TRACK_EM[v] >= WIDE_EM;
+  const num = v.match(/(-?\d*\.?\d+)\s*(em|rem|px|%)/);
+  if (!num) return false; // a var() we do not recognise, a calc() — judged by TOKEN_RUNG
+  const n = parseFloat(num[1]);
+  if (n <= 0) return false; // negative or zero: the reset is the entire answer
+  if (num[2] === 'px') return n >= 0.8; // ~0.05em at a 16px body
+  if (num[2] === '%') return n >= WIDE_EM * 100;
+  return n >= WIDE_EM;
+}
+
+const TRACKING_FIX =
+  'Arabic is a connected script — tracking severs the joins (§1.4). rtl.css resets it under ' +
+  ':lang(ar), so a hardcoded track leaves the label with no emphasis at all. Use the token ' +
+  'rung (tracking-wider-1…4 / var(--track-N)), which rtl.css flattens and compensates in one ' +
+  'place, or add a role class (.u-label / .u-eyebrow / .u-tab), or scope the rule to ' +
+  ':lang(en) if the text is genuinely Latin-only.';
 
 /* ---------------------------------------------------------------------------
  * 3. Hardcoded user-facing copy.
@@ -146,8 +202,16 @@ const LATIN_SCOPED = /:lang\(en\)|\.u-latin\b|\[lang=['"]?en/i;
 const USER_FACING_PROPS =
   /\b(placeholder|title|aria-label|aria-description|aria-placeholder|aria-roledescription|alt|label|heading|caption|emptyMessage|errorMessage)\s*=\s*["']([^"']{2,})["']/g;
 
-/** JSX text nodes: >Some words< with no braces, i.e. not an expression. */
+/**
+ * JSX text nodes: >Some words< with no braces, i.e. not an expression.
+ *
+ * Only ever run against .tsx/.jsx. In a .ts file the same `>…<` sandwich is a
+ * generic — `Promise<void>`, `Record<string, Resource>` — and reporting
+ * "Promise" as untranslated copy trains people to ignore the checker, which is
+ * worse than not running it.
+ */
 const JSX_TEXT = />([^<>{}\n]{2,})</g;
+const JSX_FILE = /\.(tsx|jsx)$/;
 
 /** Two consecutive letters in either script — the bar for "this is copy". */
 const HAS_WORDS = /[A-Za-z؀-ۿ]{2,}/;
@@ -191,6 +255,24 @@ function exemptionMap(lines) {
 const isCommentLine = (line) => /^\s*(\/\/|\/\*|\*|\{\s*\/\*)/.test(line);
 
 /**
+ * The safe-area insets are the one place where a physical side is the CORRECT
+ * answer: the notch is on a physical edge of a physical device and does not move
+ * when the reader's language changes. What is wrong is *mixing* them — a
+ * `pl-[calc(20px+env(safe-area-inset-left))]` welds a logical design decision
+ * (20px of inline padding) to a physical device fact, and the pair cannot be
+ * right in both directions at once. Split them, and the physical half earns an
+ * `rtl-exempt:` comment.
+ */
+const SAFE_AREA = /safe-area-inset-(?:left|right)|--\w*safe[-_]?[lr]\b/i;
+
+const fixFor = (logical, line) =>
+  SAFE_AREA.test(line)
+    ? `use ${logical} for the design padding, and keep the device inset on its own physical ` +
+      `declaration with an "rtl-exempt: safe-area inset is a physical edge" comment — the notch ` +
+      `does not move when the language does, but the 20px beside it does`
+    : `use ${logical}`;
+
+/**
  * Scan one file's text. Exported so the tests can exercise the rules on
  * fixtures without touching the filesystem.
  *
@@ -204,7 +286,14 @@ export function scanText(path, text) {
   const isCss = CSS_EXT.test(path);
   const isCode = CODE_EXT.test(path);
   const inI18n = path.includes(`i18n${sep}`) || path.includes('i18n/');
-  const isTest = /\.(test|spec)\.[tj]sx?$/.test(path);
+  // Tests assert class names and stream bytes. A test cannot render Arabic
+  // wrong, and `expect(cls).toContain('tracking-wider-1')` is not a design
+  // decision — it is a description of one made somewhere else.
+  const isTest =
+    /\.(test|spec)\.[cm]?[tj]sx?$/.test(path) ||
+    path.includes(`__tests__${sep}`) ||
+    path.includes('__tests__/') ||
+    /test-harness\.[tj]sx?$/.test(path);
 
   let inBlockComment = false;
 
@@ -229,32 +318,37 @@ export function scanText(path, text) {
     const commented = startedInComment || isCommentLine(line);
 
     /* --- 1. physical properties ---------------------------------------- */
-    if (!commented) {
+    if (!commented && !isTest) {
       const table = isCss ? CSS_PHYSICAL : isCode ? JS_PHYSICAL : [];
       for (const [re, logical] of table) {
         re.lastIndex = 0;
         const m = re.exec(line);
-        if (m) record('physical-property', `physical CSS "${m[0].trim()}"`, `use ${logical}`);
+        if (m) record('physical-property', `physical CSS "${m[0].trim()}"`, fixFor(logical, line));
       }
       if (isCode) {
         for (const [re, logical] of TW_PHYSICAL) {
           re.lastIndex = 0;
           const m = re.exec(line);
-          if (m) record('physical-utility', `physical Tailwind utility "${m[0]}"`, `use ${logical}`);
+          if (m) record('physical-utility', `physical Tailwind utility "${m[0]}"`, fixFor(logical, line));
         }
       }
     }
 
     /* --- 2. tracking on translatable text ------------------------------ */
-    if (!commented && !LATIN_SCOPED.test(line)) {
+    if (!commented && !LATIN_SCOPED.test(line) && !COMPENSATED.test(line)) {
       for (const [re, kind] of TRACKING) {
         re.lastIndex = 0;
-        const m = re.exec(line);
-        if (m) {
+        let m;
+        while ((m = re.exec(line))) {
+          const value = m[1] ?? '';
+          // A token rung is the sanctioned answer, not a violation.
+          if (TOKEN_RUNG.test(m[0])) continue;
+          const literal = kind === 'tailwind' ? value.replace(/^\[|\]$/g, '') : value;
+          if (!isWideTracking(literal)) continue;
           record(
             'tracking-on-arabic',
-            `letter-spacing (${kind}) on text that can hold Arabic: "${m[0]}"`,
-            'Arabic is connected — scope the rule to :lang(en)/.u-latin, or use the .u-label class whose :lang(ar) branch swaps tracking for size, weight and word-spacing',
+            `wide tracking (${kind}) on text that can hold Arabic: "${m[0].trim()}"`,
+            TRACKING_FIX,
           );
         }
       }
@@ -275,9 +369,14 @@ export function scanText(path, text) {
       }
 
       JSX_TEXT.lastIndex = 0;
-      while ((m = JSX_TEXT.exec(line))) {
+      while (JSX_FILE.test(path) && (m = JSX_TEXT.exec(line))) {
         const candidate = m[1].trim();
-        if (candidate && HAS_WORDS.test(candidate) && !NOT_COPY.test(candidate)) {
+        if (
+          candidate &&
+          HAS_WORDS.test(candidate) &&
+          !NOT_COPY.test(candidate) &&
+          !LOOKS_LIKE_CODE.test(candidate)
+        ) {
           record(
             'hardcoded-string',
             `user-facing text "${candidate}" is not in the string catalogue`,

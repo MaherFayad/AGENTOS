@@ -40,9 +40,24 @@ export interface ArtifactRef {
   url?: string;
 }
 
+/**
+ * The four outcomes `done` can carry (contract, §3.2). `denied` and `canceled` are
+ * outcomes, not errors — a denied run is data, and the sentence says which happened.
+ */
+const DONE_TEXT: Record<'ok' | 'error' | 'denied' | 'canceled', string> = {
+  ok: 'Run finished.',
+  error: 'Run finished with an error.',
+  denied: 'Run stopped: the plan was denied.',
+  canceled: 'Run canceled.',
+};
+
 export interface ConsoleState {
   phase: RunPhase;
   runId?: string;
+  /** The terminal outcome from `done`. Absent until the run ends. */
+  status?: 'ok' | 'error' | 'denied' | 'canceled';
+  /** Present when a human denied the plan and wrote why. */
+  denialNote?: string;
   traceUrl?: string;
   /** The plan text that the run is paused on, when `phase === 'awaiting-approval'`. */
   plan?: string;
@@ -134,8 +149,16 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
       });
 
     case 'approval-sent':
+      // The decision is *sent*, not yet confirmed by the stream. `deny` is shown as a
+      // finished run immediately because the contract says denial aborts cleanly; if the
+      // runner disagrees it will say so with its own `done` or `error`, which wins.
       return append(
-        { ...state, phase: action.decision === 'approve' ? 'streaming' : 'done', plan: undefined },
+        {
+          ...state,
+          phase: action.decision === 'approve' ? 'streaming' : 'done',
+          status: action.decision === 'approve' ? state.status : 'denied',
+          plan: undefined,
+        },
         {
           kind: 'notice',
           tone: action.decision === 'approve' ? 'ok' : 'error',
@@ -147,11 +170,20 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
       const withId = action.eventId ? { ...state, lastEventId: action.eventId } : state;
       const event = action.event;
       switch (event.type) {
-        case 'start':
-          return append(
-            { ...withId, phase: 'streaming', runId: event.runId, traceUrl: event.traceUrl },
+        case 'start': {
+          // `tools[]` is the resolved allowlist — exactly `wired_into`, never a superset
+          // (§3.2). Printing it makes the security boundary something a person can see
+          // rather than something a document claims.
+          const started = append(
+            { ...withId, phase: 'streaming', runId: event.runId, traceUrl: event.traceUrl ?? undefined },
             { kind: 'notice', text: `Run ${event.runId} started.` },
           );
+          const tools = Array.isArray(event.tools) ? event.tools : [];
+          return append(started, {
+            kind: 'notice',
+            text: tools.length > 0 ? `Allowed to use: ${tools.join(', ')}.` : 'Allowed to use: no tools at all.',
+          });
+        }
         case 'token':
           return appendToken({ ...withId, phase: withId.phase === 'awaiting-approval' ? 'awaiting-approval' : 'streaming' }, event.text);
         case 'tool': {
@@ -160,10 +192,15 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
           return append(withId, { kind: 'tool', tone, text: `${mark} ${event.name}` });
         }
         case 'plan':
-          return append(
-            { ...withId, phase: 'awaiting-approval', plan: event.summary },
-            { kind: 'plan', tone: 'pending', text: event.summary },
-          );
+          // `awaitingApproval` is the gate, not the presence of a plan: an agent with
+          // `approval: none` still announces what it is about to do, and pausing on that
+          // would strand every unattended run behind a button nobody is there to press.
+          return event.awaitingApproval
+            ? append(
+                { ...withId, phase: 'awaiting-approval', plan: event.summary },
+                { kind: 'plan', tone: 'pending', text: event.summary },
+              )
+            : append(withId, { kind: 'plan', text: event.summary });
         case 'artifact':
           return append(
             { ...withId, artifacts: [...withId.artifacts, { path: event.path, kind: event.kind, url: event.url }] },
@@ -174,20 +211,24 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
             {
               ...withId,
               phase: 'done',
-              costUsd: event.costUsd,
+              status: event.status,
+              costUsd: event.costUsd ?? undefined,
               durationMs: event.durationMs,
               traceUrl: event.traceUrl ?? withId.traceUrl,
+              denialNote: event.denialNote,
             },
             {
               kind: 'done',
-              tone: event.status === 'ok' ? 'ok' : 'error',
-              text: event.status === 'ok' ? 'Run finished.' : 'Run finished with an error.',
+              tone: event.status === 'ok' ? 'ok' : event.status === 'error' ? 'error' : 'pending',
+              text: DONE_TEXT[event.status] + (event.denialNote ? ` ${event.denialNote}` : ''),
             },
           );
         case 'error':
+          // `hint` is written for a human on a phone, so it is shown verbatim and next to
+          // the message rather than folded away behind a details toggle.
           return append(
             { ...withId, phase: 'error', errorMessage: event.message, retryable: event.retryable },
-            { kind: 'error', tone: 'error', text: event.message },
+            { kind: 'error', tone: 'error', text: [event.message, event.hint].filter(Boolean).join(' ') },
           );
         default:
           return withId;

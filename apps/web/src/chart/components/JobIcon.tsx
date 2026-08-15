@@ -27,7 +27,7 @@ export function JobIcon({ name, size = 13 }: { name: string; size?: number }) {
 export function IconSquare({ name, className = '' }: { name: string; className?: string }) {
   return (
     <span
-      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-line bg-card text-ivory-2 ${className}`}
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-chip border border-line bg-card text-ivory-2 ${className}`}
     >
       <JobIcon name={name} />
     </span>

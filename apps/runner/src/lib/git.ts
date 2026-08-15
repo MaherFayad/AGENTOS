@@ -15,7 +15,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { relative } from 'node:path';
 import { ApiError } from './errors';
-import { assertInsideAgents, type RunnerConfig } from './config';
+import { assertInsideAgents, assertInsideCompany, type RunnerConfig } from './config';
 
 const exec = promisify(execFile);
 
@@ -57,6 +57,31 @@ export async function commitAgentFile(
   message: string,
 ): Promise<string> {
   assertInsideAgents(config, absolutePath);
+  return commitPath(config, absolutePath, message);
+}
+
+/**
+ * Commit a single file under `company/` — the Second Brain write-back (§3.3, ADR-007).
+ *
+ * Separate from `commitAgentFile` on purpose. One function per write boundary means the
+ * boundary check cannot be skipped by passing a different path to a shared helper, and
+ * `grep commitCompanyFile` answers "what in this service can write the brain?" in full.
+ */
+export async function commitCompanyFile(
+  config: RunnerConfig,
+  absolutePath: string,
+  message: string,
+): Promise<string> {
+  assertInsideCompany(config, absolutePath);
+  return commitPath(config, absolutePath, message);
+}
+
+/** Private. Callers reach this only through a boundary-checked wrapper above. */
+async function commitPath(
+  config: RunnerConfig,
+  absolutePath: string,
+  message: string,
+): Promise<string> {
   const pathspec = repoRelative(config, absolutePath);
 
   await git(config.repoRoot, ['add', '--', pathspec]);

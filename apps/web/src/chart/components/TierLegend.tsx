@@ -21,7 +21,7 @@ export function TierLegend() {
           <Chip>
             <span title={row.full} className="inline-flex items-center gap-1.5">
               <JobIcon name={row.icon} size={12} />
-              <span className="text-[10px] font-medium uppercase tracking-[.22em]">{row.label}</span>
+              <span className="text-label-sm uppercase">{row.label}</span>
             </span>
           </Chip>
         </li>

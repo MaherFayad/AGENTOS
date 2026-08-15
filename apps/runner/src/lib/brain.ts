@@ -12,9 +12,10 @@
  * with easier-to-move quantities like the number of files in `sources/` (which is
  * reported alongside it instead, so it can inform without inflating).
  */
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { BrainCompleteness } from '@agnetos/contracts';
-import { lastCommitIso } from './git';
+import { commitCompanyFile, lastCommitIso } from './git';
 import type { RunnerConfig } from './config';
 
 export interface InterviewTopic {
@@ -171,4 +172,60 @@ export async function readCompanyBrain(config: RunnerConfig): Promise<string | n
   } catch {
     return null;
   }
+}
+
+/**
+ * The one agent whose artifact is written back into `company/` (§3.3).
+ *
+ * A slug, not a frontmatter flag. A flag would let any SKILL.md grant itself brain-write
+ * by adding a line — and SKILL.md files are exactly what an "import this agent from
+ * GitHub" flow (Part IV) brings in from outside. A constant in the runner cannot be
+ * granted by a file that arrives later.
+ */
+export const INTERVIEW_AGENT_SLUG = 'intelligence/company-interview';
+
+export interface BrainWriteBack {
+  /** Repo-relative path written. */
+  path: string;
+  commitSha: string;
+  /** Completeness *after* the write — what the map should scale to now. */
+  completeness: BrainCompleteness;
+}
+
+/**
+ * Write the interview's artifact back to `company/COMPANY.md` and commit it (§3.3: "git
+ * history is brain versioning").
+ *
+ * The agent itself never writes outside its scratch workspace. It produces `output.md`
+ * like every other agent; the runner copies that out and commits it. So the capability to
+ * change the file eleven other agents obey lives in the runner — behind `approval:
+ * required`, which the interview's frontmatter declares — and not in a prompt.
+ *
+ * Returns `null` for every other agent, which is the common case and deliberately silent.
+ */
+export async function writeBackBrain(
+  config: RunnerConfig,
+  agentSlug: string,
+  artifact: { absolutePath: string; kind: string } | null,
+): Promise<BrainWriteBack | null> {
+  if (agentSlug !== INTERVIEW_AGENT_SLUG) return null;
+  if (!artifact || artifact.kind !== 'md') return null;
+
+  const markdown = await readFile(artifact.absolutePath, 'utf8');
+  // An empty or near-empty artifact would silently erase the brain and, worse, would then
+  // be committed as its new history. Refuse instead: the run still succeeded, and its
+  // artifact is still downloadable for a human to look at.
+  if (markdown.trim().length < MIN_ANSWER_CHARS) return null;
+
+  await mkdir(dirname(config.companyFile), { recursive: true });
+  await writeFile(config.companyFile, markdown, 'utf8');
+
+  const completeness = await computeBrainCompleteness(config);
+  const commitSha = await commitCompanyFile(
+    config,
+    config.companyFile,
+    `brain: company interview — ${completeness.answered} of ${completeness.total} topics answered`,
+  );
+
+  return { path: 'company/COMPANY.md', commitSha, completeness };
 }

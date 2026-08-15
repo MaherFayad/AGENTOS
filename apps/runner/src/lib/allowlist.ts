@@ -60,8 +60,20 @@ export const CONNECTOR_REGISTRY: Readonly<Record<string, Connector>> = {
 
   // --- delivery / data ------------------------------------------------------
   slack: { label: 'Slack', tools: ['mcp__slack__*'] },
+  gmail: { label: 'Gmail', tools: ['mcp__gmail__*'], note: 'Draft and send; send is gated by approval: required.' },
+  hubspot: { label: 'HubSpot', tools: ['mcp__hubspot__*'], note: 'CRM system of record.' },
   postgres: { label: 'Postgres', tools: ['mcp__postgres__*'], note: 'Agent output rows (§2.5).' },
   langfuse: { label: 'Langfuse', tools: ['mcp__langfuse__*'], note: 'Read-only, for the auditor.' },
+
+  // --- version control ------------------------------------------------------
+  // Grants the *tool*, not the write boundary. Which paths a commit may touch is decided
+  // by `assertInsideAgents` / `assertInsideCompany` in config.ts, on the runner's side of
+  // the wire, where a prompt cannot argue with it (ADR-002, ADR-007).
+  git: {
+    label: 'Git',
+    tools: ['mcp__git__*'],
+    note: 'Repo history. Write paths are bounded by the runner, not by this grant.',
+  },
 
   // --- the second brain (§3.3) ---------------------------------------------
   // The company-interview agent is the one thing that may write COMPANY.md. It is a

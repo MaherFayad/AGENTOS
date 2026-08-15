@@ -15,7 +15,7 @@
  * `--check` writes nothing and exits non-zero if the artifact on disk differs from a fresh
  * computation. That is CI's determinism gate (ADR-003: "runs it twice, diffs").
  *
- * Runs on a bare clone: no dependencies outside `node:` builtins (ADR-004).
+ * Runs on a bare clone: no dependencies outside `node:` builtins (ADR-006).
  */
 
 import { readFile, writeFile, readdir, mkdir, access } from 'node:fs/promises';

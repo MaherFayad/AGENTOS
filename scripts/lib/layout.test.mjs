@@ -1,6 +1,6 @@
 /**
  * Tests for the layout engine. The two that matter are DETERMINISM and STABILITY —
- * they are the whole reason ADR-003 and ADR-004 exist. Everything else is guard rails.
+ * they are the whole reason ADR-003 and ADR-006 exist. Everything else is guard rails.
  *
  *   node --test scripts/lib/layout.test.mjs
  *   npm test                      (via the scripts/__tests__ shim)

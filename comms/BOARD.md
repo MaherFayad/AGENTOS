@@ -85,9 +85,12 @@ Every section of the spec of record must be **claimed by exactly one agent** in
 fails the build when a section is unclaimed, when a requirement cites a file that does not
 exist, or when a requirement cites no spec section.
 
+Sections are listed individually, not as ranges — the checker matches them literally, and a
+range would leave the sections inside it owned by nobody.
+
 | Spec section | Claimed by |
 |---|---|
-| PART I · §1.1–§1.6 | `design-system-guardian` |
+| PART I · §1.1 · §1.2 · §1.3 · §1.4 · §1.5 · §1.6 | `design-system-guardian` |
 | PART II · §2.0 · §2.7 · §3.6 | `shell-navigation-engineer` |
 | §2.1 · §2.2 | `map-galaxy-engineer` |
 | §2.3 | `drawer-engineer` |

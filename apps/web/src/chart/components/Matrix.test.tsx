@@ -92,7 +92,10 @@ describe('<JobCard>', () => {
   });
 
   it('sets the name at 13px/600', () => {
-    expect(collapsed).toMatch(/class="[^"]*text-\[13px\][^"]*font-semibold/);
+    // `text-small` IS the 13px rung of the §1.4 scale and `font-semibold` is the 600.
+    // Asserted as tokens, not as `text-[13px]`: check-tokens.mjs rejects the arbitrary
+    // value, so a test demanding one would pin the component to a build failure.
+    expect(collapsed).toMatch(/class="[^"]*text-small[^"]*font-semibold/);
   });
 
   it('raises to --card-2 on hover', () => {

@@ -6,21 +6,40 @@
  * `/api/*` is network-only. If the tailnet is gone you get an honest "no tailnet" page,
  * never yesterday's cost ticker with today's date on it.
  *
- * Owner: shell-navigation-engineer. Push payloads are produced by the relay
- * (`sessions-relay-engineer`) — see `PushPayload` in `src/lib/pwa.ts`.
+ * Owner: shell-navigation-engineer — caching, offline fallback, versioning.
+ * **Push lives in `/sw-push.js`, owned by `sessions-relay-engineer`** (§3.1 E2E: the
+ * payload is opened client-side, and none of that is the shell's business). It is pulled
+ * in below with one line, so the two features never edit the same file and never register
+ * two `push` listeners for one message.
  *
  * Plain JS with no build step, served from /public: a service worker that needs a
  * bundler is a service worker that silently stops matching the app it caches.
  */
+
+/**
+ * Guarded: if the push module is missing or throws while parsing, the shell's caching and
+ * offline page must still install. A PWA that fails to install because notifications are
+ * broken is a worse outcome than a PWA without notifications.
+ */
+try {
+  importScripts('/sw-push.js');
+} catch (error) {
+  // Nothing to report to — no client is listening at install time.
+}
 
 const VERSION = 'cc-shell-v1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = '/offline';
 
-const PRECACHE = [OFFLINE_URL, '/manifest.webmanifest', '/icons/icon-192.png'];
-
-const PUSH_KINDS = ['permission-request', 'run-failure', 'approval-request'];
+const PRECACHE = [
+  OFFLINE_URL,
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  // The notification badge must be cached: it is needed while the app is closed and the
+  // device may well be off the tailnet by then.
+  '/icons/badge-72.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -79,41 +98,14 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  let payload;
-  try {
-    payload = event.data.json();
-  } catch {
-    return;
-  }
-  if (!payload || !PUSH_KINDS.includes(payload.kind)) return;
+/**
+ * `push` and `notificationclick` are deliberately absent from this file. They live in
+ * `/sw-push.js` (imported at the top), because §3.1's payloads are end-to-end encrypted
+ * and are opened with a key this file must never see. Adding a handler here would fire a
+ * second notification for every message.
+ */
 
-  event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      tag: payload.tag || payload.kind,
-      // Permission prompts and approvals block a run: they should survive being ignored.
-      requireInteraction: payload.kind !== 'run-failure',
-      data: { url: payload.url || '/sessions' },
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
-    }),
-  );
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || '/sessions';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ('focus' in client) {
-          client.navigate(target);
-          return client.focus();
-        }
-      }
-      return self.clients.openWindow(target);
-    }),
-  );
+/** Lets the page tell a waiting worker to take over, instead of asking a person to. */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'agnetos:skip-waiting') self.skipWaiting();
 });

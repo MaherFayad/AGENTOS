@@ -21,18 +21,18 @@ export function ViewTabs(): React.JSX.Element {
   const { route } = useShell();
 
   const onChange = useCallback(
-    (value: string) => {
-      router.push(viewHref(value as ShellView));
+    (value: ShellView) => {
+      router.push(viewHref(value));
     },
     [router],
   );
 
   return (
-    <SegmentedControl
+    <SegmentedControl<ShellView>
       label="Views"
       value={route.view}
       onChange={onChange}
-      items={VIEWS.map((view) => ({ value: view, label: VIEW_LABELS[view] }))}
+      options={VIEWS.map((view) => ({ value: view, label: VIEW_LABELS[view] }))}
     />
   );
 }

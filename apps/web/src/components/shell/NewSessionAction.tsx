@@ -24,7 +24,8 @@ export function NewSessionAction(): React.JSX.Element {
 
   return (
     <div className="flex items-center gap-3">
-      <Eyebrow tone="copper" className="hidden md:block">
+      {/* size="sm" is the spec's 10px/+0.35em; tone="alive" is the copper (§2.0, §1.3). */}
+      <Eyebrow size="sm" tone="alive" className="hidden md:block">
         NAVIGATION
       </Eyebrow>
       <Pill variant="primary" onClick={start} aria-label="Start a new Claude session">

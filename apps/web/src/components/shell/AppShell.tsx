@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
       <div className="relative h-[100dvh] w-full overflow-hidden bg-bg text-ivory">
         <a
           href="#view-canvas"
-          className="sr-only left-4 top-4 z-[70] rounded-full border border-line-2 bg-bg-2 px-3 py-1.5 text-[12px] text-ivory focus:not-sr-only focus:absolute"
+          className="sr-only left-4 top-4 z-toast rounded-pill border border-line-2 bg-bg-2 px-3 py-1.5 text-meta text-ivory focus:not-sr-only focus:absolute"
         >
           Skip to the view
         </a>
@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
           {children}
         </main>
 
-        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col">
+        <div className="pointer-events-none absolute inset-0 z-chrome flex flex-col">
           <TopBar />
           <BreadcrumbStrip />
           <div className="flex-1" />

@@ -1,107 +1,110 @@
 /**
  * The shapes the drawer reads. Spec §2.3, §2.6.5 · Part IV.
  *
- * LOCAL MIRROR, ON PURPOSE AND TEMPORARILY. `packages/contracts/src/frontmatter.ts` and
- * `src/api.ts` are still `export {}` stubs owned by `agent-library-curator` and
- * `runner-engineer`. These types are transcribed from the prose contracts
- * (`comms/contracts/frontmatter-schema.md`, `comms/contracts/api-contracts.md`) and are
- * deleted the moment the real ones land — see the messages in
- * `comms/inbox/agent-library-curator/` and `comms/inbox/runner-engineer/`.
+ * THE LOCAL MIRROR IS GONE. When this module was first written,
+ * `packages/contracts/src/{frontmatter,api}.ts` were `export {}` stubs and these types
+ * were transcribed from the prose contracts. Both owners have since filled them in
+ * (`comms/inbox/_all/20260815-1857-runner-engineer-api-contract-concrete.md`), so this
+ * file now *imports* them and adds only the three things the drawer legitimately owns:
  *
- * The department table is NOT mirrored: ADR-001 says `packages/contracts/departments.ts`
- * is the only place a department may be written down, so we import it.
+ *   1. A frontmatter type that is honest about what the API guarantees. The contract's
+ *      `AgentFrontmatter` has every field required; `GET /api/agents/:slug` hands back
+ *      `Record<string, unknown>` and a file can be half-written. So the drawer works with
+ *      `Partial<>` plus the three fields it refuses to render without, and collapses the
+ *      rest (§2.3's collapse rule is only implementable on optional data).
+ *   2. A *flattened* SSE union. The wire shape is `{event, data}`; a reducer is far easier
+ *      to read as `{type, ...data}`. The flattening is derived from the contract's data
+ *      interfaces, so a field added upstream appears here and a field removed upstream
+ *      breaks this file — which is the point.
+ *   3. `RunRow`, the LAST RUNS row, which is `RunSummary` with every optional field
+ *      actually optional, because a row that lost its cost is still a row worth showing.
  *
- * Owner: drawer-engineer
+ * Owner: drawer-engineer · Consumes: comms/contracts/frontmatter-schema.md,
+ * comms/contracts/api-contracts.md
  */
 
-/** Frontmatter `tier` (Part IV) — CHART row, drawer eyebrow, THE LADDER active row. */
-export type Tier = 'human-led' | 'assisted' | 'autonomous';
+import type {
+  AgentDetail,
+  AgentFrontmatter as ContractFrontmatter,
+  InputField as ContractInputField,
+  InputType,
+  Ladder,
+  RunStatus,
+  SseArtifactData,
+  SseDoneData,
+  SseErrorData,
+  SsePlanData,
+  SseStartData,
+  SseTokenData,
+  SseToolData,
+  Status as AgentStatus,
+  Tier,
+} from '@agnetos/contracts';
 
-/** Frontmatter `status` — node halo and the LIVE counter. */
-export type AgentStatus = 'live' | 'draft' | 'failing';
+export type { AgentStatus, InputType, Ladder, RunStatus, Tier };
 
-/** Frontmatter `inputs[].type`. A value outside this union is a schema gap, not a default. */
-export type InputType = 'text' | 'url' | 'number' | 'select' | 'textarea' | 'date';
-
-export interface AgentInput {
-  key: string;
-  label: string;
-  type: string;
-  required?: boolean;
-  /** `select` only. */
-  options?: string[];
-  placeholder?: string;
-}
-
-export interface Ladder {
-  'human-led': string;
-  assisted: string;
-  autonomous: string;
-}
-
-export interface AgentFrontmatter {
+/**
+ * Frontmatter as the drawer may actually receive it.
+ *
+ * `department` is deliberately widened back to `string`: the API can hand back a slug that
+ * is not in ADR-001's table (a new department, a typo), and casting an arbitrary string to
+ * the `Department` union would be a lie the compiler then believes. The drawer resolves it
+ * through `findDepartment()` and falls back to a title-cased slug.
+ */
+export type AgentFrontmatter = Omit<Partial<ContractFrontmatter>, 'department'> & {
   name: string;
-  description: string;
   department: string;
-  cluster?: string;
-  icon?: string;
   tier: Tier;
-  phase?: string;
-  status?: AgentStatus;
-  breaks_into?: string[];
-  builds_on?: string[];
-  wired_into?: string[];
-  replaces?: string;
-  ladder?: Partial<Ladder>;
-  the_human?: string;
-  inputs?: AgentInput[];
-  /** 5-field cron (§3.2). */
-  schedule?: string;
-  approval?: 'none' | 'required';
-  deliver?: { slack?: string; email?: string };
-  /**
-   * §2.6.5 `HOW TO RUN IT`. Not yet in the schema — requested from
-   * `agent-library-curator`. Until it exists the drawer composes the paragraph from
-   * facts already in the frontmatter (schedule / wired_into / approval / inputs) and
-   * collapses the section when there are none.
-   */
-  how_to_run?: string;
-}
+};
 
-/** `GET /api/agents/:slug` — "parsed frontmatter + body". */
+/** Frontmatter `inputs[]`. Re-exported so nothing under `src/drawer` redeclares it. */
+export type AgentInput = ContractInputField;
+
+/** The derived block `GET /api/agents/:slug` returns, so the drawer re-derives nothing. */
+export type Runnable = AgentDetail['runnable'];
+
+/** `GET /api/agents/:slug`, after `normalizeAgentDoc` has vouched for the three musts. */
 export interface AgentDoc {
   /** `department/agent-name`, matching the node ids in contracts/graph-layout.md. */
   slug: string;
+  /** Repo-relative path of the SKILL.md. Shown in no UI; useful in an error sentence. */
+  path?: string;
   frontmatter: AgentFrontmatter;
   /** The SKILL.md body below the frontmatter block. Unused by the drawer today. */
   body?: string;
+  /** Absent when the runner is an older build than the contract. Then nothing derives. */
+  runnable?: Runnable;
 }
 
-/** `GET /api/runs?agent=&limit=5` row. */
+/**
+ * `GET /api/runs?agent=&limit=5` row.
+ *
+ * `startedAt` is ISO 8601 and relative time is rendered client-side — the contract is
+ * explicit about it, so LAST RUNS stays live without polling. Every other field is
+ * optional here because a row that is missing its cost is still a real run.
+ */
 export interface RunRow {
   runId?: string;
-  /** Server-rendered ("4h ago"). The drawer never invents one from a missing timestamp. */
-  relativeTime?: string;
   startedAt?: string;
-  status: 'ok' | 'error' | 'running' | 'awaiting-approval';
+  status: RunStatus;
   costUsd?: number;
   durationMs?: number;
   traceUrl?: string;
 }
 
 /* -----------------------------------------------------------------------------
- * SSE union — comms/contracts/api-contracts.md, `POST /api/run`.
+ * SSE union — flattened from `RunStreamEvent` in packages/contracts/src/api.ts.
  * The console renders these and nothing else.
  * -------------------------------------------------------------------------- */
 
 export type RunEvent =
-  | { type: 'start'; runId: string; agent: string; traceUrl?: string }
-  | { type: 'token'; text: string }
-  | { type: 'tool'; name: string; input?: unknown; status: 'start' | 'ok' | 'error' }
-  | { type: 'plan'; summary: string }
-  | { type: 'artifact'; path: string; kind?: string; url?: string }
-  | { type: 'done'; status: 'ok' | 'error'; costUsd?: number; durationMs?: number; traceUrl?: string }
-  | { type: 'error'; message: string; retryable?: boolean };
+  | ({ type: 'start' } & SseStartData)
+  | ({ type: 'token' } & SseTokenData)
+  | ({ type: 'tool' } & SseToolData)
+  | ({ type: 'plan' } & SsePlanData)
+  | ({ type: 'artifact' } & SseArtifactData)
+  | ({ type: 'done' } & SseDoneData)
+  | ({ type: 'error' } & SseErrorData);
 
 export type RunEventName = RunEvent['type'];
 

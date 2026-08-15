@@ -36,7 +36,9 @@ export function DrawerHeader({
   return (
     <header>
       <div className={s.eyebrowRow}>
-        <Eyebrow tone="copper">{eyebrow}</Eyebrow>
+        {/* `alive` is the primitive's name for copper (§1.3): it means "this label sits
+            next to something that runs". The autonomy state is exactly that claim. */}
+        <Eyebrow tone="alive">{eyebrow}</Eyebrow>
         <button type="button" className={s.close} onClick={onClose} aria-label={closeLabel} title={closeLabel}>
           ✕
         </button>

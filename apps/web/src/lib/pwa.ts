@@ -55,6 +55,61 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   }
 }
 
+/* -----------------------------------------------------------------------------
+ * Install flow (§3.6 "installs to home screen").
+ *
+ * Chromium fires `beforeinstallprompt` and lets us re-raise it later from a user
+ * gesture; Safari fires nothing and installs from the Share sheet. So: capture the event
+ * if it comes, offer a button only then, and tell everyone else the truth in a sentence
+ * rather than sniffing user agents to guess which browser they are holding.
+ * -------------------------------------------------------------------------- */
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+let deferredPrompt: BeforeInstallPromptEvent | null = null;
+
+/**
+ * Subscribe to install availability. Returns an unsubscribe function.
+ *
+ * The listener is attached at module level rather than on mount because the browser fires
+ * `beforeinstallprompt` once, early — often before React has hydrated. Missing it means no
+ * install button for the whole visit.
+ */
+export function watchInstallPrompt(onChange: (available: boolean) => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+
+  const capture = (event: Event): void => {
+    event.preventDefault(); // stop the mini-infobar; we own the placement
+    deferredPrompt = event as BeforeInstallPromptEvent;
+    onChange(true);
+  };
+  const installed = (): void => {
+    deferredPrompt = null;
+    onChange(false);
+  };
+
+  onChange(deferredPrompt !== null);
+  window.addEventListener('beforeinstallprompt', capture);
+  window.addEventListener('appinstalled', installed);
+  return () => {
+    window.removeEventListener('beforeinstallprompt', capture);
+    window.removeEventListener('appinstalled', installed);
+  };
+}
+
+/** Re-raise the captured prompt. Must be called from a user gesture. */
+export async function promptInstall(): Promise<'accepted' | 'dismissed' | 'unavailable'> {
+  if (deferredPrompt === null) return 'unavailable';
+  const event = deferredPrompt;
+  deferredPrompt = null;
+  await event.prompt();
+  const { outcome } = await event.userChoice;
+  return outcome;
+}
+
 /** True when running as an installed PWA rather than a browser tab. */
 export function isStandalone(): boolean {
   if (typeof window === 'undefined') return false;
@@ -62,12 +117,18 @@ export function isStandalone(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches || iosStandalone === true;
 }
 
-/** VAPID keys arrive base64url-encoded; `PushManager` wants raw bytes. */
-export function urlBase64ToUint8Array(base64: string): Uint8Array {
+/**
+ * VAPID keys arrive base64url-encoded; `PushManager` wants raw bytes.
+ *
+ * The buffer is allocated explicitly so the result is a `Uint8Array<ArrayBuffer>` and not
+ * the `ArrayBufferLike` default — `applicationServerKey` takes a `BufferSource`, which a
+ * possibly-shared buffer does not satisfy.
+ */
+export function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
   const normalised = padded.replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(normalised);
-  const bytes = new Uint8Array(raw.length);
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
   for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
   return bytes;
 }
