@@ -22,10 +22,15 @@ import { countWaiting, stateLabel } from '../lib/sort';
 import { useNow, useSessionList } from '../data/useSessionList';
 import { useSessionKey } from '../data/useSessionKey';
 import { KeyGate } from './KeyGate';
+import { PushSettings } from './PushSettings';
 import s from '../sessions.module.css';
 import type { DecryptedSession } from '../types';
 
-export function SessionsTab(): React.JSX.Element {
+export function SessionsTab({
+  spawnRequested = false,
+}: {
+  spawnRequested?: boolean;
+} = {}): React.JSX.Element {
   const { status, key, error, unlock } = useSessionKey();
   const { list } = useSessionList(key);
   const now = useNow();
@@ -48,6 +53,16 @@ export function SessionsTab(): React.JSX.Element {
           <span className={s.waitingCount}>{waiting} waiting on you</span>
         ) : null}
       </header>
+      <p className={s.billingNote}>
+        Billed to your Claude subscription — not the runner’s monthly cap.
+      </p>
+
+      {spawnRequested ? (
+        <p className={s.spawn} role="status">
+          A new session starts on a machine running Claude Code, not in this browser. Pair
+          that machine with the relay and it will appear here.
+        </p>
+      ) : null}
 
       <div className={s.list} role="list">
         {list.state === 'loading' ? <p className={s.empty}>Reading the relay…</p> : null}
@@ -92,6 +107,8 @@ export function SessionsTab(): React.JSX.Element {
           </p>
         ) : null}
       </div>
+
+      <PushSettings />
     </div>
   );
 }

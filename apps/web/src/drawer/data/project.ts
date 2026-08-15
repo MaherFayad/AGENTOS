@@ -91,10 +91,10 @@ export interface DrawerModel {
   approvalRequired: boolean;
   /**
    * `wired_into` names with no connector wired, as the *runner* resolved them
-   * (`AgentDetail.runnable`). Empty when the runner did not say — never inferred, because
-   * an inferred empty list reads as "everything is wired", a claim we did not check.
+   * (`AgentDetail.runnable`). `undefined` when the runner did not say — never inferred
+   * as `[]`, because an inferred empty list reads as "everything is wired".
    */
-  missingConnectors: string[];
+  missingConnectors: string[] | undefined;
   deliverTo: string | null;
   status: string | null;
 }
@@ -176,7 +176,8 @@ export function projectAgent(doc: AgentDoc): DrawerModel {
     howToRun: composeHowToRun(doc),
     schedule: trimmed(fm.schedule),
     scheduleInWords: describeCron(fm.schedule),
-    approvalRequired: fm.approval === 'required',
+    approvalRequired: doc.runnable?.approvalRequired === true || fm.approval === 'required',
+    missingConnectors: doc.runnable?.missingConnectors,
     deliverTo: trimmed(fm.deliver?.slack) ?? trimmed(fm.deliver?.email),
     status: trimmed(fm.status),
   };

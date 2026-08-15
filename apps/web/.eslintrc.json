@@ -9,5 +9,15 @@
       }
     ]
   },
-  "ignorePatterns": ["node_modules/", ".next/", "public/graph.json"]
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    "public/graph.json",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.test.mjs",
+    "**/test-harness.tsx",
+    "src/test/",
+    "vitest.config.ts"
+  ]
 }

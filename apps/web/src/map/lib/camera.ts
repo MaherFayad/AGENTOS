@@ -37,6 +37,9 @@ export function toPercent(k: number): number {
 /** One notch of the shell's −/+ buttons. Geometric so it feels even at both ends. */
 export const ZOOM_STEP = 1.3;
 
+/** Wheel zoom factor per tick — finer than the button notch. */
+export const WHEEL_ZOOM = 1.08;
+
 export function stepScale(k: number, direction: 'in' | 'out'): number {
   return clampScale(direction === 'in' ? k * ZOOM_STEP : k / ZOOM_STEP);
 }

@@ -1,15 +1,16 @@
 /*
  * globals.css — the ONLY stylesheet the app entrypoint loads.
  *
- * It contains directives and one import. Nothing else belongs here: every color, size,
- * radius and duration lives in ./styles/tokens.css, which is owned by
- * `design-system-guardian` (comms/contracts/design-tokens.md).
+ * It contains directives and imports. Colors, sizes, radii and durations live in
+ * ../styles/tokens.css (`design-system-guardian`). Direction and Arabic type live
+ * in ../styles/rtl.css (`rtl-arabic-pdpl-specialist`).
  *
  * BOARD constraint 3 / Part I: no hex outside tokens.css. `fidelity-qa-reviewer` greps
  * for it and CI fails on a hit.
  */
 
-@import './styles/tokens.css';
+@import '../styles/tokens.css';
+@import '../styles/rtl.css';
 
 @tailwind base;
 @tailwind components;

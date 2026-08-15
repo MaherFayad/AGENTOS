@@ -26,6 +26,8 @@ import { SpendLedger } from './billing';
 import type { AgentSessionFactory } from './agentSession';
 import { createSdkSession } from './agentSession';
 import { RunStore, type RunState } from './runStore';
+import { writeBackBrain, writeBrainSnapshot } from './brain';
+import type { Observability, RunTrace, ToolSpan } from '../observability/index.ts';
 
 export interface RunnerLogger {
   info: (obj: unknown, msg?: string) => void;
@@ -42,6 +44,12 @@ export interface RunnerServices {
   logger: RunnerLogger;
   /** Notify a human that a run is waiting at its gate (§3.2 push, §3.6). */
   notifyApproval?: (state: RunState, summary: string) => void;
+  /**
+   * Observability-engineer's instrumentation (§3.5). Optional: `--profile dev` has no
+   * Postgres, and a missing ledger must not refuse a run. When present, LAST RUNS and
+   * Langfuse share one id with the SSE stream.
+   */
+  obs?: Observability;
 }
 
 const noopLogger: RunnerLogger = { info: () => {}, warn: () => {}, error: () => {} };
@@ -121,33 +129,54 @@ export async function startRun(services: RunnerServices, request: RunRequest): P
   // operation that can still tell them what is wired up.
   if (!dryRun) await ledger.assertCanStart();
 
+  // Observability starts first when present so LAST RUNS, the Langfuse URL and the SSE
+  // `start` event all share one run id. Without Postgres (dev profile) we fall back to
+  // the thin Langfuse sink, which is also how a missing ledger stays honest rather than
+  // refusing the run.
+  const obsTrace: RunTrace | undefined = services.obs?.startRun({
+    agent: record.slug,
+    department: record.department,
+    agentName: record.name,
+    inputs,
+    model: config.model,
+    trigger: 'manual',
+    dryRun,
+  });
+
   const state = store.create({
+    ...(obsTrace ? { runId: obsTrace.runId } : {}),
     agent: record.slug,
     agentName: record.name,
     department: record.department,
     inputs,
-    traceUrl: null,
+    traceUrl: obsTrace?.traceUrl || null,
   });
 
-  // One id for the run, the trace and the SSE stream. Correlating three different ids
-  // across a drawer, a trace view and a log line is a tax nobody should pay at 2am.
-  const trace = langfuse.begin(state.runId);
-  state.traceUrl = trace.url;
+  const langfuseTrace = obsTrace
+    ? { traceId: obsTrace.traceId, url: obsTrace.traceUrl || null }
+    : langfuse.begin(state.runId);
+  if (!state.traceUrl) state.traceUrl = langfuseTrace.url;
 
   state.stream.emit('start', {
     runId: state.runId,
     agent: record.slug,
-    traceUrl: trace.url,
+    traceUrl: state.traceUrl,
     startedAt: state.startedAt,
     tools: record.allowlist.tools,
     approvalRequired: record.approvalRequired,
   });
 
-  void execute(services, state, record, inputs, dryRun, trace).catch((err) => {
+  void execute(services, state, record, inputs, dryRun, langfuseTrace, obsTrace).catch((err) => {
     services.logger.error({ err, runId: state.runId }, 'run failed outside its own error handling');
   });
 
   return state;
+}
+
+function toObsStatus(status: 'ok' | 'error' | 'denied' | 'canceled'): 'ok' | 'error' | 'cancelled' {
+  if (status === 'ok') return 'ok';
+  if (status === 'error') return 'error';
+  return 'cancelled';
 }
 
 async function execute(
@@ -157,12 +186,15 @@ async function execute(
   inputs: Record<string, RunInputValue>,
   dryRun: boolean,
   trace: { traceId: string; url: string | null },
+  obsTrace: RunTrace | undefined,
 ): Promise<void> {
   const { config, store, ledger, langfuse, logger } = services;
   const startedAt = Date.now();
   const toolsUsed: string[] = [];
+  const openTools = new Map<string, ToolSpan[]>();
   let scratchDir: string | null = null;
   let brainInjected = false;
+  let lastError: string | undefined;
 
   const finish = async (
     status: 'ok' | 'error' | 'denied' | 'canceled',
@@ -183,14 +215,24 @@ async function execute(
     });
     state.stream.end();
 
-    await langfuse.finish(trace, {
-      agent: record.slug,
-      status,
-      durationMs: state.durationMs,
-      costUsd: state.costUsd,
-      toolsUsed,
-      brainInjected,
-    });
+    if (obsTrace) {
+      await obsTrace.finish({
+        status: toObsStatus(status),
+        artifacts: state.artifact
+          ? [{ path: state.artifact.path, kind: state.artifact.kind }]
+          : undefined,
+        error: lastError ?? extra.denialNote,
+      });
+    } else {
+      await langfuse.finish(trace, {
+        agent: record.slug,
+        status,
+        durationMs: state.durationMs,
+        costUsd: state.costUsd,
+        toolsUsed,
+        brainInjected,
+      });
+    }
   };
 
   try {
@@ -208,11 +250,13 @@ async function execute(
 
     const planSummary = buildPlanSummary(record, inputs);
     state.stream.emit('plan', { summary: planSummary, awaitingApproval: record.approvalRequired });
+    obsTrace?.event('plan', { summary: planSummary, awaitingApproval: record.approvalRequired });
 
     if (record.approvalRequired) {
       const gate = store.openGate(state, planSummary);
       services.notifyApproval?.(state, planSummary);
       logger.info({ runId: state.runId, agent: record.slug }, 'run paused at approval gate');
+      obsTrace?.event('approval-requested', { summary: planSummary });
 
       const decision = await gate.promise;
       if (decision.decision === 'deny') {
@@ -222,6 +266,7 @@ async function execute(
         await finish('denied', { denialNote: decision.note ?? 'Denied without a note.' });
         return;
       }
+      obsTrace?.event('approval-granted');
       state.status = 'running';
       state.gate = null;
     }
@@ -247,6 +292,7 @@ async function execute(
         allowedTools: record.allowlist.tools,
         model: config.model,
         signal: state.abort.signal,
+        abortController: state.abort,
         isToolAllowed: (toolName) => isToolAllowed(record.allowlist, toolName),
       });
 
@@ -258,8 +304,18 @@ async function execute(
           case 'token':
             state.stream.emit('token', { text: event.text });
             break;
-          case 'tool':
+          case 'tool': {
             if (!toolsUsed.includes(event.name)) toolsUsed.push(event.name);
+            if (event.status === 'start' && obsTrace) {
+              const stack = openTools.get(event.name) ?? [];
+              stack.push(obsTrace.tool(event.name, event.input));
+              openTools.set(event.name, stack);
+            } else if (event.status === 'ok' || event.status === 'error') {
+              const stack = openTools.get(event.name);
+              const span = stack?.pop();
+              if (event.status === 'ok') span?.ok();
+              else span?.error(event.error ?? 'tool error');
+            }
             state.stream.emit('tool', {
               name: event.name,
               input: event.input,
@@ -268,12 +324,19 @@ async function execute(
               ...(event.error !== undefined ? { error: event.error } : {}),
             });
             break;
+          }
           case 'result':
             state.costUsd = event.costUsd;
+            if (event.costUsd !== null) obsTrace?.usage({ costUsd: event.costUsd, model: config.model });
             break;
           case 'error':
             sessionError = { message: event.message, retryable: event.retryable };
+            lastError = event.message;
             break;
+          default: {
+            const _never: never = event;
+            void _never;
+          }
         }
       }
 
@@ -291,6 +354,14 @@ async function execute(
           kind: artifact.kind,
           url: `/api/run/${state.runId}/artifact`,
           bytes: artifact.bytes,
+        });
+      }
+
+      const brainWrite = await writeBackBrain(config, record.slug, artifact);
+      if (brainWrite) {
+        await writeBrainSnapshot(config, brainWrite.completeness);
+        state.stream.emit('token', {
+          text: `[company brain updated — ${brainWrite.completeness.answered} of ${brainWrite.completeness.total} topics answered, commit ${brainWrite.commitSha.slice(0, 8)}]\n`,
         });
       }
 
@@ -312,6 +383,7 @@ async function execute(
     }
   } catch (err) {
     const apiError = toApiError(err);
+    lastError = apiError.message;
     logger.error({ err: apiError.message, runId: state.runId }, 'run failed');
     state.stream.emit('error', {
       message: apiError.message,

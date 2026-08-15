@@ -7,7 +7,7 @@ import { cx } from './cx';
  * SegmentedControl — §2.0, the MAP | DASHBOARDS | CHART | SESSIONS tabs.
  *
  * Active tab is an ivory pill with dark text; inactive is `--ink-2`; 11px,
- * uppercase, +0.25em. "Ivory pill with #131315 text" is expressed as
+ * uppercase, +0.25em. The ivory pill with inverted text is expressed as
  * `bg-copper text-copper-ink`, which resolves to exactly that pair in dark and
  * inverts correctly in light — the same reason Pill's primary variant works
  * without a theme branch (§1.2).

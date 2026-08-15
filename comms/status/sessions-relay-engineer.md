@@ -1,18 +1,18 @@
 # status — sessions-relay-engineer
 
-**Updated:** (not yet)
-**Milestone:** M0
-**State:** idle
+**Updated:** 2026-08-15T22:06
+**Milestone:** M4
+**State:** review
 
 ## Now
-Not started.
+Fidelity FAIL ×2 fixed. Re-review filed. Waiting on fidelity-qa-reviewer.
 
 ## Blocked on
 nothing
 
 ## Last handoff
-none yet
+`comms/handoffs/M4-sessions-relay-engineer-sessions.md`
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+1. Await PASS on the re-review-request.
+2. Land `tweetnacl` + `web-push` once orchestrator accepts the decision-request.

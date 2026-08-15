@@ -130,6 +130,10 @@ export function deepLinkFor(payload: PushPayload): string {
       return `/approvals/${encodeURIComponent(payload.id)}`;
     case 'run-failed':
       return `/runs/${encodeURIComponent(payload.id)}`;
+    default: {
+      const _never: never = payload.k;
+      return _never;
+    }
   }
 }
 

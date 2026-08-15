@@ -70,13 +70,76 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Part V billing split — the cost column is the human's subscription. */
+.billingNote {
+  margin: 0;
+  padding: 0 20px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.spawn {
+  margin: 0 16px 12px;
+  padding: 12px 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ivory-2);
+  background: var(--card);
+}
+
+.push {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px calc(12px + var(--ses-safe-b));
+  border-top: var(--border-w) solid var(--line);
+}
+
+.pushToggle {
+  min-height: 44px;
+  padding: 0 14px;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ivory);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pushToggle[aria-pressed='true'] {
+  border-color: var(--ivory);
+}
+
+.pushDetail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.pushDetail input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--ink-copper);
+}
+
 .list {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: 0 16px calc(24px + var(--ses-safe-b));
+  padding: 0 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;

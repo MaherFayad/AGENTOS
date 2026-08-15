@@ -452,6 +452,12 @@ export const RUNNER_ROUTES = {
  */
 export const COST_TICKER_ROUTE = { method: 'GET', path: '/api/cost/today' } as const;
 
+/**
+ * `POST /api/ops/prune` (ADR-008 nightly retention) is **`observability-engineer`'s**.
+ * ofelia fires it; metrics reads and `POST /api/run` never call `ops.prune()`.
+ */
+export const OPS_PRUNE_ROUTE = { method: 'POST', path: '/api/ops/prune' } as const;
+
 // ---------------------------------------------------------------------------
 // §3.1 relay — owned by `sessions-relay-engineer`
 // ---------------------------------------------------------------------------

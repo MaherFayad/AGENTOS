@@ -5,25 +5,26 @@ import { ChartView, type ChartViewProps } from './components/ChartView';
 import { loadChartAgents } from './data/agents';
 import type { ChartAgent } from './types';
 
-export type ChartPageProps = Omit<ChartViewProps, 'agents' | 'error'> & {
+export type ChartPageProps = Omit<ChartViewProps, 'agents'> & {
   /** Pass agents in (e.g. from a server component) to skip the client fetch. */
   agents?: readonly ChartAgent[];
 };
 
 /**
- * The mountable CHART page. `shell-navigation-engineer` owns `src/app/(views)/**` routing
- * (BOARD.md §2.0), so this exports a component for them to mount rather than defining a
- * route here — see the handoff.
+ * The mountable CHART page. Routes under `src/app/(views)/chart/**` mount this
+ * (or `ChartRoute`, which wraps it with the department URL). The shell still owns
+ * the routing skeleton; CHART owns what the page renders (§2.6).
  *
  * Loading shows nothing rather than skeleton cards: a fake grid that resolves into a real
  * one teaches the eye to distrust the real one (Part VII.3).
  */
-export function ChartPage({ agents: provided, ...viewProps }: ChartPageProps) {
+export function ChartPage({ agents: provided, error: providedError, ...viewProps }: ChartPageProps) {
+  const skipFetch = provided !== undefined;
   const [agents, setAgents] = useState<readonly ChartAgent[]>(provided ?? []);
-  const [error, setError] = useState<string | undefined>();
+  const [error, setError] = useState<string | undefined>(providedError);
 
   useEffect(() => {
-    if (provided) return;
+    if (skipFetch) return;
     let cancelled = false;
     loadChartAgents().then((result) => {
       if (cancelled) return;
@@ -33,7 +34,7 @@ export function ChartPage({ agents: provided, ...viewProps }: ChartPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [provided]);
+  }, [skipFetch]);
 
-  return <ChartView {...viewProps} agents={provided ?? agents} error={error} />;
+  return <ChartView {...viewProps} agents={provided ?? agents} error={providedError ?? error} />;
 }

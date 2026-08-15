@@ -10,6 +10,7 @@
  * ========================================================================== */
 
 import { useState } from 'react';
+import { relayToken, setRelayToken } from '../relay/client';
 import s from '../sessions.module.css';
 
 export function KeyGate({
@@ -20,6 +21,8 @@ export function KeyGate({
   error: string | null;
 }): React.JSX.Element {
   const [secret, setSecret] = useState('');
+  const [token, setToken] = useState('');
+  const alreadyPaired = Boolean(relayToken());
 
   return (
     <div className={s.tab}>
@@ -27,8 +30,10 @@ export function KeyGate({
         className={s.gate}
         onSubmit={(e) => {
           e.preventDefault();
+          if (token.trim()) setRelayToken(token.trim());
           void onUnlock(secret);
           setSecret('');
+          setToken('');
         }}
       >
         <h1 className={s.gateTitle}>Unlock your sessions</h1>
@@ -49,7 +54,21 @@ export function KeyGate({
           spellCheck={false}
           aria-label="Recovery secret"
         />
-        <button type="submit" className={`${s.pill} ${s.pillPrimary}`} disabled={!secret.trim()}>
+        {alreadyPaired ? null : (
+          <input
+            className={s.gateInput}
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="relay token (optional until happy-server is live)"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label="Relay pairing token"
+          />
+        )}
+        <button type="submit" className={`${s.pill} ${s.pillSecondary}`} disabled={!secret.trim()}>
           Unlock
         </button>
         {error ? (

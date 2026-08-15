@@ -31,16 +31,27 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PANELS_DIR = join(ROOT, 'panels');
 const MIGRATIONS_DIR = join(ROOT, 'apps/runner/src/db/migrations');
 const QUERIES_MODULE = join(ROOT, 'apps/runner/src/db/queries.ts');
+const REGISTRY_MODULE = join(ROOT, 'apps/runner/src/db/registry.ts');
 
 const errors = [];
 const warnings = [];
 
-/** Anything that looks like a statement rather than a value. */
-const SQL_SHAPED = /\b(select|insert|update|delete|drop|alter|create|union|from|where|join)\b\s/i;
+/** A statement, not a sentence that happens to contain "from" or "create". */
+const SQL_SHAPED =
+  /\b(select\s+\S[\s\S]*\sfrom\s|insert\s+into\s|update\s+\w+\s+set\s|delete\s+from\s|drop\s+(table|schema|index)\s|alter\s+table\s|create\s+(table|index|schema)\s|union\s+select\s)/i;
+
+/** Human copy. May mention SQL in English; it is not a query. */
+const PROSE_KEYS = new Set(['buildPrompt', 'emptyState', 'detail', 'caption', 'lead', 'title', 'pending', 'subtitle']);
 
 async function loadRegistry() {
-  const mod = await import(`file://${QUERIES_MODULE.replace(/\\/g, '/')}`);
-  return { named: mod.NAMED_QUERIES, metrics: mod.METRICS, ranges: Object.keys(mod.RANGES), bind: mod.bindNamedQuery };
+  const queries = await import(`file://${QUERIES_MODULE.replace(/\\/g, '/')}`);
+  const registry = await import(`file://${REGISTRY_MODULE.replace(/\\/g, '/')}`);
+  return {
+    named: registry.NAMED_QUERIES,
+    metrics: queries.METRICS,
+    ranges: Object.keys(queries.RANGES),
+    bind: registry.bindNamedQuery,
+  };
 }
 
 function walkQueries(node, path, visit) {
@@ -72,8 +83,8 @@ function scanForRawSql(node, path, file) {
     return;
   }
   for (const [key, value] of Object.entries(node)) {
-    // buildPrompt is a Claude Code prompt (§2.5.1) and may legitimately mention SQL.
-    if (key === 'buildPrompt') continue;
+    // buildPrompt / emptyState / detail are human sentences (§2.5) and may mention SQL.
+    if (PROSE_KEYS.has(key)) continue;
     scanForRawSql(value, `${path}.${key}`, file);
   }
 }
@@ -83,13 +94,15 @@ async function main() {
 
   // 4. The registry itself must be free of interpolation.
   for (const [name, query] of Object.entries(named)) {
+    if (!query.sql) continue; // pending entries have no SQL on purpose
     if (/\$\{/.test(query.sql)) {
-      errors.push(`queries.ts: "${name}" interpolates into its SQL string. Use a bind parameter.`);
+      errors.push(`registry.ts: "${name}" interpolates into its SQL string. Use a bind parameter.`);
     }
     const placeholders = new Set(query.sql.match(/\$\d+/g) ?? []);
-    if (placeholders.size !== query.params.length) {
+    const expected = (query.fixed?.length ?? 0) + query.params.length;
+    if (placeholders.size !== expected) {
       errors.push(
-        `queries.ts: "${name}" declares ${query.params.length} params but uses ${placeholders.size} placeholders.`,
+        `registry.ts: "${name}" declares ${expected} binds (${query.fixed?.length ?? 0} fixed + ${query.params.length} params) but uses ${placeholders.size} placeholders.`,
       );
     }
   }
@@ -142,7 +155,7 @@ async function main() {
             `${file}: ${path}.metric "${query.metric}" is not served. Available: ${metrics.join(', ')}.`,
           );
         }
-        if (query.range !== undefined && !ranges.includes(query.range)) {
+        if (query.range !== undefined && query.range !== '$range' && !ranges.includes(query.range)) {
           errors.push(`${file}: ${path}.range "${query.range}" is not supported. Use ${ranges.join(', ')}.`);
         }
         return;

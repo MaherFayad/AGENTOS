@@ -1,18 +1,21 @@
 # status — design-system-guardian
 
-**Updated:** (not yet)
+**Updated:** 2026-08-15T21:23
 **Milestone:** M0
-**State:** idle
+**State:** review
 
 ## Now
-Not started.
+Part I tokens, Tailwind wiring, theme, motion, and eight primitives are on disk. Handoff filed. Waiting on `fidelity-qa-reviewer`.
 
 ## Blocked on
-nothing
+nothing — layout.tsx / globals.css / vitest wiring is infra's file; messages sent, not idle.
 
 ## Last handoff
-none yet
+`comms/handoffs/M0-design-system-guardian-tokens.md`
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+1. Answer the fidelity review if it is not PASS.
+2. Do not add a ninth primitive without a decision-request.
+
+<!-- Overwrite this file each session. Under 30 lines. History lives in git and in
+     handoffs/, not here. -->

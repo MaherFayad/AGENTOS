@@ -27,7 +27,7 @@ export const BRANCH_SUBLABEL = {
   size: 11,
   tracking: 11 * 0.25,
   /** Vertical rhythm between the three sub-label rows. */
-  lineHeight: 15,
+  row: 15,
 } as const;
 
 /** §2.2 — "giant watermark department name … Instrument Serif caps, ~160px". */

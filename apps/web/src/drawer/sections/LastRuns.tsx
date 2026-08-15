@@ -26,10 +26,13 @@ export type RunsState =
   | { kind: 'failed'; message: string };
 
 const STATUS_WORD: Record<RunRow['status'], string> = {
+  queued: 'queued',
   ok: 'finished',
   error: 'failed',
   running: 'running',
   'awaiting-approval': 'waiting for approval',
+  denied: 'denied',
+  canceled: 'canceled',
 };
 
 export function LastRuns({ state }: { state: RunsState }) {
@@ -48,7 +51,7 @@ export function LastRuns({ state }: { state: RunsState }) {
   return (
     <div className={s.runs}>
       {state.rows.map((row, index) => {
-        const when = row.relativeTime ?? relativeTime(row.startedAt);
+        const when = relativeTime(row.startedAt);
         const cost = formatCost(row.costUsd);
         const duration = formatDuration(row.durationMs);
         const label = `Run ${when ?? 'at an unrecorded time'} — ${STATUS_WORD[row.status]}`;

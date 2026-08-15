@@ -230,13 +230,19 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
             { ...withId, phase: 'error', errorMessage: event.message, retryable: event.retryable },
             { kind: 'error', tone: 'error', text: [event.message, event.hint].filter(Boolean).join(' ') },
           );
-        default:
+        default: {
+          const _exhaustive: never = event;
+          void _exhaustive;
           return withId;
+        }
       }
     }
 
-    default:
+    default: {
+      const _exhaustive: never = action;
+      void _exhaustive;
       return state;
+    }
   }
 }
 

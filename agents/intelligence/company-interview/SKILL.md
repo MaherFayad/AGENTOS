@@ -8,7 +8,7 @@ tier: human-led
 phase: 1-foundation
 status: draft
 breaks_into: [question-set, answer-normaliser, brain-writer, gap-reporter]
-wired_into: [git]
+wired_into: [company-brain, git]
 replaces: "Twenty prompts a week that each re-explain who we are, what we sell and who we sell it to — badly, differently, and from memory."
 ladder:
   human-led: "A person answers twenty questions in one sitting and the answers are written down."

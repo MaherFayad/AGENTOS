@@ -33,6 +33,7 @@ export class RunStream {
   private readonly sinks = new Set<SseSink>();
   private nextId = 1;
   private endedAt: number | null = null;
+  private readonly endListeners = new Set<() => void>();
 
   constructor(runId: string) {
     this.runId = runId;
@@ -84,7 +85,28 @@ export class RunStream {
 
   /** Mark the run finished. The buffer stays warm for the replay window. */
   end(): void {
-    if (this.endedAt === null) this.endedAt = Date.now();
+    if (this.endedAt !== null) return;
+    this.endedAt = Date.now();
+    for (const listener of this.endListeners) {
+      try {
+        listener();
+      } catch {
+        // Ending a stream must not throw into the run.
+      }
+    }
+    this.endListeners.clear();
+  }
+
+  /** Fire once when `end()` has run (or immediately, if it already has). */
+  whenEnded(listener: () => void): () => void {
+    if (this.endedAt !== null) {
+      listener();
+      return () => {};
+    }
+    this.endListeners.add(listener);
+    return () => {
+      this.endListeners.delete(listener);
+    };
   }
 
   /** True once the replay window has closed and this stream can be dropped. */

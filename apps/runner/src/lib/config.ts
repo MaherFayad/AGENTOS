@@ -21,15 +21,22 @@ import { ApiError } from './errors';
  * walking up from the runner package until a marker directory appears. Overridable with
  * `AGNETOS_REPO_ROOT`, which is what the tests use.
  */
+function looksLikeRepoRoot(dir: string): boolean {
+  return existsSync(join(dir, 'skilltree-clone-spec.md')) || existsSync(join(dir, 'agents'));
+}
+
 function findRepoRoot(): string {
   const fromEnv = process.env.AGNETOS_REPO_ROOT;
   if (fromEnv) return resolve(fromEnv);
 
+  // Compose mounts the project at `/repo` (writable git path) and the library again at
+  // `/agents:ro`. Git writes and COMPANY.md write-back must go through `/repo` — the
+  // read-only mounts would 403 a schedule commit and a brain update alike.
+  if (looksLikeRepoRoot('/repo')) return '/repo';
+
   let dir = resolve(process.cwd());
   for (let i = 0; i < 6; i += 1) {
-    if (existsSync(join(dir, 'skilltree-clone-spec.md')) || existsSync(join(dir, 'agents'))) {
-      return dir;
-    }
+    if (looksLikeRepoRoot(dir)) return dir;
     const parent = resolve(dir, '..');
     if (parent === dir) break;
     dir = parent;
@@ -88,10 +95,14 @@ export function loadConfig(): RunnerConfig {
       : join(repoRoot, 'apps', 'web', 'public', 'graph.json'),
     scratchRoot: process.env.RUNNER_SCRATCH_ROOT
       ? resolve(process.env.RUNNER_SCRATCH_ROOT)
-      : join(repoRoot, '.runner', 'scratch'),
+      : existsSync('/workspaces')
+        ? '/workspaces'
+        : join(repoRoot, '.runner', 'scratch'),
     artifactsRoot: process.env.RUNNER_ARTIFACTS_ROOT
       ? resolve(process.env.RUNNER_ARTIFACTS_ROOT)
-      : join(repoRoot, '.runner', 'artifacts'),
+      : existsSync('/workspaces')
+        ? join('/workspaces', 'artifacts')
+        : join(repoRoot, '.runner', 'artifacts'),
     // Presence only. The value stays in process.env and is read at spawn time by the
     // Agent SDK; nothing in this service copies it into a variable that could be logged.
     configured: Boolean(process.env.ANTHROPIC_API_KEY),
@@ -100,7 +111,9 @@ export function loadConfig(): RunnerConfig {
     model: process.env.RUNNER_MODEL ?? 'claude-opus-5',
     ofeliaSyncUrl: process.env.OFELIA_SYNC_URL ?? null,
     langfuse: {
-      baseUrl: process.env.LANGFUSE_BASE_URL ?? null,
+      // Compose names this LANGFUSE_HOST; the observability module reads LANGFUSE_BASE_URL.
+      // Accept both so a run still traces when only infra's name is set.
+      baseUrl: process.env.LANGFUSE_BASE_URL ?? process.env.LANGFUSE_HOST ?? null,
       publicKey: process.env.LANGFUSE_PUBLIC_KEY ?? null,
       secretKey: process.env.LANGFUSE_SECRET_KEY ?? null,
     },

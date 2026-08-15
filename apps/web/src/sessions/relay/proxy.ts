@@ -28,7 +28,8 @@ import type { SessionEnvelope, TranscriptEnvelope } from '../types';
  * the sole entry point and binds to the Tailscale IP. There is no public port
  * and nothing here assumes auth exists (§3.6, BOARD constraint 5).
  */
-const RELAY_BASE = process.env.HAPPY_RELAY_URL ?? 'http://happy:3005';
+const RELAY_BASE =
+  process.env.HAPPY_RELAY_URL ?? process.env.HAPPY_INTERNAL_URL ?? 'http://happy:3005';
 
 /** How long we wait on the relay before telling the human something useful. */
 const TIMEOUT_MS = 10_000;

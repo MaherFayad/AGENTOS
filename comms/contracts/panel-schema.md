@@ -87,7 +87,28 @@ Grid: 2 columns, 16px gap. A widget declares `span: 1 | 2`.
 5. The activity feed is real: agent runs **are** the activity (§2.5 data note). Wire it
    to Langfuse first; business widgets light up later as agents write Postgres rows.
 
+## Envelope fields beyond the sketch
+
+- `schemaVersion` — currently `1`. Bump in `packages/contracts/src/panels.ts` and the validator together.
+- `department[]` — ADR-001 slugs. An array because `pipeline` covers `sales` and `deals`.
+- `emptyState` — required on every `sql`-backed widget. One sentence naming the agent that will fill it.
+- `pending` — required on every signal that has a query. What the strip says before the figure exists.
+- `note` — required on every `static` query. Provenance, in a sentence. An unsourced literal is a fabricated number.
+- `range: "$range"` — binds the query to the panel's time-range pills. Illegal without `filters.type: "range"`.
+- Query result state machine: `ok | empty | unavailable | error`. `unavailable` is not an error — it is a source that is correct but not wired in this phase (every `sql` query today).
+
 ## Ours, not theirs
 
 Their six are Meta Ads / HubSpot / Mission Control / Content / Outbound / Finance.
-Ours map to our stack — pending ADR from `dashboards-engineer` (BOARD open question M6).
+**Ours** ([ADR-004](../decisions/ADR-004-command-centers.md), accepted): six Command Centers covering all seven departments, with `sales` and `deals` sharing `pipeline`. A seventh center is a new `panels/*.json` file, never a component.
+
+| order | `id` | Title | `provider` | Departments | Real on day one? |
+|---|---|---|---|---|---|
+| 1 | `mission-control` | Mission Control · Agent Ops | `langfuse` | `operations` | Yes — every widget |
+| 2 | `pipeline` | Pipeline · Sales & Deals | `postgres` | `sales`, `deals` | No — empty states |
+| 3 | `client-delivery` | Client Delivery · Engagements | `postgres` | `customer` | Partly — activity feed |
+| 4 | `content-studio` | Content · Studio & Distribution | `postgres` | `marketing` | Partly — activity feed |
+| 5 | `product-funnels` | Amplitude · Product Funnels | `amplitude` | `intelligence` | No — empty states |
+| 6 | `finance` | Finance · Spend & Runway | `langfuse` | `back-office` | Partly — agent spend |
+
+Provider glyphs are abstract monochrome marks (`apps/web/src/dashboards/lib/icons.tsx`), not vendor logos. Phase 1 resolves `langfuse` + `static` only; `sql` names are declared from day one and render `emptyState`.

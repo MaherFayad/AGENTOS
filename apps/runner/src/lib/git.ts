@@ -21,9 +21,9 @@ const exec = promisify(execFile);
 
 const RUNNER_IDENTITY = [
   '-c',
-  `user.name=${process.env.RUNNER_GIT_NAME ?? 'AgnetOS runner'}`,
+  `user.name=${process.env.RUNNER_GIT_NAME ?? process.env.GIT_AUTHOR_NAME ?? 'AgnetOS runner'}`,
   '-c',
-  `user.email=${process.env.RUNNER_GIT_EMAIL ?? 'runner@agnetos.local'}`,
+  `user.email=${process.env.RUNNER_GIT_EMAIL ?? process.env.GIT_AUTHOR_EMAIL ?? 'runner@agnetos.local'}`,
 ];
 
 export async function git(cwd: string, args: string[]): Promise<string> {

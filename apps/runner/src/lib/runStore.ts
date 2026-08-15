@@ -54,13 +54,15 @@ export class RunStore {
   }
 
   create(input: {
+    /** When observability starts the trace first, reuse its id so LAST RUNS and SSE agree. */
+    runId?: string;
     agent: string;
     agentName: string;
     department: string;
     inputs: Record<string, RunInputValue>;
     traceUrl: string | null;
   }): RunState {
-    const runId = randomUUID();
+    const runId = input.runId ?? randomUUID();
     const state: RunState = {
       runId,
       agent: input.agent,

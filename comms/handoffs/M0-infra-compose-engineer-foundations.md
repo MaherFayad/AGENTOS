@@ -3,7 +3,8 @@ agent: infra-compose-engineer
 milestone: M0
 spec: PART V (cites §3.1, §3.2, §3.5, §3.6, PART IV, PART VII.4)
 created: 2026-08-15T19:45
-status: ready-for-review
+updated: 2026-08-15T22:29
+status: done
 ---
 
 # M0 — Foundations: the stack, and how the other twelve run it
@@ -24,6 +25,10 @@ That gives you `web` on <http://127.0.0.1:3000> and `runner` on <http://127.0.0.
 and nothing else — which is the point (M0 deliverable 3: front-end agents are not blocked
 on Langfuse, Postgres, a relay image or a Tailscale key).
 
+**This session (FAIL correction):** `web` currently fails `next build` on product-code
+errors in `dashboards/` and `map/` (not infra). `--profile dev` therefore starts
+**runner only** until those owners compile. Runner is up on `127.0.0.1:8787`.
+
 ## Your service's URL
 
 | You are | Your service | Local (profile) | Through Caddy, on the tailnet |
@@ -43,6 +48,22 @@ Three profiles: `dev` (web + runner) · `obs` (dev + postgres + langfuse + ofeli
 `full` (obs + happy). Plus `tls` (the tailscale service). **`up` with no profile starts
 nothing** — booting six services should be a sentence you meant to type.
 
+## What changed this session (FAIL findings)
+
+1. **REQ-INF-25/28 live probe.** Docker Desktop is up. The daemon SKIP is gone.
+   `agnetos-runner-1` publishes `127.0.0.1:8787`. Human stopped the host leftover
+   (`penpotdev-infra-mailer-1`). `node infra/check-bind.mjs` now **exits 0** — all
+   ok / no public listeners. Finding 1 remainder CLOSED.
+2. **REQ-INF-39.** `CC_HOST: ${CC_HOST:-localhost}` is on the `tailscale` service
+   `environment:` (the MagicDNS FQDN `tailscale cert` needs — not `TS_HOSTNAME`).
+   Resolved config: `CC_HOST=agnetos.tailXXXX.ts.net`.
+3. **Happy healthcheck.** Closed. Probe is `GET /health` as named by
+   `sessions-relay-engineer` (unauthenticated; 503 if Postgres is down). Metrics
+   port 9090 unused.
+4. **Web env (FYI, cheap).** `HAPPY_RELAY_URL`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+   `VAPID_PRIVATE_KEY`, `PUSH_SUBSCRIPTIONS_PATH` on `web`, plus named local volume
+   `web_push` at `/data`. No decryption key on any service.
+
 ## What exists now
 
 ```
@@ -51,7 +72,7 @@ infra/Caddyfile                 / → web · /api → runner · /traces → lang
 infra/caddy/tls/internal.caddy  TLS_MODE=internal — Caddy's own CA, zero secrets (default)
 infra/caddy/tls/tailscale.caddy TLS_MODE=tailscale — the real MagicDNS cert
 infra/check-bind.mjs            §3.6 proof: no public listener, asked of Docker not of YAML
-infra/web.Dockerfile            Next.js standalone, non-root, repo-root context
+infra/web.Dockerfile            Next.js standalone, non-root, repo-root context; /data for push
 infra/runner.Dockerfile         Node + git + ca-certificates, non-root, repo-root context
 infra/ofelia/config.ini         GENERATED-file contract + the exact job shape, no live job
 infra/BACKUP.md                 encrypted pg_dumpall + restore, entirely in containers
@@ -81,6 +102,9 @@ by `REPO_WRITE_ROOT=/repo/agents`. If you find yourself wanting to write to `/ag
 directly, that is the constraint working, not a mount misconfiguration.
 
 **Before you claim anything is done:** `npm run verify` and `node infra/check-bind.mjs`.
+`verify` does not run the bind check (CI's `infra` job does). A SKIP on an unreachable
+daemon is still exit 0 — REQ-INF-28 asks for a loud SKIP, not a silent pass. That was
+not changed.
 
 ## Contracts touched
 
@@ -91,8 +115,8 @@ None changed. `infra/` consumes four and owns none:
 - `contracts/frontmatter-schema.md` (`agent-library-curator`) — the `schedule:` field is
   the sole source of ofelia jobs.
 - ADR-002 (mine, accepted) — repo shape. This closed the BOARD's open M0 question.
-- ADR-005 (`sessions-relay-engineer`, open) — compose reads `HAPPY_IMAGE` so the M4
-  decision costs no edit here.
+- ADR-005 (`sessions-relay-engineer`, **accepted**) — Happy, not Omnara. Compose still
+  reads `HAPPY_IMAGE`. The healthcheck path is still theirs to name.
 
 ## Deliberately not done
 
@@ -112,9 +136,9 @@ None changed. `infra/` consumes four and owns none:
 - **An ofelia drift check.** "A job in the config but not in frontmatter is a bug" is today
   enforced only by the file being wholly regenerated — true once the generator exists.
   Until then it is a comment, and comments are not checks. REQ-INF-71.
-- **A verified `happy` healthcheck.** It probes `/`; the relay's real health path is unknown
-  until ADR-005. A probe that always passes would be worse than one that is sometimes
-  wrong. `sessions-relay-engineer` owns correcting it.
+- **A verified `happy` healthcheck.** Done this session. Probe is `GET /health`
+  (named by `sessions-relay-engineer`; unauthenticated; 503 if Postgres is down).
+  Metrics port 9090 unused.
 - **Langfuse v3.** Part V describes "langfuse + postgres". v3 needs ClickHouse, Redis and
   S3/MinIO — three more services to keep local under Part VII.4. That is an ADR, not an
   image bump.
@@ -128,34 +152,33 @@ None changed. `infra/` consumes four and owns none:
 - **Secret management beyond a gitignored `.env`.** No vault, no SOPS, no Docker secrets.
   One tailnet-only host, one operator: a 0600 file is the honest boundary. More would imply
   a threat model nobody has written down.
-- **Docker Desktop was not running during this session**, so the bind check's
-  running-container probe reported `SKIP`, not `ok`. The declared-port lint passed. See
-  Verification — this is the one gap the human must close on the real host.
+- **`--profile dev` web image.** `next build` fails on `dashboards/data/use-resolved.ts`
+  (JSX parse) and missing `map/` imports (`motion`, `drawer/events`, `lib/shell-bus`).
+  Those files are not infra. Runner is up; web is not.
+- **ADR-008 nightly `ops.prune()` ofelia job.** Function is SQL; `config.ini` is
+  frontmatter-generated. Observability names the invoke path; infra mounts it in
+  compose. Not M7.
 
 ## Verification
 
-What I ran, and what it printed:
+What I ran this session, and what it printed:
 
 ```
-$ docker compose -f infra/compose.yaml config --quiet        → exit 0
-$ node scripts/check-comms.mjs                                → exit 0
-    roster agents 14 · inbox messages 3 · contracts 5 · decisions 7
-$ node scripts/check-spec-coverage.mjs
-    spec sections 27 (15 claimed) · requirements 261 · implemented 255 (98%)
-    declared, unbuilt 6                                       → PART V no longer unclaimed
+$ docker info --format "{{.ServerVersion}}"                   → 29.2.0
+$ docker compose -f infra/compose.yaml --env-file .env config --quiet
+                                                              → exit 0
+$ docker compose -f infra/compose.yaml --env-file .env --profile dev up -d --build
+    web: next build FAILED (dashboards JSX + map missing modules) — not infra
+    runner: built and started  127.0.0.1:8787->8787/tcp
 $ node infra/check-bind.mjs                                   → exit 0
-    SKIP running-container probe — docker daemon not reachable
-    ok compose caddy/happy/langfuse/postgres/runner/web — 8 ports, all loopback
+    ok   running  agnetos-runner-1         127.0.0.1:8787/tcp  (loopback)
+    ok   compose caddy/happy/langfuse/postgres/runner/web — 8 ports, all loopback
+    8 declared + 1 running port(s) bound to loopback or the tailnet. No public listeners.
+$ docker compose --profile tls config  → tailscale.environment.CC_HOST=agnetos.tailXXXX.ts.net
 ```
 
-`check-spec-coverage.mjs` still exits 1, on eight sections owned by other agents (§2.0,
-§2.1, §2.4, §2.5, §2.7, §3.1, §3.5, §3.6, PART II, PART III, PART VI, PART VII). **PART V
-is claimed and every path this spec cites resolves** — the row that was mine is clear.
-
-I also fixed a syntax error that made `scripts/check-spec-coverage.mjs` fail to parse at
-all: a doc comment contained the literal `*/` inside a regex example, closing the block
-early. One-line fix, no behaviour change; `commandcenter-orchestrator` should know it
-happened.
+SKIP-as-non-zero was **not** done: REQ-INF-28 asks for a loud SKIP, not a failing one, and
+`npm run verify` does not invoke this script.
 
 **The walkthrough the human runs once, on the real machine** (M0 deliverable 1 — no YAML
 proves a phone can reach anything):
@@ -166,21 +189,24 @@ proves a phone can reach anything):
 3. Create a reusable, tagged auth key → `TS_AUTHKEY`. Set `TLS_MODE=tailscale`.
 4. `docker compose -f infra/compose.yaml --env-file .env --profile tls --profile obs up -d --build`
 5. **`node infra/check-bind.mjs`** — with the daemon up this inspects every running
-   container, not just this project's. It must print `ok`, never `SKIP`.
+   container, not just this project's. It must print `ok`, never `SKIP`, and must not
+   FAIL a leftover public bind.
 6. From the phone, on the tailnet: `https://{CC_HOST}/` → install the PWA.
 7. `docker compose exec runner sh -c 'touch /agents/x'` must fail read-only. Asserting the
    `:ro` string in YAML is not the same test.
 
 ## Next agent
 
-`fidelity-qa-reviewer` for the M0 gate. Then, in parallel:
+`fidelity-qa-reviewer` for overall M0 / PART V PASS
+(`comms/inbox/fidelity-qa-reviewer/20260815-2224-infra-compose-engineer-m0-final.md`).
+Findings 1–3 all closed. Web image build remains a product-code issue, not infra.
 
-- `map-galaxy-engineer` (M1 lead) — start with `--profile dev`; read the URL table above
-  and `comms/specs/infrastructure.md` § "Interfaces we expose".
-- `sessions-relay-engineer` (M4, only needs M0) — read Decision 7 in
-  `comms/specs/infrastructure.md` before touching `/api`: route order in the Caddyfile is
-  load-bearing and a mistake there shows up as a 404 on the phone, not an error in the
-  proxy. Your first task is ADR-005; `HAPPY_IMAGE` and the healthcheck are yours after.
-- `runner-engineer` (M3) — `REPO_WRITE_ROOT=/repo/agents` is wired and waiting for the path
-  check that enforces it. `infra/ofelia/config.ini` documents the exact job shape your M7
-  generator must emit.
+- `map-galaxy-engineer` / `dashboards-engineer` — web image will not build until the
+  JSX parse and missing imports above compile.
+- `sessions-relay-engineer` — `HAPPY_RELAY_URL` / VAPID / `web_push` are on the `web`
+  service. Healthcheck is `GET /health`. No decryption key was added.
+- `observability-engineer` — ADR-008 accepted; name how ofelia should invoke
+  `ops.prune()` (not a frontmatter schedule row).
+- `runner-engineer` (M3) — `REPO_WRITE_ROOT=/repo/agents` is wired and waiting for the
+  path check that enforces it. `infra/ofelia/config.ini` documents the exact job shape
+  your M7 generator must emit.

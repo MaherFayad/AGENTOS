@@ -1,0 +1,474 @@
+'use client';
+
+/**
+ * The composing drawer — §2.3 (map, inline-start, glass, full height) and the
+ * §2.6.5 chart panel (inline-end mirror). One component, a `side` prop.
+ *
+ * Every string about an agent is projected from frontmatter (`projectAgent`). Optional
+ * sections collapse via `<Section when={…}>`. Run/Schedule stay disabled with an honest
+ * tooltip until `GET /api/status` says the runner is actually there.
+ *
+ * Owner: drawer-engineer
+ */
+
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { DEFAULT_LOCALE, translate, type StringKey, type Vars } from '@/i18n';
+import { useFocusTrap } from './a11y/useFocusTrap';
+import { ApiCallError, downloadUrl, fetchAgent, fetchRuns, postSchedule } from './data/client';
+import { initialValues, toRunPayload, validateInputs, type InputValues } from './data/inputs';
+import { projectAgent, type DrawerModel } from './data/project';
+import type { AgentDoc } from './data/types';
+import { openDrawer } from './events';
+import { GlassPanel } from './primitives';
+import { useRunStream } from './run/useRunStream';
+import { useRunnerAvailability } from './run/useRunnerAvailability';
+import { AutonomyToggleRow, SkillCards } from './sections/ChartSections';
+import { BreaksIntoChips, BuildsOnChips, ToolChips } from './sections/Chips';
+import { DrawerHeader } from './sections/Header';
+import { InputsForm } from './sections/InputsForm';
+import { Ladder } from './sections/Ladder';
+import { LastRuns, type RunsState } from './sections/LastRuns';
+import { Paragraph, QuoteBox, WiredIntoList } from './sections/Prose';
+import { RunConsole } from './sections/RunConsole';
+import { Section } from './sections/Section';
+import { SkillFileCard } from './sections/SkillFileCard';
+import s from './drawer.module.css';
+
+export type DrawerSide = 'left' | 'right';
+
+export interface JobDrawerProps {
+  /** `department/agent-slug`. Null while nothing is selected. */
+  slug: string | null;
+  /** `left` = map (§2.3, inline-start). `right` = chart mirror (§2.6.5, inline-end). */
+  side?: DrawerSide;
+  open: boolean;
+  onClose: () => void;
+}
+
+const t = (key: StringKey, vars?: Vars): string => translate(DEFAULT_LOCALE, key, vars);
+
+type AgentState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; doc: AgentDoc; model: DrawerModel }
+  | { kind: 'failed'; message: string; hint?: string };
+
+export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps) {
+  const isChart = side === 'right';
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const capabilities = useRunnerAvailability();
+  const run = useRunStream();
+
+  const [agent, setAgent] = useState<AgentState>({ kind: 'idle' });
+  const [runs, setRuns] = useState<RunsState>({ kind: 'loading' });
+  const [values, setValues] = useState<InputValues>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduleResult, setScheduleResult] = useState<string | null>(null);
+  const [consoleHeld, setConsoleHeld] = useState(false);
+
+  useFocusTrap(panelRef, { active: open, onClose });
+
+  useEffect(() => {
+    if (!slug || !open) {
+      setAgent({ kind: 'idle' });
+      return;
+    }
+    const controller = new AbortController();
+    setAgent({ kind: 'loading' });
+    setScheduleResult(null);
+    setErrors({});
+    fetchAgent(slug, controller.signal)
+      .then((doc) => {
+        const model = projectAgent(doc);
+        setAgent({ kind: 'ready', doc, model });
+        setValues(initialValues(model.inputs.fields));
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        const failure = error instanceof ApiCallError ? error : new ApiCallError('This agent could not be loaded.');
+        setAgent({ kind: 'failed', message: failure.message, hint: failure.hint });
+      });
+    return () => controller.abort();
+  }, [slug, open]);
+
+  useEffect(() => {
+    if (!slug || !open) {
+      setRuns({ kind: 'loading' });
+      return;
+    }
+    const controller = new AbortController();
+    setRuns({ kind: 'loading' });
+    fetchRuns(slug, 5, controller.signal)
+      .then((rows) => setRuns({ kind: 'ready', rows }))
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setRuns({
+          kind: 'failed',
+          message: error instanceof Error ? error.message : 'The runs list could not be read.',
+        });
+      });
+    return () => controller.abort();
+  }, [slug, open]);
+
+  useEffect(() => {
+    if (run.active || run.state.phase === 'done' || run.state.phase === 'error') setConsoleHeld(true);
+  }, [run.active, run.state.phase]);
+
+  const onRun = useCallback(() => {
+    if (!slug || agent.kind !== 'ready') return;
+    const { fields } = agent.model.inputs;
+    const result = validateInputs(fields, values);
+    if (!result.ok) {
+      setErrors(result.errors);
+      return;
+    }
+    setErrors({});
+    setConsoleHeld(true);
+    run.start({ agent: slug, inputs: toRunPayload(fields, values) });
+  }, [agent, run, slug, values]);
+
+  const onSchedule = useCallback(
+    (cron: string) => {
+      if (!slug) return;
+      setScheduleBusy(true);
+      postSchedule(slug, cron)
+        .then((response) => {
+          setScheduleResult(
+            response.nextRunAt
+              ? `Saved. Next run ${response.nextRunAt}.`
+              : 'Saved. The schedule is in the agent’s file.',
+          );
+        })
+        .catch((error: unknown) => {
+          setScheduleResult(error instanceof Error ? error.message : 'The schedule could not be saved.');
+        })
+        .finally(() => setScheduleBusy(false));
+    },
+    [slug],
+  );
+
+  const onDismissConsole = useCallback(() => {
+    run.reset();
+    setConsoleHeld(false);
+  }, [run]);
+
+  const model = agent.kind === 'ready' ? agent.model : null;
+  const view = isChart ? 'chart' : 'map';
+  const state = open ? 'open' : 'closed';
+
+  return (
+    <>
+      <button
+        type="button"
+        className={s.scrim}
+        data-state={state}
+        onClick={onClose}
+        tabIndex={open ? 0 : -1}
+        aria-label={t('drawer.action.close')}
+      />
+      <aside
+        className={s.drawer}
+        data-side={isChart ? 'end' : 'start'}
+        data-view={view}
+        data-state={state}
+        data-testid="job-drawer"
+        aria-hidden={open ? undefined : true}
+        {...(!open ? { inert: true } : {})}
+      >
+        <GlassPanel
+          ref={panelRef}
+          className={s.panel}
+          radius="md"
+          shadow="drawer"
+          bordered={false}
+          role="dialog"
+          aria-modal={open ? true : undefined}
+          aria-labelledby={titleId}
+          aria-label={t('a11y.drawer')}
+          tabIndex={-1}
+        >
+          <div className={s.body}>
+            {agent.kind === 'loading' || agent.kind === 'idle' ? (
+              <p className={s.status}>{t('drawer.empty.loading')}</p>
+            ) : null}
+
+            {agent.kind === 'failed' ? (
+              <div className={s.status}>
+                <p>{t('drawer.empty.missing')}</p>
+                <p className={s.statusHint}>{[agent.message, agent.hint].filter(Boolean).join(' ')}</p>
+              </div>
+            ) : null}
+
+            {model ? (
+              isChart ? (
+                <ChartAnatomy
+                  model={model}
+                  titleId={titleId}
+                  onClose={onClose}
+                  capabilities={capabilities}
+                  values={values}
+                  errors={errors}
+                  onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
+                  onRun={onRun}
+                  onSchedule={onSchedule}
+                  running={run.active}
+                  scheduleBusy={scheduleBusy}
+                  scheduleResult={scheduleResult}
+                  downloadHref={downloadUrl(model.slug)}
+                  runs={runs}
+                />
+              ) : (
+                <MapAnatomy
+                  model={model}
+                  titleId={titleId}
+                  onClose={onClose}
+                  capabilities={capabilities}
+                  values={values}
+                  errors={errors}
+                  onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
+                  onRun={onRun}
+                  onSchedule={onSchedule}
+                  running={run.active}
+                  scheduleBusy={scheduleBusy}
+                  scheduleResult={scheduleResult}
+                  downloadHref={downloadUrl(model.slug)}
+                  runs={runs}
+                />
+              )
+            ) : null}
+          </div>
+
+          <RunConsole
+            state={run.state}
+            open={consoleHeld}
+            onDecide={(decision) => void run.decide(decision)}
+            onCancel={run.cancel}
+            onDismiss={onDismissConsole}
+          />
+        </GlassPanel>
+      </aside>
+    </>
+  );
+}
+
+interface AnatomyProps {
+  model: DrawerModel;
+  titleId: string;
+  onClose: () => void;
+  capabilities: ReturnType<typeof useRunnerAvailability>;
+  values: InputValues;
+  errors: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  onRun: () => void;
+  onSchedule: (cron: string) => void;
+  running: boolean;
+  scheduleBusy: boolean;
+  scheduleResult: string | null;
+  downloadHref: string;
+  runs: RunsState;
+}
+
+function MapAnatomy({
+  model,
+  titleId,
+  onClose,
+  capabilities,
+  values,
+  errors,
+  onChange,
+  onRun,
+  onSchedule,
+  running,
+  scheduleBusy,
+  scheduleResult,
+  downloadHref,
+  runs,
+}: AnatomyProps) {
+  return (
+    <>
+      <DrawerHeader
+        eyebrow={model.eyebrow}
+        title={model.title}
+        breadcrumb={model.breadcrumb}
+        description={model.description}
+        titleId={titleId}
+        onClose={onClose}
+        closeLabel={t('drawer.action.close')}
+      />
+
+      <SkillFileCard
+        fileCount={model.skillFileCount}
+        downloadHref={downloadHref}
+        capabilities={capabilities}
+        schedule={model.schedule}
+        onRun={onRun}
+        onSchedule={onSchedule}
+        running={running}
+        scheduleBusy={scheduleBusy}
+        scheduleResult={scheduleResult}
+      />
+
+      <Section label={t('drawer.section.breaksInto')} when={model.breaksInto.length > 0}>
+        <BreaksIntoChips items={model.breaksInto} />
+      </Section>
+      <Section label={t('drawer.section.wiredInto')} when={model.wiredInto.length > 0}>
+        <WiredIntoList tools={model.wiredInto} />
+      </Section>
+      <Section label={t('drawer.section.buildsOn')} when={model.buildsOn.length > 0}>
+        <BuildsOnChips items={model.buildsOn} view="map" />
+      </Section>
+      <Section label={t('drawer.section.replaces')} when={Boolean(model.replaces)}>
+        <QuoteBox text={model.replaces ?? ''} />
+      </Section>
+      <Section label={t('drawer.section.ladder')} when={model.ladder.length > 0}>
+        <Ladder rows={model.ladder} />
+      </Section>
+      <Section label={t('drawer.section.theHuman')} when={Boolean(model.theHuman)}>
+        <Paragraph text={model.theHuman ?? ''} />
+      </Section>
+
+      <Additions
+        model={model}
+        capabilities={capabilities}
+        values={values}
+        errors={errors}
+        onChange={onChange}
+        onRun={onRun}
+        onSchedule={onSchedule}
+        running={running}
+        scheduleBusy={scheduleBusy}
+        scheduleResult={scheduleResult}
+        downloadHref={downloadHref}
+        runs={runs}
+        includeSkillCard={false}
+      />
+    </>
+  );
+}
+
+function ChartAnatomy({
+  model,
+  titleId,
+  onClose,
+  capabilities,
+  values,
+  errors,
+  onChange,
+  onRun,
+  onSchedule,
+  running,
+  scheduleBusy,
+  scheduleResult,
+  downloadHref,
+  runs,
+}: AnatomyProps) {
+  return (
+    <>
+      <DrawerHeader
+        eyebrow={model.clusterEyebrow}
+        title={model.title}
+        breadcrumb={model.breadcrumb}
+        description={null}
+        titleId={titleId}
+        onClose={onClose}
+        closeLabel={t('drawer.action.close')}
+      />
+      <AutonomyToggleRow tier={model.tier} />
+
+      <Section label={t('drawer.section.replaces')} when={Boolean(model.replaces)}>
+        <QuoteBox text={model.replaces ?? ''} cost />
+      </Section>
+      <Section label={t('drawer.section.whatItDoes')} when={Boolean(model.description)}>
+        <Paragraph text={model.description ?? ''} />
+      </Section>
+      <Section label={t('drawer.section.fromManualToAutonomous')} when={model.ladder.length > 0}>
+        <Ladder rows={model.ladder} nowBadge />
+      </Section>
+      <Section label={t('drawer.section.skills')} when={model.skills.length > 0}>
+        <SkillCards
+          skills={model.skills}
+          capabilities={capabilities}
+          onRead={(skill) => {
+            if (skill.agentSlug) openDrawer({ slug: skill.agentSlug, view: 'chart' });
+          }}
+          onRun={(skill) => {
+            if (skill.agentSlug) openDrawer({ slug: skill.agentSlug, view: 'chart' });
+          }}
+        />
+      </Section>
+      <Section label={t('drawer.section.tools')} when={model.wiredInto.length > 0}>
+        <ToolChips tools={model.wiredInto} />
+      </Section>
+      <Section label={t('drawer.section.howToRunIt')} when={Boolean(model.howToRun)}>
+        <Paragraph text={model.howToRun ?? ''} />
+      </Section>
+
+      <Additions
+        model={model}
+        capabilities={capabilities}
+        values={values}
+        errors={errors}
+        onChange={onChange}
+        onRun={onRun}
+        onSchedule={onSchedule}
+        running={running}
+        scheduleBusy={scheduleBusy}
+        scheduleResult={scheduleResult}
+        downloadHref={downloadHref}
+        runs={runs}
+        includeSkillCard
+      />
+    </>
+  );
+}
+
+function Additions({
+  model,
+  capabilities,
+  values,
+  errors,
+  onChange,
+  onRun,
+  onSchedule,
+  running,
+  scheduleBusy,
+  scheduleResult,
+  downloadHref,
+  runs,
+  includeSkillCard,
+}: Omit<AnatomyProps, 'titleId' | 'onClose'> & { includeSkillCard: boolean }) {
+  const hasInputs = model.inputs.fields.length > 0 || model.inputs.unsupported.length > 0;
+
+  return (
+    <>
+      {includeSkillCard ? (
+        <SkillFileCard
+          fileCount={model.skillFileCount}
+          downloadHref={downloadHref}
+          capabilities={capabilities}
+          schedule={model.schedule}
+          onRun={onRun}
+          onSchedule={onSchedule}
+          running={running}
+          scheduleBusy={scheduleBusy}
+          scheduleResult={scheduleResult}
+        />
+      ) : null}
+
+      <Section label={t('drawer.section.lastRuns')}>
+        <LastRuns state={runs} />
+      </Section>
+      <Section label={t('drawer.section.inputs')} when={hasInputs}>
+        <InputsForm
+          fields={model.inputs.fields}
+          unsupported={model.inputs.unsupported}
+          values={values}
+          errors={errors}
+          onChange={onChange}
+        />
+      </Section>
+    </>
+  );
+}

@@ -1,13 +1,13 @@
 import type { PhaseProgress } from '../types';
 import type { PhaseColumn, TierRow } from '../model/taxonomy';
-import { Pill } from '../ui';
 import { IconSquare } from './JobIcon';
 import { ProgressDashes } from './ProgressDashes';
 
 /**
  * §2.6.3 — the two header bands of the matrix.
  *
- * Both carry a derived number: the row header a jobs-count pill, the column header the
+ * Both carry a derived number: the row header a jobs-count pill (display chrome only —
+ * not a control; count is announced via the rowheader aria-label), the column header the
  * 4-segment progress dashes. Neither number is ever passed in as a literal.
  */
 
@@ -24,9 +24,12 @@ export function TierRowHeader({ row, count }: { row: TierRow; count: number }) {
         <span className="block text-meta font-semibold leading-tight text-ivory">{row.label}</span>
         <span className="mt-0.5 block text-chip font-normal leading-tight text-ink-3">{row.gloss}</span>
       </span>
-      <Pill>
+      <span
+        aria-hidden
+        className="inline-flex h-8 select-none items-center justify-center rounded-pill border border-line-2 bg-transparent px-3 font-sans text-pill text-ivory"
+      >
         <span className="tabular-nums">{count}</span>
-      </Pill>
+      </span>
     </div>
   );
 }

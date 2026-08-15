@@ -1,0 +1,394 @@
+/* =============================================================================
+ * dashboards.module.css — Command Centers carousel + detail (§2.4–§2.5)
+ *
+ * NO COLOR LITERALS. NO TYPE LITERALS. NO DURATION LITERALS.
+ * Color is var(--token). Type sizes that the named scale does not yet carry
+ * (the 44px serif carousel title, the 26px/700 detail title) are CSS variables
+ * set once on `.view` and consumed via `font-size: var(...)`. A decision-request
+ * asks design-system-guardian for named utilities; until they land, this is the
+ * only way to hit the spec sizes without an arbitrary Tailwind value.
+ *
+ * Carousel geometry (perspective, rotate, rear scale/brightness) comes from
+ * tokens.css §1.6. The per-card transform is applied in JS from lib/carousel.ts
+ * so mid-drag rotation is continuous.
+ * ========================================================================== */
+
+.view {
+  /* Spec §2.4 / §2.5.1 sizes not yet in the named type scale. */
+  --dash-carousel-title: 44px;
+  --dash-detail-title: 26px;
+  --dash-card-width: 720px;
+  --dash-card-height: 400px;
+  --dash-safe-t: env(safe-area-inset-top, 0px);
+  --dash-safe-b: env(safe-area-inset-bottom, 0px);
+  --dash-safe-l: env(safe-area-inset-left, 0px);
+  --dash-safe-r: env(safe-area-inset-right, 0px);
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ivory);
+  background: var(--bg);
+  padding-left: var(--dash-safe-l);
+  padding-right: var(--dash-safe-r);
+}
+
+/* -------------------------------------------------------------- carousel */
+
+.carousel {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg);
+}
+
+.floor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ellipse {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  width: 62%;
+  height: 22%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, var(--bg-3) 0%, var(--bg) 72%);
+  pointer-events: none;
+}
+
+.header {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding-top: calc(72px + var(--dash-safe-t));
+  padding-bottom: 8px;
+}
+
+.carouselTitle {
+  margin: 8px 0 6px;
+  font-family: var(--font-serif);
+  font-size: var(--dash-carousel-title);
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--ivory);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.stage {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  perspective: var(--carousel-perspective);
+  perspective-origin: 50% 48%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+}
+
+.stage:active {
+  cursor: grabbing;
+}
+
+.stage:focus-visible {
+  outline: 1px solid var(--line-2);
+  outline-offset: 4px;
+}
+
+.ring {
+  position: relative;
+  width: var(--dash-card-width);
+  height: var(--dash-card-height);
+  transform-style: preserve-3d;
+}
+
+.card {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card-lg);
+  background: var(--screen);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cardFront {
+  pointer-events: auto;
+  cursor: pointer;
+  border-color: var(--line-2);
+}
+
+.cardScreen {
+  height: 100%;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.previewKpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.previewKpi {
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-kpi);
+  background: var(--card);
+}
+
+.previewGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.previewWidget {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card-sm);
+  background: var(--card);
+}
+
+.caption {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 8px 20px 0;
+}
+
+.captionTitle {
+  display: block;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--ivory);
+}
+
+.captionRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.controls {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 20px 8px;
+}
+
+.dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--line-2);
+  cursor: pointer;
+}
+
+.dot:focus-visible {
+  outline: 1px solid var(--line-2);
+  outline-offset: 4px;
+}
+
+.dot[aria-current='true'] {
+  background: var(--ivory);
+}
+
+.hint {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 4px 20px calc(56px + var(--dash-safe-b));
+  color: var(--ink-3);
+}
+
+/* ---------------------------------------------------------------- detail */
+
+.detail {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: calc(88px + var(--dash-safe-t)) 56px calc(72px + var(--dash-safe-b));
+}
+
+.detailInner {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detailTitle {
+  margin: 0;
+  font-size: var(--dash-detail-title);
+  font-weight: 700;
+  color: var(--ivory);
+  line-height: 1.15;
+}
+
+.filterRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.signals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.span2 {
+  grid-column: span 2;
+}
+
+.rail {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-3);
+  padding: 12px 4px;
+}
+
+.rail:focus-visible {
+  outline: 1px solid var(--line-2);
+  outline-offset: 4px;
+}
+
+.railPrev {
+  left: calc(8px + var(--dash-safe-l));
+}
+
+.railNext {
+  right: calc(8px + var(--dash-safe-r));
+}
+
+.railDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--ink-copper);
+}
+
+.footer {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.footerLead {
+  margin: 0;
+  color: var(--ivory);
+}
+
+.footerDetail {
+  margin: 6px 0 12px;
+  color: var(--ink-2);
+}
+
+.unsupported {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-card);
+  color: var(--ink-3);
+  padding: 16px;
+}
+
+.emptyLine {
+  margin: 0;
+  color: var(--ink-3);
+}
+
+.skeleton {
+  display: block;
+  border-radius: var(--r-chip);
+  background: var(--card-2);
+  min-height: 1em;
+}
+
+@media (max-width: 900px) {
+  .kpiRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .span2 {
+    grid-column: span 1;
+  }
+  .ring {
+    width: min(var(--dash-card-width), 92vw);
+    height: 320px;
+  }
+  .detail {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .rail {
+    display: none;
+  }
+}

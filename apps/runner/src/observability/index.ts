@@ -55,7 +55,10 @@ export type Observability = Instrumentation & {
 export async function createObservability(
   env: Record<string, string | undefined> = process.env,
 ): Promise<Observability> {
-  const db = await connect(env.DATABASE_URL);
+  // Infra's compose names the business database `APP_DATABASE_URL` (Langfuse has
+  // its own `DATABASE_URL` on a different database). Accept either; never the
+  // Langfuse-internal URL — that would put our ledger in their schema.
+  const db = await connect(env.DATABASE_URL ?? env.APP_DATABASE_URL);
   await migrate(db);
   const instrumentation = createInstrumentation({ sink: sinkFromEnv(env), ledger: createLedger(db) });
   return {

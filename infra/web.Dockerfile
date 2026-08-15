@@ -48,7 +48,8 @@ ENV NODE_ENV=production \
 # HOSTNAME=0.0.0.0 is the CONTAINER's interface, not the host's. Host exposure is decided
 # solely by the published-port bind address in infra/compose.yaml.
 
-RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
+RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs \
+ && mkdir -p /data && chown nextjs:nodejs /data
 
 COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static

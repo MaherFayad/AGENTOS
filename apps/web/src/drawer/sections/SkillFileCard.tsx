@@ -74,23 +74,56 @@ export function SkillFileCard({
           </Pill>
         )}
 
-        <Pill
-          variant="primary"
-          onClick={onRun}
-          disabled={!runnerReady || running}
-          title={running ? 'This agent is running now.' : (capabilities.reason ?? 'Run this agent now')}
-        >
-          {running ? '▶ Running…' : '▶ Run now'}
-        </Pill>
+        {runnerReady ? (
+          <Pill
+            variant="primary"
+            onClick={onRun}
+            disabled={running}
+            title={running ? 'This agent is running now.' : 'Run this agent now'}
+          >
+            {running ? '▶ Running…' : '▶ Run now'}
+          </Pill>
+        ) : (
+          // Disabled Pill uses pointer-events-none, so the runner-down reason must live
+          // on a hoverable/focusable carrier — do not put title only on the disabled button.
+          <span
+            className={s.disabledAction}
+            title={capabilities.reason ?? undefined}
+            tabIndex={0}
+            aria-describedby="drawer-run-disabled-reason"
+          >
+            <span id="drawer-run-disabled-reason" className={s.srOnly}>
+              {capabilities.reason}
+            </span>
+            <Pill variant="primary" disabled>
+              ▶ Run now
+            </Pill>
+          </span>
+        )}
 
-        <Pill
-          variant="secondary"
-          onClick={() => setEditing((open) => !open)}
-          disabled={!runnerReady}
-          title={capabilities.reason ?? 'Set a cron schedule for this agent'}
-        >
-          ⏰ Schedule
-        </Pill>
+        {runnerReady ? (
+          <Pill
+            variant="secondary"
+            onClick={() => setEditing((open) => !open)}
+            title="Set a cron schedule for this agent"
+          >
+            ⏰ Schedule
+          </Pill>
+        ) : (
+          <span
+            className={s.disabledAction}
+            title={capabilities.reason ?? undefined}
+            tabIndex={0}
+            aria-describedby="drawer-schedule-disabled-reason"
+          >
+            <span id="drawer-schedule-disabled-reason" className={s.srOnly}>
+              {capabilities.reason}
+            </span>
+            <Pill variant="secondary" disabled>
+              ⏰ Schedule
+            </Pill>
+          </span>
+        )}
       </div>
 
       {editing && runnerReady ? (

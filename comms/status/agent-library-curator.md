@@ -1,18 +1,18 @@
 # status — agent-library-curator
 
-**Updated:** (not yet)
+**Updated:** 2026-08-15T21:22
 **Milestone:** M0
-**State:** idle
+**State:** review
 
 ## Now
-Not started.
+M0 Part IV filed. 12 agents validate. Connector registry required (invariant 5).
 
 ## Blocked on
 nothing
 
 ## Last handoff
-none yet
+comms/handoffs/M0-agent-library-curator-frontmatter.md
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+1. Weekly curation toward ~60 — do not bulk-run the seeder.
+2. M7: `agent-auditor` runtime with runner + observability (REQ-LIB-35–38).

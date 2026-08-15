@@ -1,11 +1,15 @@
-import { ViewMount } from '../../../components/shell';
+import { DrawerHost } from '../../../drawer';
+import { ChartMount } from './mount';
 
 /** `/chart` — the AI rollout matrix (§2.6). Owner: `chart-matrix-engineer`. */
-export default function ChartPage(): React.JSX.Element {
+export const dynamic = 'force-dynamic';
+
+export default async function ChartIndexPage(): Promise<React.JSX.Element> {
   return (
-    <ViewMount title="The AI rollout" owner="chart-matrix-engineer" spec="§2.6">
-      Autonomy tiers down the side, rollout phases across the top, the same frontmatter
-      the map projects — a different projection, not a second copy of the data.
-    </ViewMount>
+    <>
+      <ChartMount />
+      {/* drawer-engineer owns §2.6.5 — host listens for `openDrawer`, we do not render a second drawer. */}
+      <DrawerHost />
+    </>
   );
 }

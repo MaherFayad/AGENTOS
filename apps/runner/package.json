@@ -7,15 +7,21 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/lib/__tests__/allowlist.test.ts src/lib/__tests__/runService.test.ts src/lib/__tests__/sse.test.ts src/routes/__tests__/api.test.ts src/observability/__tests__/instrument.test.ts src/observability/__tests__/metrics.test.ts src/observability/__tests__/redaction.test.ts src/observability/__tests__/status.test.ts"
   },
   "dependencies": {
     "@agnetos/contracts": "*",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.221",
+    "@fastify/websocket": "^11.2.0",
+    "chokidar": "^4.0.3",
     "fastify": "^5.2.1",
+    "pg": "^8.13.1",
     "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
+    "@types/pg": "^8.11.10",
     "typescript": "^5.7.3"
   }
 }

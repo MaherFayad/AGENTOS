@@ -1,18 +1,18 @@
 # status — runner-engineer
 
-**Updated:** (not yet)
-**Milestone:** M0
+**Updated:** 2026-08-15T21:53
+**Milestone:** M3 (surface built during M0)
 **State:** idle
 
 ## Now
-Not started.
+brainCompleteness decision closed — overlay removed; watcher + build-graph pass opts.
 
 ## Blocked on
 nothing
 
 ## Last handoff
-none yet
+`comms/handoffs/M3-runner-engineer-runner.md`
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+1. Infra: wire `OFELIA_SYNC_URL` or `OFELIA_HUP_COMMAND` so schedule reloads without a restart.
+2. Stay idle for fidelity queue (API surface — no 1440px review unless contract/allowlist check).

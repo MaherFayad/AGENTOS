@@ -131,7 +131,7 @@ BOARD constraint 2 — this spec only guarantees the images those choices are bu
 | REQ-INF-16 | §3.2 | The runner's only writable view of the repo is `/repo`, and `REPO_WRITE_ROOT=/repo/agents` names the one subtree its git path may touch | `infra/compose.yaml` | manual — coordinated with `runner-engineer`  |
 | REQ-INF-17 | §3.2 | Per-run scratch workspaces are a named volume (`runner_workspaces`), never the repo checkout | `infra/compose.yaml` | manual — see Test plan |
 | REQ-INF-18 | PART VII | The Langfuse Postgres volume is **named, `driver: local`** — not a bind mount to a host path and not a cloud volume driver | `infra/compose.yaml` | manual — see Test plan |
-| REQ-INF-19 | PART VII | Every other volume (`happy_data` `caddy_data` `caddy_config` `ts_state` `ts_certs` `runner_workspaces`) is likewise named and local, so a `docker volume ls` is the complete inventory | `infra/compose.yaml` | manual — see Test plan |
+| REQ-INF-19 | PART VII | Every other volume (`happy_data` `web_push` `caddy_data` `caddy_config` `ts_state` `ts_certs` `runner_workspaces`) is likewise named and local, so a `docker volume ls` is the complete inventory | `infra/compose.yaml` | manual — see Test plan |
 | REQ-INF-20 | PART VII | An encrypted `pg_dumpall` procedure is documented, runs entirely inside containers (nothing installed on the host), and states its restore path | `infra/BACKUP.md` | manual — see Test plan |
 | REQ-INF-21 | PART VII | `backups/` ignores its own contents, so a dump can never be committed by accident — not even an encrypted one | `backups/.gitignore` | manual — see Test plan |
 | REQ-INF-22 | PART VII | Langfuse telemetry is off and experimental features are off; no trace data leaves the box | `infra/compose.yaml` | manual — see Test plan |
@@ -279,10 +279,9 @@ service it is documented under. Adding a key is a PR to that file, not an inline
   Swarm, and inventing a memory ceiling for a Next.js build before anyone has measured one
   produces OOM kills that look like application bugs. Revisit when M3 gives real numbers.
 
-- **A verified `happy` healthcheck.** The probe hits `/` because the relay's actual health
-  path is unknown until ADR-005 picks Happy or Omnara. A healthcheck that always passes
-  would be worse than one that is occasionally wrong, so it stays honest and wrong for now,
-  and `sessions-relay-engineer` owns correcting it.
+- **A verified `happy` healthcheck.** Done. `sessions-relay-engineer` named
+  unauthenticated `GET /health` (503 if Postgres is down). Probe is
+  `wget -q --spider http://127.0.0.1:3005/health`. Metrics port 9090 unused.
 
 - **Secret management beyond a gitignored `.env`.** No Docker secrets, no vault, no SOPS. On
   a single tailnet-only host with one operator, a file with 0600 permissions is the honest

@@ -25,6 +25,7 @@ export interface AgentSessionOptions {
   allowedTools: string[];
   model: string;
   signal: AbortSignal;
+  abortController: AbortController;
   /**
    * The runner's own gate. Returns false for anything outside the allowlist — see the
    * enforcement-point comment in `allowlist.ts` for why this exists alongside
@@ -79,8 +80,16 @@ export const createSdkSession: AgentSessionFactory = async function* createSdkSe
       systemPrompt: options.systemPrompt,
       allowedTools: options.allowedTools,
       permissionMode: 'dontAsk',
-      canUseTool: async (request: { toolName: string }) => options.isToolAllowed(request.toolName),
-      abortController: undefined,
+      abortController: options.abortController,
+      canUseTool: async (toolName: string, input: unknown) => {
+        if (!options.isToolAllowed(toolName)) {
+          return {
+            behavior: 'deny' as const,
+            message: `"${toolName}" is not in this agent's wired_into list.`,
+          };
+        }
+        return { behavior: 'allow' as const, updatedInput: input };
+      },
     },
   });
 

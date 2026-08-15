@@ -19,6 +19,7 @@
  */
 
 import type { GraphEdge } from '@agnetos/contracts';
+import { DURATION } from '../../components/primitives/motion';
 
 export interface Point {
   x: number;
@@ -31,9 +32,15 @@ export const ALPHA_TARGET = 0.3;
 /** Hop-count attenuation of the drag. Beyond this the galaxy does not move at all. */
 const PULL = [1, 0.45, 0.18, 0.06];
 
-/** Spring constants. Stiff enough to feel taut, damped enough to overshoot once. */
-const STIFFNESS = 0.055;
-const DAMPING = 0.78;
+/**
+ * Spring constants tuned so a ~100px release settles near `DURATION.relax` (§1.6).
+ * Measured settle ≈ 36 frames @ 16.667ms ≈ 600ms; see relax.test.ts.
+ */
+const STIFFNESS = 0.16;
+const DAMPING = 0.68;
+
+/** Spec settle window — exported so tests assert against the token, not a literal. */
+export const RELAX_MS = DURATION.relax;
 
 /** Below this the node is home and we stop integrating it — otherwise rAF never idles. */
 const SETTLED = 0.05;

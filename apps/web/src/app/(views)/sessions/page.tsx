@@ -8,6 +8,11 @@ import { SessionsTab } from '@/sessions';
  * cannot do on its own — the list's empty state says exactly that rather than
  * offering a button that would lie.
  */
-export default function SessionsPage(): React.JSX.Element {
-  return <SessionsTab />;
+export default async function SessionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}): Promise<React.JSX.Element> {
+  const query = await searchParams;
+  return <SessionsTab spawnRequested={query.new === '1'} />;
 }

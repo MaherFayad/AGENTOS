@@ -13,10 +13,16 @@ import { describe, expect, it } from 'vitest';
 
 const CSS = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url)), 'utf8');
 
-/** Declarations grouped by selector. Good enough for a flat token file. */
+/**
+ * Declarations grouped by selector. Comments are stripped first — otherwise the
+ * banner above each `:root` is treated as part of the selector and every pin
+ * silently reads `undefined`. Nested `@media { :root { … } }` is consumed as
+ * one outer block, so reduced-motion overrides do not leak into the base map.
+ */
 function scope(selector: string): Record<string, string> {
   const out: Record<string, string> = {};
-  const blocks = CSS.matchAll(/([^{}]+)\{([^}]*)\}/g);
+  const stripped = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const blocks = stripped.matchAll(/([^{}]+)\{([^}]*)\}/g);
   for (const [, sel, body] of blocks) {
     if (sel.trim() !== selector) continue;
     for (const [, name, value] of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
@@ -182,5 +188,8 @@ describe('§1.4 families', () => {
     expect(root['--track-2']).toBe('.3em');
     expect(root['--track-3']).toBe('.35em');
     expect(root['--track-4']).toBe('.45em');
+  });
+  it('publishes accent tracking so RTL never writes -0.01em as a literal', () => {
+    expect(root['--track-accent']).toBe('-0.01em');
   });
 });

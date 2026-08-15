@@ -61,9 +61,11 @@ const b64 = (bytes: Uint8Array): string => {
   return btoa(s);
 };
 
-const unb64 = (s: string): Uint8Array => {
+const unb64 = (s: string): Uint8Array<ArrayBuffer> => {
   const bin = atob(s);
-  const out = new Uint8Array(bin.length);
+  // Explicit ArrayBuffer backing — WebCrypto's BufferSource rejects SharedArrayBuffer
+  // under TS 5.7+ DOM typings.
+  const out = new Uint8Array(bin.length) as Uint8Array<ArrayBuffer>;
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 };
@@ -103,7 +105,7 @@ export async function deriveSessionKey(
   );
 
   const context = new TextEncoder().encode(CONTEXT);
-  const fullSalt = new Uint8Array(context.length + salt.length);
+  const fullSalt = new Uint8Array(context.length + salt.length) as Uint8Array<ArrayBuffer>;
   fullSalt.set(context, 0);
   fullSalt.set(salt, context.length);
 

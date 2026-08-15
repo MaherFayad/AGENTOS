@@ -193,18 +193,25 @@ export async function metricBreakdown(
 export async function costToday(
   db: DbClient,
   timezone: string,
-): Promise<{ usd: number; runs: number; unpricedRuns: number }> {
+): Promise<{ usd: number | null; runs: number; unpricedRuns: number }> {
+  // `sum` of no rows (or of only-NULL costs) is NULL. Do not coalesce to 0:
+  // `$0.00 today` is a real reading, and an empty ledger is not a reading
+  // (Part VII.3 / standing rule 9).
   const sql = `
-    SELECT coalesce(sum(cost_usd), 0)::float8 AS usd,
+    SELECT sum(cost_usd)::float8 AS usd,
            count(*)::int AS runs,
            (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced_runs
     FROM ops.agent_runs
     WHERE ${REAL_RUNS}
       AND started_at >= date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1
   `;
-  const { rows } = await db.query<{ usd: number; runs: number; unpriced_runs: number }>(sql, [timezone]);
-  const row = rows[0] ?? { usd: 0, runs: 0, unpriced_runs: 0 };
-  return { usd: Number(row.usd), runs: row.runs, unpricedRuns: row.unpriced_runs };
+  const { rows } = await db.query<{ usd: number | null; runs: number; unpriced_runs: number }>(sql, [timezone]);
+  const row = rows[0] ?? { usd: null, runs: 0, unpriced_runs: 0 };
+  return {
+    usd: row.usd === null ? null : Number(row.usd),
+    runs: row.runs,
+    unpricedRuns: row.unpriced_runs,
+  };
 }
 
 /**
@@ -367,7 +374,7 @@ export const NAMED_QUERIES: Record<string, NamedQuery> = {
     params: [{ name: 'days', type: 'int', default: 28 }],
     sql: `
       SELECT agent AS label,
-             coalesce(sum(cost_usd), 0)::float8 AS value,
+             sum(cost_usd)::float8 AS value,
              count(*)::int AS runs,
              (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced
       FROM ops.agent_runs

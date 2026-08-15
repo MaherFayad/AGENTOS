@@ -53,8 +53,11 @@ citations live in Decision 9 and in "Interfaces we expose".
    tier legend chips are outline + glyph + label (§1.3). If a `status: live` indicator is
    ever added here it will be the only colour on the view, and it will be an ADR.
 
-7. **No route file.** `shell-navigation-engineer` owns `src/app/(views)/**`, so CHART
-   exports a mountable `<ChartPage />` instead of defining a route. See the handoff.
+7. **CHART owns the contents of the existing chart routes.** The shell still owns the
+   routing skeleton (`src/app/(views)/**`, §2.0). CHART replaces the `ViewMount`
+   placeholders in `chart/page.tsx` and `chart/[department]/page.tsx` with `<ChartPage />`
+   (via a thin `ChartRoute` that keeps the tab bar and `/chart/:department` in sync).
+   New route segments are still the shell's to add.
 
 8. **An unstaffed department gets an empty state, not an empty grid.** Twelve hatch
    blocks say "twelve deliberate gaps"; an unmapped department says "nobody has been here
@@ -62,9 +65,9 @@ citations live in Decision 9 and in "Interfaces we expose".
 
 9. **Where CHART stops and the drawer starts.** §2.6.5's `More detail →` is ours; the
    panel it opens is not. BOARD.md gives `drawer-engineer` §2.3 and the §2.6.5 panel, so
-   CHART emits `openDrawer(agentSlug, {side:'right'})` and renders nothing further. A
-   "temporary" chart-local drawer would mean a second copy of the agent projection, which
-   is exactly what Part IV constraint 4 forbids.
+   CHART emits `openDrawer(agentSlug, {side:'right'})` and renders nothing further.
+   Their `<DrawerHost />` is mounted as a **sibling** on the chart routes so the event
+   has a listener; that is their component, not a second drawer in `src/chart`.
 
 ## Coverage
 
@@ -107,18 +110,20 @@ citations live in Decision 9 and in "Interfaces we expose".
 | REQ-CHT-35 | §2.6.4 | Enter and Space expand the focused card (native button semantics, `aria-expanded` reflects state) | `apps/web/src/chart/components/JobCard.tsx` · `apps/web/src/chart/model/keyboard.ts` | `apps/web/src/chart/model/keyboard.test.ts` |
 | REQ-CHT-36 | §2.6.3 | Focus holds at the grid edges instead of wrapping | `apps/web/src/chart/model/keyboard.ts` | `apps/web/src/chart/model/keyboard.test.ts` |
 | REQ-CHT-37 | §2.6.3 | The grid never steals focus: `.focus()` runs only for keyboard-initiated moves | `apps/web/src/chart/components/Matrix.tsx` | manual — see Test plan |
-| REQ-CHT-38 | §2.6 | CHART holds no copy of agent data: every rendered value comes from the frontmatter projection, and fixtures live only under `__fixtures__/` | `apps/web/src/chart/types.ts` · `apps/web/src/chart/data/agents.ts` | `apps/web/src/chart/components/ChartView.test.tsx` |
+| REQ-CHT-38 | §2.6 | CHART holds no copy of agent data: every rendered value comes from the frontmatter projection, and fixtures live only under `__fixtures__/` | `apps/web/src/chart/types.ts` · `apps/web/src/chart/data/agents.ts` · `apps/web/src/chart/data/fromDisk.ts` · `apps/web/src/chart/data/parseSkill.ts` | `apps/web/src/chart/components/ChartView.test.tsx` · `apps/web/src/chart/data/parseSkill.test.ts` |
 | REQ-CHT-39 | §2.6 | A department with no agents shows an honest empty state instead of a fabricated grid | `apps/web/src/chart/components/ChartEmptyState.tsx` | `apps/web/src/chart/components/ChartView.test.tsx` |
 | REQ-CHT-40 | §2.6 | If the agent library cannot be read, the view says so rather than rendering an empty rollout | `apps/web/src/chart/data/agents.ts` · `apps/web/src/chart/components/ChartEmptyState.tsx` | `apps/web/src/chart/components/ChartView.test.tsx` |
 | REQ-CHT-41 | §2.6 | No literal colour anywhere in `src/chart` — chrome is monochrome and this view carries no data ink | `apps/web/src/chart/components/StatLine.tsx` · `apps/web/src/chart/components/EmptyCell.tsx` | `apps/web/src/chart/components/Matrix.test.tsx` |
-| REQ-CHT-42 | §2.6 | CHART mounts as an exported page component; it defines no route under `src/app/(views)` | `apps/web/src/chart/ChartPage.tsx` · `apps/web/src/chart/index.ts` | manual — integration with `shell-navigation-engineer` |
+| REQ-CHT-42 | §2.6 | `/chart` and `/chart/:department` render `<ChartPage />` from `src/chart`, not `ViewMount` | `apps/web/src/app/(views)/chart/page.tsx` · `apps/web/src/app/(views)/chart/[department]/page.tsx` · `apps/web/src/app/(views)/chart/ChartRoute.tsx` · `apps/web/src/app/(views)/chart/mount.tsx` · `apps/web/src/chart/ChartPage.tsx` | manual — open `/chart` |
 
 ## Interfaces we expose
 
 From `apps/web/src/chart` (`index.ts` is the whole public surface):
 
 - `<ChartPage />` — mountable page; optional `agents` prop skips the client fetch,
-  `department` / `onDepartmentChange` make it routable by the shell.
+  `department` / `onDepartmentChange` make it routable by the shell. `/chart` and
+  `/chart/:department` mount it via `ChartRoute` (URL sync) and `ChartMount` (disk
+  projection of `agents/**/SKILL.md`).
 - `<ChartView />` — the presentational view, for anyone who already has agents in hand.
 - `openDrawer(agentSlug, {side, handler})`, `OPEN_DRAWER_EVENT`
   (`'commandcenter:open-drawer'`), `OpenDrawerDetail` — the §2.6.5 selection contract.
@@ -136,7 +141,7 @@ Everything else under `src/chart` is private.
 | Agent frontmatter fields `name, description, department, icon, tier, phase, breaks_into` | `agent-library-curator` | `comms/contracts/frontmatter-schema.md` |
 | `GET /api/agents` (list projection) | `runner-engineer` | `comms/contracts/api-contracts.md` — **requested, not yet in the contract** |
 | `Pill`, `Chip`, `Eyebrow`, `DURATION`, `EASE` | `design-system-guardian` | `comms/contracts/design-tokens.md` |
-| The right drawer | `drawer-engineer` | §2.6.5 — via the event above |
+| The right drawer | `drawer-engineer` | §2.6.5 — `openDrawer` event; their `<DrawerHost />` is a sibling on the chart routes, not a chart component |
 
 All five couplings are funnelled through two files, `src/chart/data/contracts.ts` and
 `src/chart/ui.ts`, so a rename upstream is a one-file change here.
@@ -155,7 +160,8 @@ All five couplings are funnelled through two files, `src/chart/data/contracts.ts
     once the app scaffold lands, and by `fidelity-qa-reviewer`'s a11y sweep.
   - REQ-CHT-07 (Instrument Serif italic) and REQ-CHT-28 (500ms reveal, reduced motion)
     are visual — the 1440px side-by-side and a `prefers-reduced-motion` toggle.
-  - REQ-CHT-42 — verified when `shell-navigation-engineer` mounts the page.
+  - REQ-CHT-42 — `/chart` mounts `<ChartPage />`; confirmed when the matrix (not
+    `ViewMount`) is the thing on screen.
 - **The two tests the brief names explicitly:** stat-line derivation lives in
   `model/stats.test.ts` + `components/StatLine.test.tsx` (fixtures in, counts asserted);
   hatch-on-every-empty-cell lives in `components/EmptyCell.test.tsx` (walks the real
@@ -166,8 +172,10 @@ All five couplings are funnelled through two files, `src/chart/data/contracts.ts
 - **The §2.6.5 drawer body.** `drawer-engineer` owns it. Building a "temporary" chart
   drawer would have created a second copy of the agent projection — the exact thing
   Part IV forbids — so `More detail →` emits and stops.
-- **A route file.** `src/app/(views)/chart/**` stays empty; `shell-navigation-engineer`
-  mounts `<ChartPage />`. Two owners of one route is worse than one extra import.
+- **`GET /api/agents` list.** Requested of `runner-engineer`; the page currently projects
+  `agents/**/SKILL.md` from disk (`/agents` in Docker, repo-relative in `next dev`) so the
+  matrix is real numbers rather than a 404 empty state. When the list endpoint lands,
+  `loadChartAgents` is the client fallback and the disk read can go.
 - **Search/filter inside CHART.** §2.0 puts search in the shell and says result click =
   fly-to-node. CHART will consume that selection when the shell exposes it; it is not
   building a second search box.

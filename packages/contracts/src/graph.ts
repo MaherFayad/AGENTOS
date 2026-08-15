@@ -154,9 +154,9 @@ export interface GraphDelta {
   added: GraphNode[];
   removed: string[];
   changed: GraphNode[];
-  /** Edges are re-sent whole for the touched neighbourhood — cheaper than diffing them
-   *  and they carry no position of their own. */
-  edges: GraphEdge[];
+  /** Edges for the touched neighbourhood, when the producer has them. Absent ⇒ the
+   *  client keeps the edges it already has (runner `delta` frames omit this today). */
+  edges?: GraphEdge[];
   /** Present when §3.3 completeness moved, so the galaxy can re-budget its particles. */
   core?: GraphCore;
 }

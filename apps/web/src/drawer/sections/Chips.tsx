@@ -44,7 +44,7 @@ export function BreaksIntoChips({ items }: { items: ChipRef[] }) {
 }
 
 /** BUILDS ON — dashed chip; opening it swaps the drawer to the prerequisite agent. */
-export function BuildsOnChips({ items }: { items: ChipRef[] }) {
+export function BuildsOnChips({ items, view = 'map' }: { items: ChipRef[]; view?: 'map' | 'chart' }) {
   return (
     <div className={s.chips}>
       {items.map((item) => (
@@ -59,7 +59,7 @@ export function BuildsOnChips({ items }: { items: ChipRef[] }) {
               source: 'chip',
               durationMs: DURATION.zoom,
             });
-            if (item.agentSlug) openDrawer({ slug: item.agentSlug });
+            if (item.agentSlug) openDrawer({ slug: item.agentSlug, view });
           }}
         >
           {item.label}

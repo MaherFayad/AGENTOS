@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { DOWNLOAD_ROUTE_AGREED, fetchRunnerStatus } from '../data/client';
 
-export type RunnerState = 'checking' | 'ready' | 'unreachable';
+export type RunnerState = 'checking' | 'ready' | 'unreachable' | 'unconfigured';
 
 export interface Capabilities {
   runner: RunnerState;
@@ -29,6 +29,7 @@ const REASON: Record<RunnerState, string | null> = {
   checking: 'Checking whether the runner is up…',
   ready: null,
   unreachable: 'The runner is not reachable from here, so nothing can be started. Nothing was sent.',
+  unconfigured: 'The runner is up but has no API key, so nothing can be started. Nothing was sent.',
 };
 
 export function useRunnerAvailability(): Capabilities {
@@ -38,8 +39,9 @@ export function useRunnerAvailability(): Capabilities {
     const controller = new AbortController();
     let cancelled = false;
     fetchRunnerStatus(controller.signal)
-      .then(() => {
-        if (!cancelled) setRunner('ready');
+      .then((status) => {
+        if (cancelled) return;
+        setRunner(status.runnerConfigured === false ? 'unconfigured' : 'ready');
       })
       .catch(() => {
         if (!cancelled) setRunner('unreachable');

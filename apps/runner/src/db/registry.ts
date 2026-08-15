@@ -534,7 +534,7 @@ export const NAMED_QUERIES: Record<string, NamedQuery> = {
     fixed: [],
     sql: `
       SELECT agent AS label,
-             coalesce(sum(cost_usd), 0)::float8 AS value,
+             sum(cost_usd)::float8 AS value,
              count(*)::int AS runs,
              (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced
       FROM ops.agent_runs

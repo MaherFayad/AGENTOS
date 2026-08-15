@@ -11,12 +11,14 @@
  * command that builds one. A map drawn from a live simulation would look right and be
  * subtly different on every request — the exact failure ADR-003 exists to prevent, and the
  * kind that is discovered months later by someone wondering why a node moved.
+ *
+ * `core.brainCompleteness` is produced once by `computeLayout` (build-graph + watcher),
+ * never overlaid here — one number, one producer (§3.3).
  */
 import { readFile } from 'node:fs/promises';
 import type { GraphReadBody } from '@agnetos/contracts';
 import { ApiError } from './errors';
 import type { RunnerConfig } from './config';
-import { computeBrainCompleteness } from './brain';
 
 export interface GraphOverlay {
   /** Agents with an approval gate open right now — the map pulses these amber (§3.2). */
@@ -34,19 +36,16 @@ export async function graphIsBuilt(config: RunnerConfig): Promise<boolean> {
 }
 
 /**
- * Read the stored payload and overlay the two fields only a running runner can know.
+ * Read the stored payload and overlay the one field only a running runner can know:
  *
- * Everything else — positions, edges, departments, the version hash — is passed through
- * byte-equivalent. The overlay is deliberately additive and deliberately tiny:
- *
- *   `core.brainCompleteness`  §3.3, computed from `company/` (never a constant).
  *   `nodes[].approvalPending` §3.2, true while a run of that agent waits at its gate.
  *
- * `approvalPending` cannot come from the artifact because it is a fact about *now*, and
- * the artifact is a fact about the last build. `brainCompleteness` could in principle be
- * baked in at build time; it is overlaid instead so the number cannot go stale between
- * builds while the galaxy is being asked to render it. Both are also pushed over
- * `/ws/graph`, from the same computation, so the two surfaces cannot disagree.
+ * Everything else — positions, edges, departments, `core.brainCompleteness`, the version
+ * hash — is passed through byte-equivalent from the artifact. `approvalPending` cannot
+ * come from the artifact because it is a fact about *now*, and the artifact is a fact
+ * about the last build. Brain completeness is baked by the layout engine at build/watch
+ * time (ADR-003 opts); `/ws/graph` `hello` carries the live watcher value for particles
+ * between builds.
  */
 export async function readGraph(
   config: RunnerConfig,
@@ -71,13 +70,6 @@ export async function readGraph(
       cause: err,
     });
   }
-
-  const brain = await computeBrainCompleteness(config);
-  const core = (typeof payload.core === 'object' && payload.core !== null ? payload.core : {}) as Record<
-    string,
-    unknown
-  >;
-  payload.core = { ...core, brainCompleteness: brain.value };
 
   if (Array.isArray(payload.nodes)) {
     const pending = new Set(overlay.approvalPending);

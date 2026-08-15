@@ -120,6 +120,13 @@ export async function notify(input: {
   const payload = buildPushPayload(input);
   const subs = await readSubscriptions();
 
+  // pendingSender only warns — nothing left the box. Do not count as sent
+  // (Part VII.3 — honest empty beats a plausible fake delivery).
+  if (sender === pendingSender) {
+    await Promise.all(subs.map((sub) => sender.send(sub, payload)));
+    return { sent: 0, failed: 0 };
+  }
+
   let sent = 0;
   let failed = 0;
   await Promise.all(

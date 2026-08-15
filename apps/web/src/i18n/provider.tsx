@@ -82,10 +82,10 @@ export const useT = (): I18n['t'] => useI18n().t;
 /**
  * Renders a headline whose accent phrase is marked `[[like this]]`.
  *
- * Latin: Instrument Serif italic (§1.4 — the brand signature).
- * Arabic: the same phrase in heavier weight, upright. Both come from the
- * `.u-accent` class in styles/rtl.css; this component does not branch on
- * locale and no component ever should.
+ * Latin: Instrument Serif italic + `tracking-accent` (§1.4 — the brand signature).
+ * Arabic: the same phrase in heavier weight, upright and untracked. Both come
+ * from `.u-accent` in styles/rtl.css plus the token utility; this component
+ * does not branch on locale and no component ever should.
  */
 export function Accented({ k, vars }: { k: StringKey; vars?: Vars }) {
   const { tParts } = useI18n();
@@ -93,7 +93,7 @@ export function Accented({ k, vars }: { k: StringKey; vars?: Vars }) {
     <>
       {tParts(k, vars).map((part, i) =>
         part.accent ? (
-          <em key={i} className="u-accent">
+          <em key={i} className="u-accent tracking-accent">
             {part.text}
           </em>
         ) : (

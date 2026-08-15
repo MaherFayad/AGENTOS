@@ -29,7 +29,7 @@ const nextConfig = {
   // §1.4 / BOARD constraint 7: fonts are self-hosted via @fontsource. No runtime network
   // requests, so Next's font optimizer (which fetches from Google) stays off.
   experimental: {
-    optimizePackageImports: ['@agnetos/contracts'],
+    optimizePackageImports: ['@agnetos/contracts', 'lucide-react'],
   },
 
   // The stack has no public ports (§3.6) and the tailnet terminates TLS at Caddy, which

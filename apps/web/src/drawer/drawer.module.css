@@ -25,12 +25,14 @@
   inset: 0;
   background: var(--scrim);
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--dur-drawer) var(--ease-drawer);
   z-index: 40;
 }
 
 .scrim[data-state='open'] {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* -----------------------------------------------------------------------------
@@ -49,6 +51,7 @@
   transform: translateX(var(--slide));
   transition: transform var(--dur-drawer) var(--ease-drawer);
   will-change: transform;
+  pointer-events: none;
 }
 
 .drawer[data-side='end'] {
@@ -63,6 +66,7 @@
 
 .drawer[data-state='open'] {
   --slide: 0%;
+  pointer-events: auto;
 }
 
 /* The transform is the one physical property CSS gives us no logical form for, so the
@@ -236,6 +240,25 @@
   margin-block-start: 12px;
 }
 
+/* Hover/focus carrier for a disabled Run/Schedule Pill — title must not live only on the
+ * button (Pill sets pointer-events-none when disabled). */
+.disabledAction {
+  display: inline-flex;
+  cursor: not-allowed;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* `Take it ↓` is a real <a download> — see SkillFileCard.tsx. This mirrors the secondary
  * Pill's shape so the row reads as one set of controls. It is a stand-in for an `as` prop
  * on Pill, requested from design-system-guardian; when that lands, this class goes. */
@@ -350,7 +373,7 @@
   font-size: 9px;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: var(--track-1);
   line-height: 1.4;
   color: var(--ink-3);
 }

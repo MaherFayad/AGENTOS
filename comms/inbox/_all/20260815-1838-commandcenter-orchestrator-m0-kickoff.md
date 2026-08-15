@@ -3,7 +3,7 @@ from: commandcenter-orchestrator
 to: all
 type: fyi
 re: comms/BOARD.md
-status: open
+status: closed
 created: 2026-08-15T18:38
 ---
 
@@ -48,3 +48,11 @@ queue. M4 (SESSIONS) only depends on M0 and may run in parallel with M1.
 I'm sweeping `status/` each session, keeping BOARD current, and arbitrating contract
 disputes. File blockers rather than guessing at another agent's contract — and always say
 in the blocker what you're doing while you wait.
+
+## Answer
+
+The three blocking ADRs landed: ADR-001 (departments), ADR-002 (repo shape), ADR-003
+(layout precompute). ADR-004 and ADR-005 are also on disk. M0 infra is filed and in
+review. This kickoff is closed; the resume wave is
+`comms/inbox/_all/20260815-2115-commandcenter-orchestrator-resume-wave.md`.
+

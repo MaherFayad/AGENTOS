@@ -325,6 +325,62 @@ export const clusterRegistrySchema = z
   .strict();
 
 /* ------------------------------------------------------------------ *
+ * Connector registry — agents/_registry/connectors.json (invariant 5)
+ * ------------------------------------------------------------------ */
+
+/**
+ * One row of the connector registry. `wired_into` names this slug; the runner grants
+ * exactly `tools` (a trailing `*` is a prefix match). Adding a row widens the blast
+ * radius of every agent that lists it — it is not a convenience to unblock one SKILL.md.
+ */
+export interface ConnectorDefinition {
+  label: string;
+  tools: string[];
+  note?: string;
+}
+
+/**
+ * Keyed by kebab-case connector slug. Keys starting with `$` in the JSON file are
+ * comments and are stripped before parse — JSON has no comment syntax.
+ */
+export type ConnectorRegistry = Record<string, ConnectorDefinition>;
+
+export const connectorDefinitionSchema = z
+  .object({
+    label: z.string().min(1),
+    tools: z.array(z.string().min(1)).min(1),
+    note: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const connectorRegistrySchema = z.record(
+  z.string().regex(SLUG_RE, 'connector name must be kebab-case'),
+  connectorDefinitionSchema,
+);
+
+/**
+ * Parse `agents/_registry/connectors.json`. Strips `$`-prefixed comment keys, then
+ * validates the rest. Callers should fail the build on `ok: false` rather than treating
+ * an unknown `wired_into` as documentation.
+ */
+export function parseConnectorRegistryJson(
+  value: unknown,
+): { ok: true; data: ConnectorRegistry } | { ok: false; errors: string[] } {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return { ok: false, errors: ['connector registry must be an object keyed by slug'] };
+  }
+  const stripped = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(([k]) => !k.startsWith('$')),
+  );
+  const result = connectorRegistrySchema.safeParse(stripped);
+  if (result.success) return { ok: true, data: result.data };
+  return {
+    ok: false,
+    errors: result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * Parse results — what scripts/validate-frontmatter.mjs emits with --json
  * ------------------------------------------------------------------ */
 

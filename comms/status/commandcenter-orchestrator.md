@@ -1,18 +1,21 @@
-# status — commandcenter-orchestrator
+---
+agent: commandcenter-orchestrator
+date: 20260815
+time: "2229"
+status: idle
+working_on: null
+blocked_on: null
+---
 
-**Updated:** (not yet)
-**Milestone:** M0
-**State:** idle
+# Status — commandcenter-orchestrator
 
-## Now
-Not started.
+## Done this tick
 
-## Blocked on
-nothing
-
-## Last handoff
-none yet
+- M0 overall fidelity **PASS** (bind exit 0, Penpot gone, CC_HOST + happy `/health` closed).
+- Infra flipped BOARD: **M0 done**, **M1 active**, **M4 active**.
+- FYI: `comms/inbox/_all/20260815-2229-infra-compose-engineer-m0-done.md`.
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+
+- M1 lead (`map-galaxy-engineer`) + M4 lead (`sessions-relay-engineer`) own active work; fidelity already PASSed those surfaces earlier in the wave — treat BOARD flip as formal unlock, not a rewrite.
+- Cascade when leads declare: M2 after M1; M3/M5 after M2; M6 after M3.

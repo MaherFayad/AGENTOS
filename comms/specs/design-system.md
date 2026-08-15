@@ -11,6 +11,18 @@
 
 PART I · §1.1 · §1.2 · §1.3 · §1.4 · §1.5 · §1.6
 
+## Boundaries — sections this spec cites but does not own
+
+Citing is not claiming. These stay with the agent BOARD.md names:
+
+| Section | Owner | What is mine | What is theirs |
+|---|---|---|---|
+| §2.0 | `shell-navigation-engineer` | `SegmentedControl`, the theme *mechanism* | the shell that mounts them, the theme toggle control |
+| §2.1 | `map-galaxy-engineer` | starfield / glow / dot-grid parameters | the canvas that draws them |
+| §2.4 | `dashboards-engineer` | carousel numbers (perspective, rotate, scale) | drag-to-spin and the widget surface |
+| PART V | `infra-compose-engineer` | the token grep, `tokens.css`, the primitives | `layout.tsx`, `globals.css`, `package.json` |
+| §1.4 Arabic / PART VII | `rtl-arabic-pdpl-specialist` | `--track-1…4` and `--track-accent` so they can flatten | `rtl.css` itself — do not edit it from here |
+
 ## Decisions
 
 - **Verbatim, not interpreted.** §1.1 and §1.2 are transcribed character-for-character
@@ -21,9 +33,10 @@ PART I · §1.1 · §1.2 · §1.3 · §1.4 · §1.5 · §1.6
   `comms/contracts/design-tokens.md` §3 for the five agents who consume it.
 - **Derived tints via `color-mix`**, not extra hex. `--ink-teal-line` / `--ink-teal-fill`
   exist so a chip never writes an alpha literal, and no new color enters the palette.
-- **Tracking is tokenised** (`--track-1…4`) rather than hardcoded in the Tailwind scale,
-  so the RTL layer flattens all four in one place. Arabic must never be tracked.
-  This supersedes the ad-hoc `--track-label/-eyebrow/-tab` in `styles/rtl.css`.
+- **Tracking is tokenised** (`--track-1…4` plus `--track-accent: -0.01em`) rather than
+  hardcoded in the Tailwind scale, so the RTL layer flattens them in one place. Arabic
+  must never be tracked. This supersedes the ad-hoc `--track-label/-eyebrow/-tab` in
+  `styles/rtl.css`. `--track-accent` exists so `.u-accent` can `var()` instead of a literal.
 - **`--dur-hover: 160ms` is an owner addition**, not a spec value, and is labelled as
   such in `tokens.css` and contract §8a. §1.6 defines no hover timing; without a token
   every card would pick its own.
@@ -117,7 +130,7 @@ PART I · §1.1 · §1.2 · §1.3 · §1.4 · §1.5 · §1.6
 | REQ-DS-58 | §1.4 | Body: Plus Jakarta Sans 16px / 400 / line-height 1.6 → `text-body` | `apps/web/tailwind.config.ts` | `scripts/check-tokens.mjs` |
 | REQ-DS-59 | §1.4 | Small / meta: 12–13px / 400–600 → `text-small` (13px), `text-meta` (12px) | `apps/web/tailwind.config.ts` | `scripts/check-tokens.mjs` |
 | REQ-DS-60 | §1.4 | Wide-tracked label: 11–13px / 500 / +0.25em…+0.45em uppercase → `text-label*` + `tracking-wider-1…4` | `apps/web/tailwind.config.ts` | `apps/web/src/components/primitives/Eyebrow.test.tsx` |
-| REQ-DS-61 | §1.4 | KPI numeral: 28–32px / 600, `tabular-nums` → `text-kpi-sm|kpi|kpi-lg` | `apps/web/tailwind.config.ts` | `apps/web/src/components/primitives/KpiNumeral.test.tsx` |
+| REQ-DS-61 | §1.4 | KPI numeral: 28–32px / 600, tabular-nums → `text-kpi-sm`, `text-kpi`, `text-kpi-lg` | `apps/web/tailwind.config.ts` | `apps/web/src/components/primitives/KpiNumeral.test.tsx` |
 | REQ-DS-62 | §1.4 | The four tracking rungs are tokens (`--track-1…4`) so RTL can flatten them in one place | `apps/web/src/styles/tokens.css` | `apps/web/src/styles/tokens.test.ts` |
 | REQ-DS-63 | §1.4 | Plus Jakarta Sans self-hosted at 400/500/600/700 via `@fontsource` | `apps/web/src/styles/fonts.ts` | manual — `npm run build` emits no `fonts.g*` URL |
 | REQ-DS-64 | §1.4 | Instrument Serif self-hosted, 400 upright + 400 italic | `apps/web/src/styles/fonts.ts` | manual — see test plan |
@@ -132,8 +145,8 @@ PART I · §1.1 · §1.2 · §1.3 · §1.4 · §1.5 · §1.6
 | ID | Spec § | Requirement | Implemented in | Verified by |
 |---|---|---|---|---|
 | REQ-DS-70 | §1.5 | Pills and buttons are `999px` → `rounded-pill` | `apps/web/src/styles/tokens.css` | `apps/web/src/components/primitives/Pill.test.tsx` |
-| REQ-DS-71 | §1.5 | Cards are 12–16px → `rounded-card-sm|card|card-lg` | `apps/web/src/styles/tokens.css` | `apps/web/src/components/primitives/Card.test.tsx` |
-| REQ-DS-72 | §1.5 | Drawers and panels are 16–20px → `rounded-panel|panel-lg` | `apps/web/src/styles/tokens.css` | `apps/web/src/components/primitives/GlassPanel.test.tsx` |
+| REQ-DS-71 | §1.5 | Cards are 12–16px → `rounded-card-sm`, `rounded-card`, `rounded-card-lg` | `apps/web/src/styles/tokens.css` | `apps/web/src/components/primitives/Card.test.tsx` |
+| REQ-DS-72 | §1.5 | Drawers and panels are 16–20px → `rounded-panel`, `rounded-panel-lg` | `apps/web/src/styles/tokens.css` | `apps/web/src/components/primitives/GlassPanel.test.tsx` |
 | REQ-DS-73 | §1.5 | KPI tiles are 12px → `rounded-kpi` | `apps/web/src/styles/tokens.css` | `apps/web/src/styles/tokens.test.ts` |
 | REQ-DS-74 | §1.5 | Every card is 1px `--line`, `--line-2` on hover | `apps/web/src/components/primitives/Card.tsx` | `apps/web/src/components/primitives/Card.test.tsx` |
 | REQ-DS-75 | §1.5 | Dark mode has no shadows except drawers: `0 8px 40px rgba(0,0,0,.5)` | `apps/web/src/styles/tokens.css` | `apps/web/src/components/primitives/Card.test.tsx` |
@@ -241,9 +254,9 @@ PART I · §1.1 · §1.2 · §1.3 · §1.4 · §1.5 · §1.6
 - **Light-theme data ink.** The nine hues are identical in both themes on purpose
   (REQ-DS-49). If light-mode contrast turns out to fail WCAG on `--ink-amber`, that is an
   ADR with measured numbers, not a quiet tweak.
-- **RTL overrides.** `--track-1…4` exist so the RTL layer can flatten them; the layer
-  itself is `rtl-arabic-pdpl-specialist`'s (§1.4 Arabic note).
-- **Fixing the type literals already in `src/chart/`, `src/components/shell/` and
-  `src/drawer/`.** 78 of them, all `no-type-literal`, all written before this scale
-  existed. They are their owners' files; messages are filed with the exact line numbers
-  and the utility to swap in.
+- **RTL overrides.** `--track-1…4` and `--track-accent` exist so the RTL layer can flatten
+  them; the layer itself is `rtl-arabic-pdpl-specialist`'s (`rtl.css` — not edited from here).
+  `--track-accent` is published; they can retire the `letter-spacing: -.01em` exemption.
+- **Fixing type literals in other agents' files.** `validate:tokens` currently fails on
+  `drawer.module.css`, `sessions.module.css`, and `map/lib/map-type.ts` — their owners'
+  files. Messages are filed with the swap. Not patched from here.

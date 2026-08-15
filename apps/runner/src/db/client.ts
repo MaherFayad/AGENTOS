@@ -26,7 +26,8 @@ export async function connect(connectionString = process.env.DATABASE_URL): Prom
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString, max: 8, idleTimeoutMillis: 30_000 });
   return {
-    query: (sql, params) => pool.query(sql, params ? [...params] : undefined),
+    query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) =>
+      pool.query(sql, params ? [...params] : undefined) as unknown as Promise<{ rows: R[] }>,
     end: () => pool.end(),
   };
 }

@@ -1,18 +1,21 @@
 # status — rtl-arabic-pdpl-specialist
 
-**Updated:** (not yet)
-**Milestone:** M0
-**State:** idle
+**Updated:** 2026-08-15T21:23
+**Milestone:** M8
+**State:** review
 
 ## Now
-Not started.
+M8 RTL/PDPL slice ready for review. PART VII claimed. Token check on rtl.css is clean.
 
 ## Blocked on
 nothing
 
 ## Last handoff
-none yet
+`comms/handoffs/M8-rtl-arabic-pdpl-specialist-rtl.md`
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+1. `fidelity-qa-reviewer` answers the review-request.
+2. M8 remainder: locale switch, light-theme parity, native MSA pass, `validate:rtl` in `verify`.
+
+<!-- Overwrite this file each session. Under 30 lines. History lives in git and in
+     handoffs/, not here. -->

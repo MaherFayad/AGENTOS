@@ -411,6 +411,49 @@ function checkDeliver(fm, err) {
   if (d.email !== undefined && !(isStr(d.email) && EMAIL_RE.test(d.email))) err(`deliver.email "${d.email}" is not an email address`);
 }
 
+/**
+ * Invariant 5: `wired_into` names must exist in this registry. Keys starting with `$`
+ * are comments (JSON has no comment syntax) and are ignored. Shape is
+ * `{ [slug]: { label, tools[], note? } }` — the same shape the runner's CONNECTOR_REGISTRY
+ * uses, so a name that validates here is a name the runner can actually grant.
+ *
+ * @param {unknown} value
+ * @returns {{ names: Set<string>, errors: string[] }}
+ */
+export function parseConnectorRegistry(value) {
+  const errors = [];
+  const names = new Set();
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return { names, errors: ['must be an object keyed by connector slug, not an array'] };
+  }
+  for (const [name, def] of Object.entries(value)) {
+    if (name.startsWith('$')) continue;
+    if (!SLUG_RE.test(name)) {
+      errors.push(`"${name}" is not a kebab-case slug`);
+      continue;
+    }
+    if (!def || typeof def !== 'object' || Array.isArray(def)) {
+      errors.push(`${name} must be {label, tools, note?}`);
+      continue;
+    }
+    for (const k of Object.keys(def)) {
+      if (!['label', 'tools', 'note'].includes(k)) errors.push(`${name}: unknown field "${k}"`);
+    }
+    if (!isStr(def.label)) errors.push(`${name}.label is required`);
+    if (!Array.isArray(def.tools) || def.tools.length === 0) {
+      errors.push(`${name}.tools must be a non-empty list of tool names or prefix patterns`);
+    } else {
+      for (const t of def.tools) if (!isStr(t)) errors.push(`${name}.tools contains a non-string`);
+    }
+    if (def.note !== undefined && !isStr(def.note)) errors.push(`${name}.note must be a string`);
+    names.add(name);
+  }
+  if (names.size === 0) {
+    errors.push('registry has no connectors — every wired_into name would fail invariant 5');
+  }
+  return { names, errors };
+}
+
 function checkLadder(fm, err) {
   const l = fm.ladder;
   if (!l || typeof l !== 'object' || Array.isArray(l)) { err('ladder must be a mapping with all three rungs'); return; }
@@ -526,12 +569,18 @@ export async function validateAll() {
     }
   }
 
-  // --- optional connector registry (owner: runner-engineer, §3.2) --
+  // --- connector registry (invariant 5 — required, not optional) ----
   let connectors = null;
-  if (await exists(CONNECTORS)) {
+  if (!(await exists(CONNECTORS))) {
+    globalErr(
+      'agents/_registry/connectors.json',
+      'connector registry is missing — invariant 5: a wired_into name that is not here is unknown_connector at run time (§3.2). Author the file; do not skip the check',
+    );
+  } else {
     try {
-      const parsed = JSON.parse(await readFile(CONNECTORS, 'utf8'));
-      connectors = new Set(Array.isArray(parsed) ? parsed : Object.keys(parsed));
+      const result = parseConnectorRegistry(JSON.parse(await readFile(CONNECTORS, 'utf8')));
+      for (const m of result.errors) globalErr('agents/_registry/connectors.json', m);
+      if (result.names.size) connectors = result.names;
     } catch (e) {
       globalErr('agents/_registry/connectors.json', `is not valid JSON: ${e.message}`);
     }
@@ -690,6 +739,7 @@ export async function validateAll() {
     errors,
     lucideAuthoritative: authoritative,
     connectorRegistry: connectors ? 'present' : 'absent',
+    connectorCount: connectors ? connectors.size : 0,
   };
 }
 
@@ -709,7 +759,8 @@ async function main() {
     for (const a of report.agents) byDept[a.department] = (byDept[a.department] ?? 0) + 1;
     console.log(`  by department     ${DEPARTMENTS.map((d) => `${d} ${byDept[d] ?? 0}`).join(' · ')}`);
     if (!report.lucideAuthoritative) console.log('  note  lucide-react is not installed — icons checked against the offline list');
-    if (report.connectorRegistry === 'absent') console.log('  note  agents/_registry/connectors.json is absent — wired_into is shape-checked only (owner: runner-engineer)');
+    if (report.connectorRegistry === 'present') console.log(`  connectors        ${report.connectorCount}`);
+    else console.log('  connectors        absent — invariant 5 cannot be checked');
     for (const w of report.warnings) console.log(`  warn  ${w.path ?? 'repo'}: ${w.message}`);
     for (const e of report.errors) console.log(`  FAIL  ${e.path ?? 'repo'}: ${e.message}`);
     for (const x of report.excluded) {

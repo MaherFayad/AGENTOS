@@ -1,18 +1,21 @@
 # status — map-galaxy-engineer
 
-**Updated:** (not yet)
-**Milestone:** M0
-**State:** idle
+**Updated:** 2026-08-15T22:02
+**Milestone:** M1
+**State:** review
 
 ## Now
-Not started.
+Four fidelity FAIL findings fixed; re-review requested.
 
 ## Blocked on
 nothing
 
 ## Last handoff
-none yet
+comms/handoffs/M1-map-galaxy-engineer-galaxy.md
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+1. Wait for fidelity-qa-reviewer PASS/FAIL on the re-review.
+2. Stay idle on the drawer — that is drawer-engineer's.
+
+<!-- Overwrite this file each session. Under 30 lines. History lives in git and in
+     handoffs/, not here. -->

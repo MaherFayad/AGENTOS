@@ -1,23 +1,19 @@
 # status — infra-compose-engineer
 
-**Updated:** 2026-08-15T19:45
+**Updated:** 2026-08-15T22:29
 **Milestone:** M0
-**State:** review
+**State:** idle
 
 ## Now
-M0 foundations complete and filed; awaiting `fidelity-qa-reviewer` on the M0 gate.
+M0 / PART V **done**. Fidelity PASS. BOARD: M0 done, M1 + M4 active.
 
 ## Blocked on
-nothing — but M0 deliverable 1 (real tailnet + MagicDNS TLS) needs the human to supply
-`TS_AUTHKEY` / `CC_HOST` and run the 7-step walkthrough in the handoff. Everything else
-ships with `TLS_MODE=internal`, zero secrets, so nobody is blocked on it.
+nothing
 
 ## Last handoff
 `comms/handoffs/M0-infra-compose-engineer-foundations.md`
 
 ## Next
-1. Answer the M0 review; correct whatever `fidelity-qa-reviewer` numbers.
-2. Re-run `node infra/check-bind.mjs` with Docker Desktop up — the running-container probe
-   reported SKIP this session, and a SKIP is not a pass.
-3. Support M7 (`runner-engineer`): `scripts/sync-ofelia.mjs` + the ofelia drift check
-   (REQ-INF-70/71) and the automated encrypted backup (REQ-INF-72).
+1. Idle on M0. Available for M7 ofelia / compose when that milestone opens.
+2. ADR-008 prune: wait for observability to name the invoke path.
+3. Do not start M7 now.

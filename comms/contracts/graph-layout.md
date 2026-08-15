@@ -42,9 +42,15 @@ interaction warmth (drag springs), seeded from these positions.
 
 ## Layout algorithm (§2.1)
 
-`d3-force` with four forces: `forceLink` (tree edges) + `forceManyBody` (repulsion) +
-**`forceRadial` per department** (holds the 7 branches at their angles) + `forceCollide`.
-Run to convergence server-side, snap-round coordinates to 1 decimal, store.
+Four forces — link (tree edges) + manyBody (repulsion) + **radial per department**
+(holds the 7 branches at their angles) + collide — solved by `scripts/lib/layout.mjs`
+(ADR-006). The engine is a pure function
+`computeLayout(agents, previousPositions, opts) -> GraphPayload`, where `opts` is
+`{ brainCompleteness?: number }` (0…1, default 0) plus layout knobs (ADR-003). It never
+reads `company/` itself. Coordinates are snap-rounded to 1 decimal and stored.
+
+Client-side, drag warmth and the 700ms department camera are interaction — not a cold
+simulation. The client hydrates every node from this payload.
 
 - 7 departments at even angles around the core.
 - Node sizes: anchor 44px (line icon in dark ink on ivory), job 28–32px (line icon),

@@ -132,6 +132,9 @@ body.light {
   --track-2: .3em;
   --track-3: .35em;
   --track-4: .45em;
+  /* §1.4 H1 accent words (−0.01em). Named so rtl.css `.u-accent` can var() it
+     instead of a letter-spacing literal. Latin-only; Arabic never tracks. */
+  --track-accent: -0.01em;
 }
 
 /* -----------------------------------------------------------------------------

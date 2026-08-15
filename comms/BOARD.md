@@ -3,7 +3,7 @@
 **Spec of record:** [skilltree-clone-spec.md](../skilltree-clone-spec.md) — every decision
 traces back to a section number in it. Quote the section when you cite it.
 
-**Current milestone:** `M0 — Foundations` (Part VI, row 0)
+**Current milestone:** `M1 — Shell + MAP galaxy` + `M4 — SESSIONS` (Part VI; parallel after M0)
 **Fidelity bar:** side-by-side screenshot of MAP vs their video frame at 1440px differs
 only in content (Part VI, acceptance).
 
@@ -36,11 +36,11 @@ advances the milestone. It does not write feature code.
 
 | # | Milestone | Lead | Supporting | State |
 |---|---|---|---|---|
-| 0 | Foundations — tailnet, repo skeleton, frontmatter schema, Tailwind tokens | `infra-compose-engineer` | `design-system-guardian`, `agent-library-curator` | **active** |
-| 1 | Shell + MAP galaxy | `map-galaxy-engineer` | `shell-navigation-engineer`, `design-system-guardian` | blocked on M0 |
+| 0 | Foundations — tailnet, repo skeleton, frontmatter schema, Tailwind tokens | `infra-compose-engineer` | `design-system-guardian`, `agent-library-curator` | **done** |
+| 1 | Shell + MAP galaxy | `map-galaxy-engineer` | `shell-navigation-engineer`, `design-system-guardian` | **active** |
 | 2 | Department view + drawer (read-only) | `drawer-engineer` | `map-galaxy-engineer` | blocked on M1 |
 | 3 | Runner + Run now + Langfuse | `runner-engineer` | `observability-engineer`, `drawer-engineer` | blocked on M2 |
-| 4 | SESSIONS tab + PWA + push | `sessions-relay-engineer` | `shell-navigation-engineer` | blocked on M0 |
+| 4 | SESSIONS tab + PWA + push | `sessions-relay-engineer` | `shell-navigation-engineer` | **active** |
 | 5 | CHART matrix | `chart-matrix-engineer` | `drawer-engineer` | blocked on M2 |
 | 6 | DASHBOARDS carousel + widgets | `dashboards-engineer` | `observability-engineer` | blocked on M3 |
 | 7 | Schedule + audit + interview | `runner-engineer` | `agent-library-curator`, `infra-compose-engineer` | blocked on M3 |

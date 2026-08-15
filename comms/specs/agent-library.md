@@ -11,18 +11,16 @@
 
 PART IV · §3.4
 
-Part IV is the data model — the agent library, the frontmatter that is the single source
-of truth for all three views, the repo layout for `agents/`, and the seeding/normalization
-of external agent repos. §3.4 is the audit engine, which is authored here as an agent
-(`agents/operations/agent-auditor/SKILL.md`) because it *is* a library artefact; its
-runtime (scheduling it, giving it Langfuse credentials) belongs to `runner-engineer` and
-`observability-engineer` at M7.
+## Boundaries
 
-Cited but **not** claimed: §2.2 (cluster captions consume the registry — owner
-`map-galaxy-engineer`), §2.3 (the drawer projects these fields — owner `drawer-engineer`),
-§2.6 (the matrix projects `tier × phase` — owner `chart-matrix-engineer`), §3.2 (`wired_into`
-becomes the runner allowlist — owner `runner-engineer`), §3.3 (`company/COMPANY.md` is
-seeded here, the interview runtime is `runner-engineer`'s).
+Cited but **not** claimed — these mentions must not live under Spec sections covered or
+the coverage checker steals another agent's section:
+
+- §2.2 cluster captions consume the registry — owner `map-galaxy-engineer`
+- §2.3 the drawer projects these fields — owner `drawer-engineer`
+- §2.6 the matrix projects `tier × phase` — owner `chart-matrix-engineer`
+- §3.2 `wired_into` becomes the runner allowlist — owner `runner-engineer`
+- §3.3 `company/COMPANY.md` is seeded here; the interview runtime is `runner-engineer`'s
 
 ## Decisions
 
@@ -48,16 +46,18 @@ seeded here, the interview runtime is `runner-engineer`'s).
 - **The seeder stages; it never publishes.** Imports land in `agents/_incoming/` (skipped by
   the validator) with placeholders that fail validation by design. Part VII.3 is a warning
   about volume, so the tool that produces volume is the one that has to resist it.
-- **A connector registry is assumed but not authored here.** `wired_into` is the runner's
-  allowlist (§3.2), so `runner-engineer` owns the list of connectors that exist. The
-  validator reads `agents/_registry/connectors.json` if it appears and shape-checks only
-  until then. Message filed.
+- **The connector registry is authored here as data; the runner owns the grant.**
+  `agents/_registry/connectors.json` is the vocabulary `wired_into` may use (invariant 5).
+  The runner's `CONNECTOR_REGISTRY` is the code that turns a name into tools. Adding a
+  connector is both files, or the validator and the runner disagree. The validator
+  **requires** the JSON file and rejects unknown names — a typo in `wired_into` fails CI,
+  not a 2am run. Keys starting with `$` are comments.
 
 ## Coverage
 
 | ID | Spec § | Requirement | Implemented in | Verified by |
 |---|---|---|---|---|
-| REQ-LIB-01 | PART IV | One agent = one folder at `agents/{department}/{slug}/SKILL.md` | `agents` | `node scripts/validate-frontmatter.mjs` |
+| REQ-LIB-01 | PART IV | One agent = one folder at `agents/{department}/{slug}/SKILL.md` | `agents/` | `node scripts/validate-frontmatter.mjs` |
 | REQ-LIB-02 | PART IV | The frontmatter type exports every Part IV field with no additions | `packages/contracts/src/frontmatter.ts` | `npm run typecheck` |
 | REQ-LIB-03 | PART IV | `tier` union is exactly `human-led \| assisted \| autonomous` (CHART rows) | `packages/contracts/src/frontmatter.ts` | `node scripts/validate-frontmatter.mjs` |
 | REQ-LIB-04 | PART IV | `phase` union is exactly `1-foundation \| 2-capture \| 3-generate \| 4-orchestrate` (CHART columns) | `packages/contracts/src/frontmatter.ts` | `node scripts/validate-frontmatter.mjs` |
@@ -89,32 +89,39 @@ seeded here, the interview runtime is `runner-engineer`'s).
 | REQ-LIB-30 | PART IV | Seeder stages to `agents/_incoming/`; a raw import cannot pass validation | `scripts/seed-agents.mjs` | promotion of an uncurated import is excluded |
 | REQ-LIB-31 | PART IV | Upstream categories that do not map to the seven departments are reported, not forced | `scripts/seed-agents.mjs` | `--unmapped` |
 | REQ-LIB-32 | PART IV | The Part IV canonical example exists field-for-field as the drawer's reference frame | `agents/sales/account-enrichment/SKILL.md` | manual diff against Part IV |
-| REQ-LIB-33 | PART IV | ≥1 agent in each of the seven departments, so no map branch is empty | `agents` | validator's by-department line |
-| REQ-LIB-34 | §2.6 | Seed agents span the `tier × phase` matrix so both cards and hatched cells render | `agents` | `--json` report, 6 of 12 cells filled |
-| REQ-LIB-35 | §3.4 | `agent-auditor` reports frontmatter gaps, stale agents, error rates, missing creds, orphan skills | `agents/operations/agent-auditor/SKILL.md` | — |
-| REQ-LIB-36 | §3.4 | `agent-auditor` writes `audit/report.md` and commits only the `status` field | `agents/operations/agent-auditor/SKILL.md` | — |
-| REQ-LIB-37 | §3.4 | `agent-auditor` is the only writer of `status: live`, from real Langfuse runs | `agents/operations/agent-auditor/SKILL.md` | — |
-| REQ-LIB-38 | §3.4 | Pointed at a prospect's answers, the auditor produces a marked map + deployment plan | `agents/operations/agent-auditor/SKILL.md` | — |
+| REQ-LIB-33 | PART IV | ≥1 agent in each of the seven departments, so no map branch is empty | `agents/` | validator's by-department line |
+| REQ-LIB-34 | §2.6 | Seed agents span the `tier × phase` matrix so both cards and hatched cells render | `agents/` | `--json` report, 6 of 12 cells filled |
+| REQ-LIB-35 | §3.4 | `agent-auditor` reports frontmatter gaps, stale agents, error rates, missing creds, orphan skills | — | — |
+| REQ-LIB-36 | §3.4 | `agent-auditor` writes `audit/report.md` and commits only the `status` field | — | — |
+| REQ-LIB-37 | §3.4 | `agent-auditor` is the only writer of `status: live`, from real Langfuse runs | — | — |
+| REQ-LIB-38 | §3.4 | Pointed at a prospect's answers, the auditor produces a marked map + deployment plan | — | — |
 | REQ-LIB-39 | §3.3 | `company/COMPANY.md` carries the interview's section structure with honest gap markers | `company/COMPANY.md` | manual read |
 | REQ-LIB-40 | PART VII | `company/COMPANY.md` carries the PDPL data-handling block every runner invocation inherits | `company/COMPANY.md` | `rtl-arabic-pdpl-specialist` review |
-| REQ-LIB-41 | §3.3 | `company-interview` asks the ~20 questions incl. Arabic/MSA register, red lines, PDPL | `agents/intelligence/company-interview/SKILL.md` | — |
-| REQ-LIB-42 | PART IV | Every agent ships `status: draft`; nothing hand-sets `live` | `agents` | validator warns on any hand-set `live` |
+| REQ-LIB-41 | §3.3 | `company-interview` asks the ~20 questions incl. Arabic/MSA register, red lines, PDPL | `agents/intelligence/company-interview/SKILL.md` | manual read |
+| REQ-LIB-42 | PART IV | Every agent ships `status: draft`; nothing hand-sets `live` | `agents/` | validator warns on any hand-set `live` |
+| REQ-LIB-43 | PART IV | Validator: every `wired_into` name exists in `agents/_registry/connectors.json` (invariant 5); the file is required | `scripts/validate-frontmatter.mjs` | `node scripts/validate-frontmatter.mjs` |
+| REQ-LIB-44 | PART IV | Seeder only emits `wired_into` names that exist in the connector registry | `scripts/seed-agents.mjs` | `node scripts/seed-agents.mjs` |
 
 ## Interfaces we expose
 
 - **`packages/contracts/src/frontmatter.ts`** — `DEPARTMENTS` (ordered, ADR-001),
   `DEPARTMENT_LABELS`, `TIERS`, `PHASES`, `STATUSES`, `APPROVALS`, `INPUT_TYPES`,
   `LADDER_RUNGS`; types `AgentFrontmatter`, `InputField`, `Delivery`, `Ladder`,
-  `ClusterRegistry`, `AgentFile`, `ValidationReport`; schemas `agentFrontmatterSchema`,
-  `clusterRegistrySchema`; helpers `toSlug`, `isCronExpression`, `parseAgentFrontmatter`.
+  `ClusterRegistry`, `ConnectorRegistry`, `ConnectorDefinition`, `AgentFile`,
+  `ValidationReport`; schemas `agentFrontmatterSchema`, `clusterRegistrySchema`,
+  `connectorRegistrySchema`; helpers `toSlug`, `isCronExpression`, `parseAgentFrontmatter`,
+  `parseConnectorRegistryJson`.
   Nothing else in the repo may hardcode a department name, a tier or a phase.
 - **`agents/_registry/clusters.json`** — the cluster registry. Keys are the seven
   department slugs; each value is an ordered `{slug, label}[]` whose first three entries are
   the department's map sub-labels (§2.1).
+- **`agents/_registry/connectors.json`** — the connector registry. Vocabulary for
+  `wired_into` (invariant 5). Keys are kebab-case slugs; values are `{label, tools[], note?}`.
+  `$`-prefixed keys are comments.
 - **`scripts/validate-frontmatter.mjs`** — CLI (`--json`, `--strict`) and importable
-  (`validateAll()`, `parseFrontmatter()`, `toSlug()`, `isCronExpression()`). `validateAll()`
-  returns `ValidationReport`; consumers render `agents[]` and surface `excluded[]` as a
-  warning. Run it before every layout recompute.
+  (`validateAll()`, `parseFrontmatter()`, `parseConnectorRegistry()`, `toSlug()`,
+  `isCronExpression()`). `validateAll()` returns `ValidationReport`; consumers render
+  `agents[]` and surface `excluded[]` as a warning. Run it before every layout recompute.
 - **`agents/**/SKILL.md`** — the library itself. Twelve curated agents at M0.
 - **`company/COMPANY.md`** — the brain the runner injects into every invocation (§3.3).
 
@@ -125,8 +132,9 @@ seeded here, the interview runtime is `runner-engineer`'s).
   `comms/contracts/`, and the validators assert the two agree.
 - `comms/contracts/frontmatter-schema.md` — our own contract; the prose is normative.
 - `packages/contracts/package.json` (owner `infra-compose-engineer`) — must declare `zod`.
-- `agents/_registry/connectors.json` (owner `runner-engineer`, does not exist yet) — the
-  connector registry `wired_into` is validated against once it lands (§3.2).
+- `apps/runner/src/lib/allowlist.ts` `CONNECTOR_REGISTRY` (owner `runner-engineer`) — the
+  code half of `agents/_registry/connectors.json`. Same keys, or a name that validates
+  here 422s at run time. We do not edit that file.
 - Langfuse API shape (owner `observability-engineer`) — `agent-auditor` reads runs, error
   rates and trace URLs from it at M7.
 
@@ -149,8 +157,9 @@ seeded here, the interview runtime is `runner-engineer`'s).
   ladder rungs genuinely escalate, and whether `the_human` names something real. The
   validator checks presence, length, distinctness and placeholder text; the judgement is
   `agent-auditor`'s finding list and a human's read.
-- **`typecheck` is not runnable yet** — `packages/contracts` has no `package.json` or
-  `tsconfig.json` (owner `infra-compose-engineer`). REQ-LIB-02 is unverified until it does.
+- **`typecheck`.** `packages/contracts` now has `package.json` with `zod` and a `typecheck`
+  script (owner `infra-compose-engineer`). REQ-LIB-02 is verified by `npm run typecheck`
+  in that workspace.
 
 ## Deliberately not done
 
@@ -160,17 +169,19 @@ seeded here, the interview runtime is `runner-engineer`'s).
   thin ones this week would make the count look better and the library worse.
 - **Bulk-running the seeder.** Deliberate, and the reason the script defaults to a dry run.
   Dumping 137 unreviewed agents is the exact failure Part VII.3 warns about.
-- **`agents/_registry/connectors.json`.** `wired_into` is the runner's tool allowlist, so
-  the authoritative list of connectors belongs to `runner-engineer`. The validator has the
-  hook and will start enforcing membership the moment the file exists. Until then a typo in
-  `wired_into` is caught only at run time — that is a real gap, filed, not forgotten.
+- **`agent-auditor` runtime (REQ-LIB-35–38).** The SKILL.md is authored under Operations.
+  Walking Langfuse, writing `audit/report.md`, and committing `status` is M7, with
+  `runner-engineer` and `observability-engineer`.
+- **Keeping the runner's `CONNECTOR_REGISTRY` in lockstep.** The JSON is ours; the grant
+  is theirs. A drift test on the runner side is `runner-engineer`'s. We do not edit
+  `apps/runner/**`.
 - **Checked-in negative fixtures + `node --test`.** `package.json` points `test` at
   `scripts/__tests__/*.test.mjs`, which is not a path I own at M0. The fixtures exist as a
   documented manual procedure; converting them is a 30-minute job for whoever owns that
   directory.
 - **`packages/contracts/departments.ts`** (ADR-001's angle/rail table). Not my file. The
   ordered array lives in `frontmatter.ts` and `departments.ts` must import it rather than
-  restate it — message filed to `infra-compose-engineer`.
+  restate it — the collision is flagged in `packages/contracts/src/index.ts`.
 - **Leaf skill files.** `breaks_into` entries are declared inline and the map synthesises
   the dots. Writing 36 stub files for the twelve agents' leaves would add files nothing
   reads. `agent-auditor` reports orphans in the other direction (a file nobody references).

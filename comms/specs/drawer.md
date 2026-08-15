@@ -1,0 +1,154 @@
+# Spec — MAP job drawer
+
+> The implementation spec for §2.3 of `skilltree-clone-spec.md`.
+> Checked by `npm run validate:coverage`.
+
+## Owner
+
+`drawer-engineer`
+
+## Spec sections covered
+
+§2.3 — MAP job drawer (left panel, ~300px, `--glass` + blur, full height), including the
+ten-section anatomy and the three additions below THE HUMAN (LAST RUNS, INPUTS, live SSE
+console).
+
+## Boundaries — sections this spec cites but does not own
+
+BOARD.md gives this agent §2.3 **and** the §2.6.5 chart-detail *panel*. The coverage
+checker treats every `§n.n` under **Spec sections covered** as an ownership claim, and
+the spec of record only has a `## 2.6` heading — there is no claimable `§2.6.5` id.
+`chart-matrix-engineer` already claims §2.6 (including REQ-CHT-29/30: `More detail →`
+emits `openDrawer(agentSlug, {side:'right'})` and CHART contains no drawer of its own).
+
+This spec therefore **does not claim §2.6**. The chart drawer is the same `JobDrawer`
+with `side="right"`: autonomy toggle, REPLACES cost quote, WHAT IT DOES, FROM MANUAL TO
+AUTONOMOUS with a NOW badge, SKILLS cards, TOOLS chips, HOW TO RUN IT. Those live in
+`apps/web/src/drawer/sections/ChartSections.tsx` and `JobDrawer.tsx`. CHART owns the
+selection; we own the panel it opens.
+
+| Section | Owner | What is mine | What is theirs |
+|---|---|---|---|
+| §2.6 / item 5 | `chart-matrix-engineer` | the right-hand panel, the shared section components, `DrawerHost` | the matrix, `More detail →`, `src/chart/events.ts` |
+| §2.2 | `map-galaxy-engineer` | the drawer overlay on `/map/:department/:agent` | the department canvas underneath |
+| §3.2 | `runner-engineer` | SSE console, reconnect, Run/Schedule buttons | `POST /api/run`, `GET /api/run/:runId/stream`, approvals, git schedule |
+| §3.5 | `observability-engineer` | LAST RUNS rows and the trace link | `GET /api/runs`, Langfuse |
+| §1.4 | `rtl-arabic-pdpl-specialist` | logical `inset-inline-*` / `data-side=start\|end` | the M8 RTL visual pass |
+| Part IV | `agent-library-curator` | the projection `frontmatter → DrawerModel` | the schema itself |
+
+## Decisions
+
+1. **One component, a `side` prop.** `left` is the map drawer (inline-start, 300px, glass,
+   full height). `right` is the chart mirror (inline-end, 360px). They share every
+   sub-component. A second drawer implementation would be a second copy of the agent
+   projection, which Part IV forbids.
+2. **CHART's event is consumed, not forked.** `DrawerHost` listens to
+   `commandcenter:open-drawer` from `apps/web/src/chart/events.ts`. Map chips use the
+   drawer's own `drawer:open` bus for in-place swaps on the same side.
+3. **The map drawer is a route.** `/map/:department/:agent` mounts `JobDrawerRoute`, so a
+   phone can be handed a link and the back button closes it (shell `route.ts`).
+4. **INPUTS are generated.** `planInputs(frontmatter.inputs)` is the only form factory.
+   An unrenderable type is a schema gap shown in the drawer, never a hand-written
+   per-agent form.
+5. **▶ Run now is honest.** Until `GET /api/status` says the runner is configured, the
+   button is disabled with a tooltip. There is no decorative ▶.
+6. **Reconnect is GET, never a second POST.** After `start` hands back `runId`, a dropped
+   connection re-attaches via `GET /api/run/:runId/stream` with `Last-Event-ID`.
+7. **The chart autonomy toggle is a readout.** `tier` lives in frontmatter. Changing it
+   would be a git write the runner owns. The row is disabled and says so.
+
+## Coverage
+
+| ID | Spec § | Requirement | Implemented in | Verified by |
+|---|---|---|---|---|
+| REQ-DRW-01 | §2.3 | Map drawer is ~300px, full height, `--glass` + blur, on the inline-start edge | `apps/web/src/drawer/drawer.module.css` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` |
+| REQ-DRW-02 | §2.3 | Drawer slides in over a scrim in `--dur-drawer` (320ms) | `apps/web/src/drawer/drawer.module.css` | manual — see Test plan |
+| REQ-DRW-03 | §2.3 | Eyebrow is the autonomy state in copper caps (`FULLY AUTONOMOUS`) plus a close ✕ | `apps/web/src/drawer/sections/Header.tsx` · `apps/web/src/drawer/data/project.ts` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-04 | §2.3 | Title is 24px/700 ivory; breadcrumb is 12px `--ink-2` (`Sales · Enrichment`) | `apps/web/src/drawer/sections/Header.tsx` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-05 | §2.3 | Description is 13px `--ivory-2` | `apps/web/src/drawer/sections/Header.tsx` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-06 | §2.3 | Skill-file card: 1px `--line`, 12px radius, download line plus Take it / ▶ Run now / ⏰ Schedule | `apps/web/src/drawer/sections/SkillFileCard.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` |
+| REQ-DRW-07 | §2.3 | ▶ Run now is primary copper; it is disabled with an honest tooltip when the runner is down | `apps/web/src/drawer/sections/SkillFileCard.tsx` · `apps/web/src/drawer/run/useRunnerAvailability.ts` | `apps/web/src/drawer/run/useRunnerAvailability.ts` |
+| REQ-DRW-08 | §2.3 | BREAKS INTO chips (11px, 1px border, 6px radius); click emits `shell:flyTo` | `apps/web/src/drawer/sections/Chips.tsx` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-09 | §2.3 | WIRED INTO is a plain text list (`Exa · Firecrawl`) | `apps/web/src/drawer/sections/Prose.tsx` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-10 | §2.3 | BUILDS ON is a dashed-border chip that opens the prerequisite agent | `apps/web/src/drawer/sections/Chips.tsx` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-11 | §2.3 | WHAT IT REPLACES is a quote box on `--card` | `apps/web/src/drawer/sections/Prose.tsx` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-12 | §2.3 | THE LADDER is three rows HUMAN-LED / HUMAN-ASSISTED / FULLY AUTONOMOUS; active ivory, others `--ink-3` | `apps/web/src/drawer/sections/Ladder.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` |
+| REQ-DRW-13 | §2.3 | THE HUMAN is the closing paragraph from frontmatter `the_human` | `apps/web/src/drawer/sections/Prose.tsx` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-14 | §2.3 | LAST RUNS shows up to 5 rows from `GET /api/runs` (relative time, status dot, cost, duration; click → trace) | `apps/web/src/drawer/sections/LastRuns.tsx` · `apps/web/src/drawer/data/client.ts` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-15 | §2.3 | INPUTS form is generated from frontmatter `inputs:` (`type` + `required`); never hand-written per agent | `apps/web/src/drawer/data/inputs.ts` · `apps/web/src/drawer/sections/InputsForm.tsx` | `apps/web/src/drawer/data/inputs.test.ts` · `apps/web/src/drawer/JobDrawer.test.tsx` |
+| REQ-DRW-16 | §2.3 | Live SSE console is monospace 12px on `--screen` and slides up over the drawer | `apps/web/src/drawer/sections/RunConsole.tsx` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/run/console-model.test.ts` |
+| REQ-DRW-17 | §2.3 | Console renders exactly the contract events (`start`, `token`, `tool`, `plan`, `artifact`, `done`, `error`) | `apps/web/src/drawer/run/console-model.ts` | `apps/web/src/drawer/run/console-model.test.ts` |
+| REQ-DRW-18 | §2.3 | Reconnect uses `GET /api/run/:runId/stream` plus `Last-Event-ID` (header and `?lastEventId=`); it does not POST a second run | `apps/web/src/drawer/run/transport.ts` · `apps/web/src/drawer/run/useRunStream.ts` | `apps/web/src/drawer/run/transport.test.ts` |
+| REQ-DRW-19 | §2.3 | Console window is bounded (~2k lines in the reducer, 400 painted) | `apps/web/src/drawer/run/console-model.ts` · `apps/web/src/drawer/sections/RunConsole.tsx` | `apps/web/src/drawer/run/console-model.test.ts` |
+| REQ-DRW-20 | §2.3 | `plan` with `awaitingApproval` pauses the run and shows Allow / Deny | `apps/web/src/drawer/run/console-model.ts` · `apps/web/src/drawer/sections/RunConsole.tsx` | `apps/web/src/drawer/run/console-model.test.ts` |
+| REQ-DRW-21 | §2.3 | Missing optional sections collapse — no empty headers, no "N/A" | `apps/web/src/drawer/sections/Section.tsx` · `apps/web/src/drawer/data/project.ts` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-22 | §2.3 | Focus trap + Esc to close + scrim click; focus ring is monochrome | `apps/web/src/drawer/a11y/useFocusTrap.ts` · `apps/web/src/drawer/a11y/focus-trap.ts` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/a11y/focus-trap.test.ts` |
+| REQ-DRW-23 | §2.3 | Every agent-facing string is projected from frontmatter; the drawer stores no copy | `apps/web/src/drawer/data/project.ts` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-24 | §2.3 | No raw hex in the drawer tree — colours are `var(--token)` | `apps/web/src/drawer/drawer.module.css` | `scripts/check-tokens.mjs` |
+| REQ-DRW-25 | §2.3 | Map route `/map/:department/:agent` mounts the left drawer | `apps/web/src/drawer/JobDrawerRoute.tsx` · `apps/web/src/app/(views)/map/[department]/[agent]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-DRW-26 | §2.3 | Chart `More detail` opens the same component on the right via `DrawerHost` consuming `src/chart/events.ts` | `apps/web/src/drawer/DrawerHost.tsx` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` · `apps/web/src/chart/events.test.ts` |
+| REQ-DRW-27 | §2.3 | Chart extras (autonomy toggle, REPLACES cost quote, SKILLS cards, TOOLS, HOW TO RUN IT, NOW badge) share the map section set | `apps/web/src/drawer/sections/ChartSections.tsx` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` |
+| REQ-DRW-28 | §2.3 | Direction is logical (`inset-inline-*`, `data-side=start\|end`) so RTL is a `dir` attribute, not a retrofit | `apps/web/src/drawer/drawer.module.css` | `apps/web/src/i18n/direction.ts` |
+| REQ-DRW-29 | §2.3 | An unknown input type is reported in the drawer as a schema gap, not coerced into a text box | `apps/web/src/drawer/data/inputs.ts` | `apps/web/src/drawer/data/inputs.test.ts` |
+
+## Interfaces we expose
+
+From `apps/web/src/drawer` (`index.ts` is the public surface):
+
+- `<JobDrawer slug side open onClose />` — the composing drawer. `side="left"` is §2.3,
+  `side="right"` is the §2.6.5 panel.
+- `<JobDrawerRoute slug side />` — map-route mount; Esc / ✕ navigates back to the
+  department.
+- `<DrawerHost />` — chart-route mount; listens to `commandcenter:open-drawer`.
+- `projectAgent(doc) → DrawerModel` — the frontmatter projection.
+- `planInputs(inputs) → InputPlan` — the form factory.
+
+Everything else under `src/drawer` is private.
+
+## Interfaces we consume
+
+| What | From | Contract |
+|---|---|---|
+| Agent frontmatter + `inputs[]` | `agent-library-curator` | `comms/contracts/frontmatter-schema.md` |
+| `GET /api/agents/:slug`, `GET /api/runs`, `POST /api/run`, `GET /api/run/:runId/stream`, `POST /api/schedule`, `POST /api/approvals/:runId`, `GET /api/status` | `runner-engineer` / `observability-engineer` | `comms/contracts/api-contracts.md` |
+| `openDrawer(agentSlug, {side:'right'})`, `OPEN_DRAWER_EVENT` | `chart-matrix-engineer` | `apps/web/src/chart/events.ts` |
+| `shell:flyTo` | `shell-navigation-engineer` | `apps/web/src/lib/shell-bus.ts` |
+| `GlassPanel`, `Pill`, `Eyebrow`, `--dur-drawer` | `design-system-guardian` | `comms/contracts/design-tokens.md` |
+| Drawer string keys | `rtl-arabic-pdpl-specialist` | `apps/web/src/i18n/strings.en.ts` |
+
+## Test plan
+
+- **Pure projection** (`data/inputs.test.ts`, `data/project.test.ts`) — two agents produce
+  two forms; unknown types become schema gaps; optional sections collapse to `null`.
+- **Transport** (`run/transport.test.ts`, `run/sse.test.ts`) — start is POST `/api/run`;
+  re-attach is GET `/api/run/:runId/stream` with `Last-Event-ID`.
+- **Console reducer** (`run/console-model.test.ts`) — the seven events, the approval
+  pause, unknown events as notices.
+- **Focus arithmetic** (`a11y/focus-trap.test.ts`) — Esc / Tab wrap.
+- **Markup** (`JobDrawer.test.tsx`) — INPUTS markup is the frontmatter label, not the
+  agent name; chart NOW badge and autonomy toggle; chart event name is stable.
+- **Not automatable here:** 320ms slide, 1440px side-by-side vs the Account Enrichment
+  frame, glass blur, monochrome focus ring. Those are `fidelity-qa-reviewer`'s gate.
+
+## Deliberately not done
+
+- **`Take it ↓` zip download.** `GET /api/agents/:slug/download` is not in the API
+  contract. The button is disabled with a tooltip that says so, rather than linking at a
+  404. (`DOWNLOAD_ROUTE_AGREED = false` in `data/client.ts`.)
+- **A fake ▶ that does nothing.** M2 is read-only for the runner. The control is wired
+  to `POST /api/run` and disabled while the runner is unreachable or unconfigured.
+- **Mounting `<ChartPage />`.** `chart-matrix-engineer` owns that. Chart routes mount
+  `<DrawerHost />` next to the existing `ViewMount` so `More detail →` has a listener
+  the moment the matrix is wired; do not drop the host.
+- **The department canvas under the map drawer.** `map-galaxy-engineer` owns §2.2. The
+  agent route keeps their `ViewMount` as a sibling of `JobDrawerRoute`.
+- **Writing `tier` from the chart toggle.** That is a frontmatter git commit, which is
+  the runner's path (ADR-002). The toggle is a disabled readout.
+- **Per-sub-skill descriptions on SKILLS cards.** `breaks_into` entries are leaf files
+  (frontmatter-schema invariant 4) and do not carry their own `description`. The card
+  collapses that line.
+- **The M8 RTL screenshot pass.** Layout is logical from the start; visual QA is
+  `rtl-arabic-pdpl-specialist`'s.
+- **Virtualizing past the 2k/400 window with a real list virtualizer.** The reducer
+  drops and counts; a windowing library would be a component-library-shaped dependency
+  Part V forbids.

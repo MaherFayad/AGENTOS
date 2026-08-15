@@ -98,8 +98,14 @@ export async function postApproval(runId: string, decision: 'approve' | 'deny', 
  * `GET /api/status` — `{tailscale, queueDepth}`. Used only to answer "is the runner
  * there?", so ▶ Run can be honestly enabled or honestly disabled.
  */
-export async function fetchRunnerStatus(signal?: AbortSignal): Promise<{ tailscale?: string; queueDepth?: number }> {
-  return (await getJson('/api/status', signal)) as { tailscale?: string; queueDepth?: number };
+export async function fetchRunnerStatus(
+  signal?: AbortSignal,
+): Promise<{ tailscale?: string; queueDepth?: number; runnerConfigured?: boolean }> {
+  return (await getJson('/api/status', signal)) as {
+    tailscale?: string;
+    queueDepth?: number;
+    runnerConfigured?: boolean;
+  };
 }
 
 /**

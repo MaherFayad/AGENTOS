@@ -177,6 +177,7 @@ invent their own. Values are the owner's, not the spec's, and are marked as such
 |---|---|---|
 | `--dur-hover` | `160ms` | §1.6 defines no hover timing; without a token every card picks a different one. |
 | `--track-1…4` | `.25em` `.3em` `.35em` `.45em` | The §1.4 tracking band as tokens, so the RTL layer flattens all four in one place (Arabic must never be tracked). |
+| `--track-accent` | `-0.01em` | §1.4 H1 accent tracking. Named so `.u-accent` / `tracking-accent` never write a literal; Arabic never uses it. |
 | `--r-*`, `--border-w`, `--blur-glass`, `--dot-*`, `--star-*`, `--galaxy-glow*`, `--scrim`, `--carousel-*` | see `tokens.css` | §1.5/§1.6 prose values, named so they are greppable. |
 | `--font-sans/serif/arabic` | see `tokens.css` | §1.4 families, including IBM Plex Sans Arabic. |
 | `z-*` scale | canvas/overlay/chrome/scrim/drawer/toast | Not a Part I concern; a cross-agent one. |

@@ -73,12 +73,22 @@ services:
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-}
       # Server-side, over the compose network — never through Caddy.
       RUNNER_INTERNAL_URL: http://runner:8787
+      # §3.1 proxy → happy. Empty keys keep the "Notify this phone" button honest
+      # (Part VII.3). There is no transcript decryption key here — adding one is a
+      # design failure (ADR-005, REQ-INF-50).
+      HAPPY_RELAY_URL: ${HAPPY_RELAY_URL:-http://happy:3005}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      PUSH_SUBSCRIPTIONS_PATH: ${PUSH_SUBSCRIPTIONS_PATH:-/data/push-subscriptions.json}
     volumes:
       # Read-only content mounts. web PROJECTS this data (BOARD constraint 4); it never
       # owns or writes it.
       - ../agents:/agents:ro
       - ../company:/company:ro
       - ../panels:/panels:ro
+      # Web Push subscription list. Local named volume — Part VII.4, same reason as
+      # Langfuse's Postgres. Not a transcript store; endpoints only.
+      - web_push:/data
     ports:
       # Loopback only, and only as a developer convenience so `--profile dev` is usable
       # without Caddy. Caddy is the sole tailnet-facing binding (see its `ports:`).
@@ -248,9 +258,9 @@ services:
     ports:
       - '${DEV_BIND_ADDR:-127.0.0.1}:${HAPPY_HOST_PORT:-3005}:3005'
     healthcheck:
-      # Path unverified until the M4 ADR picks the relay. `sessions-relay-engineer` owns
-      # correcting this; a healthcheck that always passes would be worse than a wrong one.
-      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3005/ || exit 1']
+      # ADR-005 accepted. sessions-relay-engineer named GET /health (unauthenticated;
+      # 503 if Postgres is down). Do not use metrics port 9090.
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3005/health || exit 1']
       interval: 30s
       timeout: 5s
       retries: 5
@@ -351,6 +361,8 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: 'true'
       TS_EXTRA_ARGS: --accept-dns=false
+      # FQDN `tailscale cert` writes for — the MagicDNS name, not TS_HOSTNAME (REQ-INF-39).
+      CC_HOST: ${CC_HOST:-localhost}
     volumes:
       - ts_state:/var/lib/tailscale
       - ts_certs:/certs
@@ -377,6 +389,9 @@ volumes:
     driver: local
   happy_data:
     name: agnetos_happy_data
+    driver: local
+  web_push:
+    name: agnetos_web_push
     driver: local
   runner_workspaces:
     name: agnetos_runner_workspaces

@@ -1,14 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 
-// Self-hosted fonts (§1.4, BOARD constraint 7 — no CDN, no runtime network requests).
-// Weights follow comms/contracts/design-tokens.md §4: PJS 400/500/600/700 for body,
-// labels, KPI numerals and display; Instrument Serif italic 400 for the accent words.
-import '@fontsource/plus-jakarta-sans/400.css';
-import '@fontsource/plus-jakarta-sans/500.css';
-import '@fontsource/plus-jakarta-sans/600.css';
-import '@fontsource/plus-jakarta-sans/700.css';
-import '@fontsource/instrument-serif/400-italic.css';
-
+import { DEFAULT_LOCALE, HTML_LANG, directionOf } from '@/i18n/config';
+import { I18nProvider } from '@/i18n/provider';
+// One import wires all three self-hosted families, including IBM Plex Sans
+// Arabic (comms/contracts/design-tokens.md §4). Do not import @fontsource/*
+// anywhere else or the weight set drifts.
+import '@/styles/fonts';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -25,16 +22,19 @@ export const viewport: Viewport = {
 };
 
 /**
- * Root layout — scaffold only (M0).
+ * Root layout — html/body, fonts, direction, the i18n provider.
  *
- * `shell-navigation-engineer` owns §2.0 (the app shell, segmented tabs, search, cost
- * ticker, status pill) and will wrap {children} in it. Keep this file to html/body,
- * font imports and globals.css so the shell lands in one place.
+ * `shell-navigation-engineer` owns §2.0 (the app shell) and wraps {children}
+ * further down. Locale switching is M8; until then the default is English LTR,
+ * driven from i18n/config.ts so `dir` and `lang` cannot drift from the catalogue.
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = DEFAULT_LOCALE;
   return (
-    <html lang="en" dir="ltr" suppressHydrationWarning>
-      <body className="min-h-dvh antialiased">{children}</body>
+    <html lang={HTML_LANG[locale]} dir={directionOf(locale)} suppressHydrationWarning>
+      <body className="min-h-dvh antialiased">
+        <I18nProvider locale={locale}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

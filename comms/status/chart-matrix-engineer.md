@@ -1,18 +1,18 @@
 # status — chart-matrix-engineer
 
-**Updated:** (not yet)
-**Milestone:** M0
-**State:** idle
+**Updated:** 2026-08-15T22:10
+**Milestone:** M5
+**State:** review
 
 ## Now
-Not started.
+Fidelity FAIL finding 1 fixed; re-review requested.
 
 ## Blocked on
 nothing
 
 ## Last handoff
-none yet
+comms/handoffs/M5-chart-matrix-engineer-matrix.md
 
 ## Next
-1. Read comms/BOARD.md and the contracts listed under my name.
-2. Read the spec sections I own.
+1. `fidelity-qa-reviewer` answers the re-review-request.
+2. When `GET /api/agents` (list) lands, drop the disk projection in `fromDisk.ts`.

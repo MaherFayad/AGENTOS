@@ -22,8 +22,11 @@ gives a different galaxy every reload.
 **One layout engine, two callers, one stored artifact.**
 
 The engine is `scripts/lib/layout.mjs` — a pure function
-`computeLayout(agents, previousPositions) -> GraphPayload`. It is imported, never
-duplicated.
+`computeLayout(agents, previousPositions, opts) -> GraphPayload`, where `opts` is
+`{ brainCompleteness?: number }` (0…1, default 0) plus layout knobs (`departments`,
+`clusters`, `seed`, `ticks`, `pinTicks`, `now`, `warn`). Completeness is an input,
+never read from `company/` inside the engine — that keeps it pure (see the
+`brainCompleteness` decision on this ADR). It is imported, never duplicated.
 
 | Caller | When | Writes |
 |---|---|---|

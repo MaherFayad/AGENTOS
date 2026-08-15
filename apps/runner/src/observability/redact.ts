@@ -70,7 +70,7 @@ export function redactString(input: string, path: string, hits: RedactionHit[]):
 
   for (const secret of literalSecrets) {
     if (out.includes(secret)) {
-      out = out.split(secret).join(placeholder('credential'));
+      out = out.replace(new RegExp(escapeRegExp(secret), 'g'), placeholder('credential'));
       hits.push({ rule: 'env_secret', label: 'credential', path });
     }
   }

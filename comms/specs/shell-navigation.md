@@ -9,13 +9,15 @@
 
 ## Spec sections covered
 
-PART II (the shell that all its screens share) · §2.0 · §2.7 · §3.6
+PART II · §2.0 · §2.7 · §3.6
 
-Boundary: PART II's per-screen sections are claimed by their own owners in BOARD.md —
-this spec claims only the shell that §2.0 calls "identical on all three views", the route
-skeleton every screen mounts into, the Phase 4 marketing elements, and the phone. The
-coverage checker reads every section id under this heading as an ownership claim, so no
-other id appears here; where a requirement touches a neighbour, the row says whose it is.
+## Boundaries
+
+PART II's per-screen sections are claimed by their own owners in BOARD.md — this spec
+claims only the shell that §2.0 calls "identical on all three views", the route skeleton
+every screen mounts into, the Phase 4 marketing elements, and the phone. The coverage
+checker reads every section id under Spec sections covered as an ownership claim, so no
+other id appears there; where a requirement touches a neighbour, the row says whose it is.
 
 ## Decisions
 
@@ -142,15 +144,15 @@ other id appears here; where a requirement touches a neighbour, the row says who
 | REQ-SHELL-51 | PART II | An unknown or root path resolves to MAP rather than erroring | `apps/web/src/components/shell/route.ts` · `apps/web/src/app/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
 | REQ-SHELL-52 | PART II | Every view route is a mount point an owning agent swaps into, with an honest empty state until then | `apps/web/src/components/shell/ViewMount.tsx` | `apps/web/src/components/shell/AppShell.test.tsx` |
 | REQ-SHELL-53 | PART II | The shell↔canvas seam is five named, typed events and nothing else | `apps/web/src/lib/shell-bus.ts` | `apps/web/src/lib/shell-bus.test.ts` |
-| REQ-SHELL-54 | §3.6 | A web app manifest is served with name, short_name, start_url, scope and `display: standalone` | `apps/web/public/manifest.webmanifest` | `apps/web/src/lib/pwa.test.ts` |
+| REQ-SHELL-54 | §3.6 | A web app manifest is served with name, short_name, start_url, scope and `display: standalone` | `apps/web/public/manifest.webmanifest` | `apps/web/src/lib/pwa.test.ts` · `scripts/__tests__/shell-pwa.test.mjs` |
 | REQ-SHELL-55 | §3.6 | The manifest is linked from the document head | `apps/web/src/app/(views)/layout.tsx` | `apps/web/src/lib/pwa.test.ts` |
 | REQ-SHELL-56 | §3.6 | The installed app is dark: theme_color and background_color are the near-black `--bg` | `apps/web/public/manifest.webmanifest` | `apps/web/src/lib/pwa.test.ts` |
-| REQ-SHELL-57 | §3.6 | Icons exist at 192 and 512 plus a maskable 512 | `apps/web/public/icons/icon-192.png` · `apps/web/public/icons/icon-512.png` · `apps/web/public/icons/icon-maskable-512.png` | `apps/web/src/lib/pwa.test.ts` |
+| REQ-SHELL-57 | §3.6 | Icons exist at 192 and 512 plus a maskable 512 | `apps/web/public/icons/icon-192.png` · `apps/web/public/icons/icon-512.png` · `apps/web/public/icons/icon-maskable-512.png` | `apps/web/src/lib/pwa.test.ts` · `scripts/__tests__/shell-pwa.test.mjs` |
 | REQ-SHELL-58 | §3.6 | The icons are monochrome placeholders and are labelled as placeholders in the repo | `apps/web/public/icons/README.md` | `apps/web/public/icons/README.md` |
-| REQ-SHELL-59 | §3.6 | A notification badge asset exists at the path the relay's worker references | `apps/web/public/icons/badge-72.png` | `apps/web/public/sw-push.js` |
+| REQ-SHELL-59 | §3.6 | A notification badge asset exists at the path the relay's worker references | `apps/web/public/icons/badge-72.png` | `apps/web/public/sw-push.js` · `scripts/__tests__/shell-pwa.test.mjs` |
 | REQ-SHELL-60 | §3.6 | The service worker registers once on mount and a failed registration never breaks the app | `apps/web/src/components/shell/PwaRegistrar.tsx` · `apps/web/src/lib/pwa.ts` | `apps/web/src/lib/pwa.test.ts` |
-| REQ-SHELL-61 | §3.6 | The app shell, manifest, icons and offline page are precached at install | `apps/web/public/sw.js` | `apps/web/src/lib/pwa.test.ts` |
-| REQ-SHELL-62 | §3.6 | `/api/*` and `/ws/*` are never cached and never replayed | `apps/web/public/sw.js` | `apps/web/src/lib/pwa.test.ts` |
+| REQ-SHELL-61 | §3.6 | The app shell, manifest, icons and offline page are precached at install | `apps/web/public/sw.js` | `apps/web/src/lib/pwa.test.ts` · `scripts/__tests__/shell-pwa.test.mjs` |
+| REQ-SHELL-62 | §3.6 | `/api/*` and `/ws/*` are never cached and never replayed | `apps/web/public/sw.js` | `apps/web/src/lib/pwa.test.ts` · `scripts/__tests__/shell-pwa.test.mjs` |
 | REQ-SHELL-63 | §3.6 | A failed navigation falls back to an offline page, not to a browser error | `apps/web/public/sw.js` · `apps/web/src/app/(views)/offline/page.tsx` | `apps/web/src/lib/pwa.test.ts` |
 | REQ-SHELL-64 | §3.6 | The offline page shows no agent data and says plainly that this device is off the tailnet | `apps/web/src/app/(views)/offline/page.tsx` | `apps/web/src/lib/pwa.test.ts` |
 | REQ-SHELL-65 | §3.6 | Caches from an older shell version are deleted on activate | `apps/web/public/sw.js` | `apps/web/src/lib/pwa.test.ts` |
@@ -162,7 +164,7 @@ other id appears here; where a requirement touches a neighbour, the row says who
 | REQ-SHELL-71 | §3.6 | Browsers that never fire an install event are told how to install, without user-agent sniffing | `apps/web/src/components/shell/HelpSheet.tsx` | `apps/web/src/components/shell/HelpSheet.test.tsx` |
 | REQ-SHELL-72 | §3.6 | The browser half of the push handshake asks permission, subscribes, and posts the subscription to the relay | `apps/web/src/lib/pwa.ts` | `apps/web/src/lib/pwa.test.ts` |
 | REQ-SHELL-73 | §3.6 | Every push failure path returns a sentence a person can act on, and none of them throws | `apps/web/src/lib/pwa.ts` | `apps/web/src/lib/pwa.test.ts` |
-| REQ-SHELL-74 | §3.6 | `sw.js` imports the relay's push module and registers no push handler of its own | `apps/web/public/sw.js` | `apps/web/src/lib/pwa.test.ts` |
+| REQ-SHELL-74 | §3.6 | `sw.js` imports the relay's push module and registers no push handler of its own | `apps/web/public/sw.js` | `apps/web/src/lib/pwa.test.ts` · `scripts/__tests__/shell-pwa.test.mjs` |
 | REQ-SHELL-75 | §3.6 | The three notification types — permission prompts, run failures, approval requests — are rendered by the relay's module | `apps/web/public/sw-push.js` | `apps/web/public/sw-push.js` |
 | REQ-SHELL-76 | §3.6 | There is no login route and no code path that is only safe because a session exists | `apps/web/src/app/(views)/layout.tsx` | `apps/web/src/components/shell/HelpSheet.test.tsx` |
 | REQ-SHELL-77 | §3.6 | The absence of sign-in is explained to the user once, in the help sheet | `apps/web/src/components/shell/HelpSheet.tsx` | `apps/web/src/components/shell/HelpSheet.test.tsx` |
@@ -224,6 +226,9 @@ message.
 
 - **Pure logic** (`route.test.ts`, `search.test.ts`, `shell-bus.test.ts`,
   `pwa.test.ts`) — unit, no DOM. Routing, ranking, event typing, base64url decoding.
+- **On-disk PWA assets** (`scripts/__tests__/shell-pwa.test.mjs`) — node:test, runs in
+  `npm run verify`. Manifest parse, PNG magic bytes, `sw.js` cache rules and the
+  no-push-handler invariant. This is the check that actually ships; jsdom has no SW.
 - **DOM behaviour** (`*.test.tsx` under `components/shell/`) — Testing Library against a
   stubbed `fetch`. Every endpoint-backed control is tested in three states: answering,
   404 (not built yet), and network error. "What does this look like when the runner is

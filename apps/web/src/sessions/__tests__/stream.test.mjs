@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { mergeByCursor, cursorOf, hasGap, backoffMs } from '../lib/replay.ts';
 import { buildOffsets, windowFor, isPinnedToBottom } from '../lib/virtual.ts';
 import { toSessionMeta, toTranscriptEntry, deriveState, pendingPermission } from '../relay/happy-adapter.ts';
+import { parseFrame } from '../relay/client.ts';
 
 const entry = (seq, text = `line ${seq}`) => ({
   id: `m${seq}`,
@@ -181,6 +182,16 @@ test('an unknown role becomes system rather than throwing away the entry', () =>
   const e = toTranscriptEntry({ role: 'wat', text: 'hi' }, { id: 'm3', seq: 3, at: 12 });
   assert.equal(e.kind, 'system');
   assert.equal(e.text, 'hi');
+});
+
+test('SSE frames parse event, data and id; keepalives yield nothing', () => {
+  assert.deepEqual(parseFrame('event: entry\ndata: {"seq":3}\nid: 3'), {
+    event: 'entry',
+    data: { seq: 3 },
+    id: 3,
+  });
+  assert.equal(parseFrame(': keepalive'), null);
+  assert.equal(parseFrame('event: open\ndata: not-json'), null);
 });
 
 test('the pending permission is the newest unresolved one', () => {

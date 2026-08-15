@@ -8,31 +8,34 @@
  * `{error: {code, message, hint?}}` — `hint` is written for a human on a phone.
  *
  * Routes owned here:
- *   GET /api/cost/today            shell cost ticker (§2.0)
- *   GET /api/runs                  LAST RUNS (§2.3)
- *   GET /api/runs/:runId/tools     span detail behind a LAST RUNS row
- *   GET /api/metrics/live          LIVE numerator + per-department (§2.0, §2.2)
- *   GET /api/metrics/status        derived node status, drives the amber halo (§3.4)
- *   GET /api/metrics/query         KPI tiles + `query.source: "langfuse"` (§2.5)
- *   GET /api/metrics/activity      activity feed (§2.5)
- *   GET /api/metrics/sql/:name     `query.source: "sql"` named business queries
+ *   GET /api/cost/today                 shell cost ticker (§2.0 / §3.5)
+ *   GET /api/metrics/runs               durable LAST RUNS from the ledger
+ *   GET /api/runs/:runId/tools          span detail behind a LAST RUNS row
+ *   GET /api/metrics/live               LIVE numerator + per-department (§2.0, §2.2)
+ *   GET /api/metrics/status             derived node status, drives the amber halo (§3.4)
+ *   GET /api/metrics/query              KPI tiles + `query.source: "langfuse"` (§2.5)
+ *   GET /api/metrics/activity           activity feed (§2.5)
+ *   GET /api/metrics/sql/:name          `query.source: "sql"` named business queries
+ *
+ * `GET /api/runs` is **not** here. `runner-engineer` owns that route (in-memory live
+ * view). Stealing it would give LAST RUNS two owners, which is how a drawer starts
+ * lying. The durable history lives at `/api/metrics/runs`.
  */
 
 import {
   activityFeed,
   agentEvidence,
-  bindNamedQuery,
   costToday,
   isMetric,
   isRange,
   lastRuns,
   metric,
   runToolCalls,
-  NAMED_QUERIES,
   RANGES,
   type MetricName,
   type Range,
 } from '../db/queries.ts';
+import { bindNamedQuery, NAMED_QUERIES } from '../db/registry.ts';
 import { countLive, deriveStatus, THRESHOLDS, type AgentEvidence } from '../observability/status.ts';
 import type { DbClient } from '../observability/types.ts';
 
@@ -94,7 +97,9 @@ export async function handleMetricsRequest(
       return {
         status: 200,
         body: {
-          usd: Math.round(usd * 100) / 100,
+          // `null` when nothing priced today — CostTicker renders `no cost data`.
+          // A real `$0.00` is only returned when at least one run was priced at zero.
+          usd: usd === null ? null : Math.round(usd * 100) / 100,
           runs,
           // How many of today's runs we could not price. The ticker shows a bare
           // number; this is how a caller knows whether that number is the whole story.
@@ -105,19 +110,19 @@ export async function handleMetricsRequest(
       };
     }
 
-    if (path === '/api/runs') {
+    if (path === '/api/metrics/runs') {
       const agent = q.get('agent');
       const limit = clampLimit(q.get('limit'), 5, 50);
-      const rows = await lastRuns(db, agent, limit);
-      const now = Date.now();
+      const rows = await lastRuns(db, { agent: agent ?? undefined }, limit);
       return {
         status: 200,
         body: {
+          // `startedAt` is ISO 8601. Relative time ("14m ago") is the client's job
+          // (api-contracts.md Reads) — we do not pre-render it.
           runs: rows.map((r: Record<string, unknown>) => ({
             runId: r.run_id,
             agent: r.agent,
             agentName: r.agent_name,
-            relativeTime: relativeTime(toIso(r.started_at), now),
             startedAt: toIso(r.started_at),
             status: r.status,
             durationMs: r.duration_ms,
@@ -261,6 +266,17 @@ export async function handleMetricsRequest(
       const params: Record<string, unknown> = {};
       for (const [key, value] of q.entries()) params[key] = value;
       const bound = bindNamedQuery(sqlMatch[1], params);
+      if (bound.status === 'pending' || !bound.sql) {
+        return {
+          status: 200,
+          body: {
+            name: sqlMatch[1],
+            rows: [],
+            empty: true,
+            reason: bound.blockedBy ?? 'This query is registered but not yet served.',
+          },
+        };
+      }
       const { rows } = await db.query(bound.sql, bound.params);
       return { status: 200, body: { name: sqlMatch[1], rows } };
     }
@@ -272,6 +288,7 @@ export async function handleMetricsRequest(
           queries: Object.entries(NAMED_QUERIES).map(([name, q2]) => ({
             name,
             description: q2.description,
+            status: q2.status,
             params: q2.params,
           })),
         },
@@ -337,7 +354,7 @@ function toEvidence(row: Record<string, unknown>): AgentEvidence {
 /** The route table, for whatever mounts this. */
 export const METRICS_ROUTES = [
   'GET /api/cost/today',
-  'GET /api/runs',
+  'GET /api/metrics/runs',
   'GET /api/runs/:runId/tools',
   'GET /api/metrics/live',
   'GET /api/metrics/status',

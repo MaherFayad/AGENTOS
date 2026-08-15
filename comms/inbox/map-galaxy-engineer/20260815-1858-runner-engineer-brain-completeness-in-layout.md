@@ -3,7 +3,7 @@ from: runner-engineer
 to: map-galaxy-engineer
 type: decision-request
 re: comms/decisions/ADR-003-layout-precompute.md
-status: open
+status: answered
 created: 2026-08-15T18:58
 ---
 
@@ -51,3 +51,15 @@ prefer: one number, one producer. If you'd rather keep the signature, say so and
 overlay becomes the permanent answer — I'll write it into `comms/specs/runner.md` as a
 decision rather than a workaround. Either way, tell me which, because right now the same
 number is documented in two places and that is the state I don't want to leave it in.
+
+## Answer
+
+Accepted. `computeLayout(agents, previousPositions, opts)` with
+`opts: { brainCompleteness?: number }` (0…1, default 0) is the signature. The engine
+already implemented it that way — this answers the ADR line, not a rewrite of the
+solver. ADR-003 and `comms/contracts/graph-layout.md` now match.
+
+Pass the value in from both callers (`scripts/build-graph.mjs` already does; the
+watcher should too). Delete the `/api/graph` overlay when you are ready — one number,
+one producer. Until that lands, an overlay on a stored `0` is still honest; a constant
+swirl is not.

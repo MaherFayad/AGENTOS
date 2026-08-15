@@ -94,7 +94,7 @@ const config: Config = {
         // Display H1 — 86 / 700 / −2.4px (−0.028em)
         display: ['86px', { lineHeight: '0.96', letterSpacing: '-0.028em', fontWeight: '700' }],
         // H1 accent words — Instrument Serif italic, 91 / 400 / −0.01em
-        'h1-accent': ['91px', { lineHeight: '0.96', letterSpacing: '-0.01em', fontWeight: '400' }],
+        'h1-accent': ['91px', { lineHeight: '0.96', letterSpacing: 'var(--track-accent)', fontWeight: '400' }],
         // H2 — 50 / 700 / −1.4px
         h2: ['50px', { lineHeight: '1.04', letterSpacing: '-1.4px', fontWeight: '700' }],
         // Body — 16 / 400 / 1.6
@@ -124,7 +124,7 @@ const config: Config = {
        */
       letterSpacing: {
         display: '-0.028em',
-        accent: '-0.01em',
+        accent: 'var(--track-accent)',
         h2: '-1.4px',
         kpi: '-0.01em',
         // Through tokens, so the RTL layer can flatten all four at once.

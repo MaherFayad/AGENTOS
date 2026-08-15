@@ -6,8 +6,7 @@
  * contains NO color and NO token values — if a rule here needs a color, it is
  * in the wrong file.
  *
- * WIRING (one line, owned by design-system-guardian):
- *     apps/web/src/app/globals.css →  @import './styles/rtl.css';   (after tokens.css)
+ * WIRING: apps/web/src/app/globals.css imports this after tokens.css.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * THE THREE RULES THIS FILE ENFORCES SO NO COMPONENT HAS TO REMEMBER THEM
@@ -47,10 +46,9 @@
  * `--track-*` rungs in tokens.css (§1.4, +0.25em…+0.45em); Arabic gets word
  * spacing instead, and this is the only value in that pair that is mine.
  *
- * `--ar-label-scale` is a MULTIPLIER, not a rung on the type scale: IBM Plex
- * Sans Arabic renders optically smaller than Plus Jakarta Sans at the same px,
- * and the compensation has to apply to whichever of the four label sizes the
- * element already has. A fixed px here would flatten four sizes into one. */
+ * `--word-space-label-ar` is the Arabic replacement for tracking. Size stays
+ * on the element's existing §1.4 rung (`text-label` / `-sm` / `-lg`); a
+ * multiplier here would be a new type scale. */
 :root {
   --word-space-label-ar: .22em;
 }
@@ -154,13 +152,10 @@ html {
 :lang(ar) [class*='tracking-wider-'] {
   word-spacing: var(--word-space-label-ar);
   font-weight: 600;
-  /* IBM Plex Sans Arabic sets optically smaller than Plus Jakarta Sans at the
-   * same px. This multiplies whichever of the four label sizes the element
-   * already carries; an absolute rung from the §1.4 scale would flatten all
-   * four into one. Retires the day tokens.css publishes --ar-label-scale. */
-  /* token-exempt: relative Arabic size compensation — a multiplier, not a rung on the §1.4 scale (see above) */
-  font-size: calc(1em * 1.08);
-  /* text-transform: uppercase is a no-op in Arabic — harmless, left in place so
+  /* Size stays on the §1.4 token rungs the element already carries
+   * (`text-label` / `text-label-sm` / `text-label-lg`). Weight + word-spacing
+   * are the Arabic emphasis; a 1.08em multiplier would be a new type scale.
+   * text-transform: uppercase is a no-op in Arabic — left in place so
    * components do not need a locale branch. */
 }
 
@@ -198,13 +193,9 @@ html {
   font-family: var(--font-serif);
   font-style: italic;
   font-weight: 400;
-  /* §1.4 accent tracking — the value tailwind.config.ts names `tracking-accent`.
-   * A literal here only because tokens.css does not publish it as a custom
-   * property, and this class is emitted by <Accented>, not by a utility.
-   * Latin-only either way: the :lang(ar) rules above make this element upright,
-   * heavier and untracked. Retires when --track-accent exists. */
-  /* token-exempt: §1.4 accent tracking, the tracking-accent value; tokens.css publishes no --track-accent yet (see above) */
-  letter-spacing: -.01em;
+  /* Tracking is the `tracking-accent` utility (−0.01em, contract §8), applied
+   * by <Accented> in i18n/provider.tsx. Under :lang(ar) RULE 1 and RULE 2 make
+   * this element upright, heavier, and untracked. */
 }
 
 /* -----------------------------------------------------------------------------

@@ -100,8 +100,11 @@ export function composeActivity(input: ComposeInput): ActivityLine {
       return { event: 'Run cancelled', detail: facts };
     case 'awaiting-approval':
       return { event: 'Waiting on your approval', detail: 'plan drafted, run paused' };
-    default:
+    default: {
+      const _exhaustive: never = input.status;
+      void _exhaustive;
       return { event: 'Run finished', detail: facts };
+    }
   }
 }
 

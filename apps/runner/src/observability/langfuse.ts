@@ -173,7 +173,9 @@ export function createNullSink(baseUrl = 'http://langfuse.tailnet:3000', project
 }
 
 export function sinkFromEnv(env: Record<string, string | undefined> = process.env): TraceSink {
-  const baseUrl = env.LANGFUSE_BASE_URL;
+  // Compose pins `LANGFUSE_HOST` (infra owns compose). Accept either name so a
+  // config typo does not silently drop traces onto the null sink.
+  const baseUrl = env.LANGFUSE_BASE_URL ?? env.LANGFUSE_HOST;
   const publicKey = env.LANGFUSE_PUBLIC_KEY;
   const secretKey = env.LANGFUSE_SECRET_KEY;
   const projectId = env.LANGFUSE_PROJECT_ID ?? 'default';

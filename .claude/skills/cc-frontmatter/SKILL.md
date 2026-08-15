@@ -38,8 +38,9 @@ node scripts/validate-frontmatter.mjs        # exits non-zero on any error
 The validator checks: required fields present · enums (`tier`, `phase`, `status`,
 `approval`, input `type`) · path/department agreement · slug/name agreement · every
 `builds_on` slug resolves · `icon` resolves in lucide · `schedule` is valid 5-field cron ·
-`inputs[]` keys unique. A failing file is **excluded from the map with a warning**, never
-rendered half-parsed.
+`inputs[]` keys unique · every `wired_into` name exists in `agents/_registry/connectors.json`
+(invariant 5; the file is required). A failing file is **excluded from the map with a
+warning**, never rendered half-parsed.
 
 ## Seeding from external repos (Part IV)
 

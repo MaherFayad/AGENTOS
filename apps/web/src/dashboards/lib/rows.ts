@@ -115,7 +115,7 @@ function toCell(value: unknown): TableCell {
  */
 export function toTableRows(payload: unknown, columnKeys: readonly string[]): TableRow[] {
   return arr(payload)
-    .map((row, i) => {
+    .map((row, i): TableRow | null => {
       if (!isObj(row)) return null;
       const source = isObj(row.cells) ? row.cells : row;
       const cells: Record<string, TableCell> = {};

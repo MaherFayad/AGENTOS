@@ -1,0 +1,81 @@
+/**
+ * REQ-DRW — the composing drawer projects frontmatter; the chart host consumes
+ * `src/chart/events.ts` instead of forking it.
+ */
+
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import { OPEN_DRAWER_EVENT, openDrawer } from '../chart/events';
+import { planInputs } from './data/inputs';
+import { projectAgent } from './data/project';
+import type { AgentDoc } from './data/types';
+import { InputsForm } from './sections/InputsForm';
+import { AutonomyToggleRow } from './sections/ChartSections';
+import { Ladder } from './sections/Ladder';
+
+const ENRICHMENT: AgentDoc = {
+  slug: 'sales/account-enrichment',
+  frontmatter: {
+    name: 'Account Enrichment',
+    department: 'sales',
+    cluster: 'enrichment',
+    tier: 'autonomous',
+    description: 'Layer firmographics onto target accounts.',
+    replaces: 'The research step everyone skips.',
+    the_human: 'A human audits outputs on a cadence.',
+    wired_into: ['exa', 'firecrawl'],
+    breaks_into: ['firmographic-appender'],
+    builds_on: ['database-mining'],
+    ladder: {
+      'human-led': 'A glance at the website.',
+      assisted: 'Signals appended on demand.',
+      autonomous: 'Accounts re-enrich on a schedule.',
+    },
+    inputs: [{ key: 'account_url', label: 'Account website', type: 'url', required: true }],
+  },
+};
+
+describe('composed anatomy (projection + sections)', () => {
+  const model = projectAgent(ENRICHMENT);
+
+  it('derives the INPUTS form from frontmatter, not from the agent name', () => {
+    const plan = planInputs(ENRICHMENT.frontmatter.inputs);
+    const markup = renderToStaticMarkup(
+      <InputsForm fields={plan.fields} unsupported={plan.unsupported} values={{ account_url: '' }} errors={{}} onChange={() => undefined} />,
+    );
+    expect(markup).toContain('Account website');
+    expect(markup).toContain('type="url"');
+    expect(markup).toContain('required');
+    expect(markup).not.toContain('Account Enrichment');
+    expect(plan.fields[0]?.key).toBe('account_url');
+  });
+
+  it('marks the active ladder row and only the chart flavour adds NOW', () => {
+    const map = renderToStaticMarkup(<Ladder rows={model.ladder} />);
+    const chart = renderToStaticMarkup(<Ladder rows={model.ladder} nowBadge />);
+    expect(map).toContain('data-active="true"');
+    expect(map).not.toContain('NOW');
+    expect(chart).toContain('NOW');
+  });
+
+  it('renders the chart autonomy toggle as a readout, not a control', () => {
+    const markup = renderToStaticMarkup(<AutonomyToggleRow tier={model.tier} />);
+    expect(markup).toContain('disabled');
+    expect(markup).toContain('FULLY AUTONOMOUS');
+    expect(markup).toContain('aria-pressed="true"');
+  });
+});
+
+describe('chart openDrawer is consumed, not forked', () => {
+  it('keeps the chart event name as the cross-agent contract', () => {
+    expect(OPEN_DRAWER_EVENT).toBe('commandcenter:open-drawer');
+  });
+
+  it('asks for the right side when CHART emits a selection', () => {
+    const handler = vi.fn();
+    const detail = openDrawer('sales/account-enrichment', { handler });
+    expect(detail.side).toBe('right');
+    expect(detail.source).toBe('chart');
+    expect(handler).toHaveBeenCalledWith(detail);
+  });
+});

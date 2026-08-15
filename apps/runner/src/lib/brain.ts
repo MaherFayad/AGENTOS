@@ -13,7 +13,7 @@
  * reported alongside it instead, so it can inform without inflating).
  */
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { BrainCompleteness } from '@agnetos/contracts';
 import { commitCompanyFile, lastCommitIso } from './git';
 import type { RunnerConfig } from './config';
@@ -228,4 +228,36 @@ export async function writeBackBrain(
   );
 
   return { path: 'company/COMPANY.md', commitSha, completeness };
+}
+
+/**
+ * Snapshot `build-graph.mjs` reads as `company/.brain.json` when present.
+ *
+ * Not a git commit — the brain's version history is COMPANY.md, and this file is a cache
+ * so layout rebuilds (`computeLayout` opts) and the watcher's live value share one
+ * producer. GET `/api/graph` serves the stored artifact as-is — no brain overlay.
+ */
+export async function writeBrainSnapshot(
+  config: RunnerConfig,
+  completeness: BrainCompleteness,
+): Promise<string> {
+  const path = join(config.companyDir, '.brain.json');
+  await mkdir(config.companyDir, { recursive: true });
+  await writeFile(
+    path,
+    `${JSON.stringify(
+      {
+        completeness: completeness.value,
+        answered: completeness.answered,
+        total: completeness.total,
+        sources: completeness.sources,
+        updatedAt: completeness.updatedAt,
+        missing: completeness.missing,
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
+  return path;
 }

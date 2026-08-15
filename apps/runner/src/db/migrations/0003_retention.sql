@@ -1,16 +1,17 @@
 -- 0003_retention.sql
 --
--- Retention (ADR-005). Traces are cheap until they aren't; the point of writing the
+-- Retention (ADR-008). Traces are cheap until they aren't; the point of writing the
 -- window down is that the volume never becomes the thing that forces the decision.
 --
--- Defaults, pending the human's confirmation in ADR-005:
+-- ADR-008 accepted (option B). Defaults:
 --   ops.agent_run_tools   90 days   — span detail; the expensive rows
 --   ops.agent_runs       400 days   — the ledger; a year plus a comparison window
 --   ops.agent_run_daily  forever    — the rollup, so history survives the prune
 --   app.agent_outputs    not pruned — business rows are the agent's product, not telemetry
 --
--- Langfuse has its own retention setting; it is configured to the same 90 days as the
--- span table so the two stores never disagree about what still exists.
+-- Langfuse project retention = 90 days (same as spans). Operator sets it in the
+-- Langfuse UI; infra documents the standing value. ofelia fires POST /api/ops/prune
+-- nightly via scripts/sync-ofelia.mjs — never on metrics/run request handlers.
 
 -- Daily rollup, written before anything is pruned. Keeping this means the cost ticker's
 -- history and the KPI deltas survive retention: we lose the ability to drill into an
@@ -99,4 +100,4 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION ops.prune IS
-  'Retention per ADR-005. Called by the nightly ofelia job; never on the request path.';
+  'Retention per ADR-008. Called by the nightly ofelia job; never on the request path.';

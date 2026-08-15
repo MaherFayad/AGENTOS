@@ -34,7 +34,7 @@ import { join, dirname, resolve, relative, sep, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
-import { parseFrontmatter, toSlug } from './validate-frontmatter.mjs';
+import { parseFrontmatter, parseConnectorRegistry, toSlug } from './validate-frontmatter.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(ROOT, '.seed-cache');
@@ -96,11 +96,20 @@ const RULES = [
   [/\b(pdpl|gdpr|privacy|policy|regulat)\b/i, 'back-office', 'compliance'],
 ];
 
-/** Upstream tool names we can actually authenticate → our connector names. */
+/**
+ * Upstream tool names we can actually authenticate → our connector names.
+ * Values MUST be keys in `agents/_registry/connectors.json`. The seeder loads that
+ * file at start and drops any mapping whose target is not registered — inventing a
+ * `wired_into` name the runner cannot grant is how a staged import becomes a 422.
+ */
 const TOOL_MAP = {
-  exa: 'exa', firecrawl: 'firecrawl', websearch: 'exa', web_search: 'exa',
+  exa: 'exa', firecrawl: 'firecrawl',
+  websearch: 'exa', web_search: 'exa', 'web-search': 'web-search',
+  webfetch: 'web-fetch', web_fetch: 'web-fetch', 'web-fetch': 'web-fetch',
   gmail: 'gmail', email: 'gmail', slack: 'slack', hubspot: 'hubspot',
   postgres: 'postgres', sql: 'postgres', database: 'postgres', git: 'git',
+  langfuse: 'langfuse', workspace: 'workspace',
+  company: 'company-brain', 'company-brain': 'company-brain',
 };
 
 /**
@@ -180,13 +189,15 @@ function classify(name, description, filePath) {
   return null;
 }
 
-function mapTools(raw) {
+function mapTools(raw, knownConnectors) {
   if (!raw) return [];
   const list = Array.isArray(raw) ? raw : String(raw).split(/[,\s]+/);
   const out = new Set();
   for (const t of list) {
     const mapped = TOOL_MAP[String(t).toLowerCase().trim()];
-    if (mapped) out.add(mapped);
+    if (!mapped) continue;
+    if (knownConnectors && !knownConnectors.has(mapped)) continue;
+    out.add(mapped);
   }
   return [...out];
 }
@@ -287,6 +298,27 @@ async function main() {
     process.exit(2);
   }
 
+  let knownConnectors = null;
+  const connectorsPath = join(ROOT, 'agents', '_registry', 'connectors.json');
+  if (await exists(connectorsPath)) {
+    try {
+      const result = parseConnectorRegistry(JSON.parse(await readFile(connectorsPath, 'utf8')));
+      if (result.errors.length) {
+        for (const m of result.errors) console.error(`  connectors.json: ${m}`);
+      }
+      knownConnectors = result.names;
+      for (const target of new Set(Object.values(TOOL_MAP))) {
+        if (!knownConnectors.has(target)) {
+          console.error(`  seeder TOOL_MAP target "${target}" is not in the connector registry — it will never be emitted`);
+        }
+      }
+    } catch (e) {
+      console.error(`  agents/_registry/connectors.json is not valid JSON: ${e.message}`);
+    }
+  } else {
+    console.error('  agents/_registry/connectors.json is missing — staged wired_into will be empty (invariant 5)');
+  }
+
   const staged = [];
   const skipped = [];
   const unmapped = [];
@@ -340,7 +372,7 @@ async function main() {
         icon: ICON_BY_CLUSTER[hit.cluster] ?? 'bot',
         tier: 'assisted', // every import lands mid-ladder; the ladder is written by a human
         phase: inferPhase(`${name} ${description} ${parsed.body.slice(0, 2000)}`),
-        wiredInto: mapTools(parsed.fm.tools),
+        wiredInto: mapTools(parsed.fm.tools, knownConnectors),
         body: parsed.body,
       };
 

@@ -56,6 +56,6 @@ CREATE TRIGGER agent_outputs_touch
   FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 
 COMMENT ON TABLE app.agent_outputs IS
-  'Structured agent output. Read only through the named-query registry in apps/runner/src/db/queries.ts — a panel can never carry raw SQL (panel-schema contract).';
+  'Structured agent output. Read only through the named-query registry in apps/runner/src/db/registry.ts — a panel can never carry raw SQL (panel-schema contract).';
 COMMENT ON COLUMN app.agent_outputs.run_id IS
   'The run that wrote this row. Every business number is traceable back to a real run.';

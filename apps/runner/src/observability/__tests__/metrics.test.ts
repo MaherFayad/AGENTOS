@@ -9,7 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { deltaOf, handleMetricsRequest, relativeTime } from '../../routes/metrics.ts';
-import { bindNamedQuery, NAMED_QUERIES } from '../../db/queries.ts';
+import { bindNamedQuery, NAMED_QUERIES } from '../../db/registry.ts';
+import { buildRunner } from '../../server.ts';
 import type { DbClient } from '../types.ts';
 
 type Call = { sql: string; params: readonly unknown[] };
@@ -39,6 +40,15 @@ test('GET /api/cost/today reports the number and how complete it is', async () =
   assert.equal(db.calls[0].params[0], 'Asia/Riyadh', 'the day boundary is the human’s, not UTC');
 });
 
+test('GET /api/cost/today is honestly empty when nothing has run', async () => {
+  const db = fakeDb(() => [{ usd: null, runs: 0, unpriced_runs: 0 }]);
+  const res = await handleMetricsRequest('GET', '/api/cost/today', db, { timezone: 'Asia/Riyadh' });
+  assert.equal(res.status, 200);
+  const body = res.body as Record<string, unknown>;
+  assert.equal(body.usd, null, 'CostTicker renders `no cost data`, never a plausible $0.00');
+  assert.equal(body.runs, 0);
+});
+
 test('GET /api/metrics/live returns a numerator and refuses to invent a denominator', async () => {
   const db = fakeDb(() => [
     { agent: 'sales/a', department: 'sales', total_runs: 5, successful_runs: 5, recent_runs: 5, recent_errors: 0 },
@@ -57,7 +67,7 @@ test('GET /api/metrics/live returns a numerator and refuses to invent a denomina
   assert.equal(body.totalSource, 'GET /api/graph');
 });
 
-test('GET /api/runs shapes LAST RUNS rows, trace link included', async () => {
+test('GET /api/metrics/runs shapes durable LAST RUNS rows, trace link included', async () => {
   const startedAt = new Date(Date.now() - 14 * 60_000).toISOString();
   const db = fakeDb(() => [
     {
@@ -73,14 +83,26 @@ test('GET /api/runs shapes LAST RUNS rows, trace link included', async () => {
     },
   ]);
 
-  const res = await handleMetricsRequest('GET', '/api/runs?agent=sales/account-enrichment&limit=5', db);
+  const res = await handleMetricsRequest(
+    'GET',
+    '/api/metrics/runs?agent=sales/account-enrichment&limit=5',
+    db,
+  );
   const row = (res.body as { runs: Record<string, unknown>[] }).runs[0];
 
-  assert.equal(row.relativeTime, '14m ago');
+  assert.equal(row.startedAt, startedAt, 'ISO 8601 — relative time is the client\'s job');
+  assert.equal('relativeTime' in row, false, 'do not pre-render "14m ago"');
   assert.equal(row.costUsd, 0.041, 'numeric columns arrive as strings from pg and must be coerced');
   assert.equal(row.traceUrl, 'http://langfuse.tailnet:3000/project/local/traces/deadbeef');
   assert.equal(db.calls[0].params[0], 'sales/account-enrichment');
-  assert.equal(db.calls[0].params[1], 5);
+  assert.equal(db.calls[0].params[4], 5);
+});
+
+test('GET /api/runs is not claimed here — runner-engineer serves the live view', async () => {
+  const db = fakeDb(() => [{ run_id: 'should-not-run' }]);
+  const res = await handleMetricsRequest('GET', '/api/runs?agent=sales/account-enrichment', db);
+  assert.equal(res.status, 404);
+  assert.equal(db.calls.length, 0);
 });
 
 test('a KPI query returns the window, the previous window and the delta', async () => {
@@ -151,6 +173,13 @@ test('a panel can only reach SQL through the named registry', async () => {
   assert.deepEqual(db.calls[0].params, [30]);
   assert.equal(db.calls[0].sql, NAMED_QUERIES.outputs_by_kind.sql);
 
+  const pending = await handleMetricsRequest('GET', '/api/metrics/sql/runway_estimate', db);
+  assert.equal(pending.status, 200);
+  const pendingBody = pending.body as { rows: unknown[]; empty: boolean; reason: string };
+  assert.deepEqual(pendingBody.rows, []);
+  assert.equal(pendingBody.empty, true);
+  assert.match(pendingBody.reason, /cash balance/);
+
   const unknown = await handleMetricsRequest('GET', '/api/metrics/sql/drop_everything', db);
   assert.equal(unknown.status, 400);
   assert.equal((unknown.body as { error: { code: string } }).error.code, 'unknown_query');
@@ -174,11 +203,13 @@ test('named-query parameters are validated before binding', () => {
 
 test('every registered query binds every placeholder it declares', () => {
   for (const [name, query] of Object.entries(NAMED_QUERIES)) {
+    if (!query.sql) continue;
     const placeholders = new Set(query.sql.match(/\$\d+/g) ?? []);
+    const expected = query.fixed.length + query.params.length;
     assert.equal(
       placeholders.size,
-      query.params.length,
-      `query "${name}" declares ${query.params.length} params but uses ${placeholders.size} placeholders`,
+      expected,
+      `query "${name}" declares ${expected} binds but uses ${placeholders.size} placeholders`,
     );
   }
 });
@@ -209,4 +240,17 @@ test('relative time reads the way a person would say it', () => {
   assert.equal(relativeTime('2026-08-15T11:46:00Z', now), '14m ago');
   assert.equal(relativeTime('2026-08-15T09:00:00Z', now), '3h ago');
   assert.equal(relativeTime('2026-08-13T12:00:00Z', now), '2d ago');
+});
+
+test('GET /api/cost/today is mounted with an honest empty when the ledger is down', async () => {
+  const runner = await buildRunner({ watch: false, observe: false });
+  try {
+    const res = await runner.app.inject({ method: 'GET', url: '/api/cost/today' });
+    assert.equal(res.statusCode, 200);
+    const body = res.json() as { usd: number | null; runs: number };
+    assert.equal(body.usd, null, 'CostTicker renders `no cost data`, never a plausible $0.00');
+    assert.equal(body.runs, 0);
+  } finally {
+    await runner.close();
+  }
 });
