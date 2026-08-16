@@ -109,6 +109,63 @@ test('boundary 1: the list sanitizer rebuilds every row, not just the first', ()
   assert.deepEqual(containsPoison(rows), []);
 });
 
+/**
+ * Q19 (`project-scoping.md` §5.3) — the ruling, pinned as a test rather than as
+ * a paragraph.
+ *
+ * `Plan §11` asks for the session list to group by billing account, and Part One
+ * offers the route in: "add an `account_id` to the envelope key list via ADR".
+ * The answer is **no**. Grouping is a client-side
+ * operation on an already-decrypted object — the list is decrypted and sorted in
+ * the browser today (ADR-005 consequence 1) — so the account belongs *inside*
+ * `encryptedMetadata`, not next to it.
+ *
+ * What a plaintext `account_id` would hand the relay is a stable partition of
+ * sessions into buckets that correspond to real things: work vs personal, client
+ * A vs client B. Opaque or not, it is a correlation key the server does not have
+ * today and needs for nothing.
+ *
+ * This test is what stops the key being added later "to make a UI work": the
+ * list is exact, so an addition fails here and has to be argued in an ADR.
+ */
+test('boundary 1: the session envelope is exactly five keys, and account_id is not one (ADR-016)', () => {
+  assert.deepEqual(
+    [...SESSION_ENVELOPE_KEYS],
+    ['id', 'seq', 'updatedAt', 'active', 'encryptedMetadata'],
+    'the session envelope allowlist changed. Adding a key is a security decision that needs ' +
+      'an ADR. account_id was refused — see the ## Answer in comms/inbox/sessions-relay-' +
+      'engineer/20260816-2236-commandcenter-orchestrator-m15-ops-device.md (ADR-016 covers ' +
+      'the three identity tables and deliberately defers this one back to §3.1).',
+  );
+  assert.deepEqual(
+    [...TRANSCRIPT_ENVELOPE_KEYS],
+    ['id', 'seq', 'at', 'ciphertext'],
+    'the transcript envelope allowlist changed.',
+  );
+});
+
+test('boundary 1: an upstream row that volunteers an account id loses it', () => {
+  const clean = sanitizeSessionRow({
+    id: 'ses_01H',
+    seq: 1,
+    updatedAt: 1755000000000,
+    active: true,
+    encryptedMetadata: 'eyJ2IjoxfQ==',
+    // A future relay release, or a well-meaning proxy change, offering the
+    // grouping key. It is rebuilt away rather than filtered away.
+    account_id: 'acct_work',
+    accountId: 'acct_work',
+    accountLabel: 'Work — Anthropic capped workspace',
+  });
+  assert.equal('account_id' in clean, false);
+  assert.equal('accountId' in clean, false);
+  assert.equal(
+    JSON.stringify(clean).includes('acct_work'),
+    false,
+    'a billing account is a partition of the user\'s sessions; the relay does not get one',
+  );
+});
+
 test('boundary 1: a row missing its ciphertext is rejected, not silently emptied', () => {
   assert.throws(
     () => sanitizeSessionRow({ id: 'a', seq: 1, updatedAt: 1, active: true }),

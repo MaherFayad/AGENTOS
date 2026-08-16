@@ -227,6 +227,57 @@ test('every agent in the BOARD roster has a status file', async () => {
   }
 });
 
+test('no two migrations share a number — the second shared-integer namespace', async () => {
+  // Added 2026-08-17 by `identity-access-engineer`, filed here rather than in an owner's test
+  // file because this is precisely the class this file exists for: an invariant no single
+  // agent owns, which only breaks when two of them each do something reasonable.
+  //
+  // ## Why it exists
+  //
+  // `comms/BOARD.md` states that `comms/decisions/` is **the only** shared-integer namespace
+  // in this repo — every other filename embeds its author's slug, so it cannot be raced — and
+  // then says: *"if a second shared-integer namespace is ever introduced, it inherits this
+  // rule on day one."*
+  //
+  // That day was 2026-08-17. `sessions-relay-engineer` and `identity-access-engineer` both
+  // read this directory, both computed *next free = 0006*, and both wrote a `0006_` migration
+  // within the same minute — the identical failure that made ADR-012 permanently vacant, in a
+  // namespace nobody had noticed was shared. It was resolved the same way ADR-013 resolves
+  // the ADR case: **allocate against the side with no dependents.** `0006_ops_device.sql` was
+  // already cited by a handoff and a test; `0006_identity.sql` was cited by nothing, so it
+  // became `0007_identity.sql`.
+  //
+  // A duplicate here is worse than a duplicate ADR number, and that is the argument for a
+  // gate rather than a note. `client.ts` applies migrations in **filename order** and records
+  // each by filename in `ops_migrations`, so two files sharing a number both run — in an order
+  // decided by whatever follows the digits. A migration whose foreign key happens to sort
+  // after its target table applies cleanly on one machine and fails on the next rename.
+  const dir = 'apps/runner/src/db/migrations';
+  const files = (await walk(dir)).filter((f) => f.endsWith('.sql')).map((f) => f.split('/').pop());
+  assert.ok(files.length > 0, `${dir}: no migrations found — has the path moved?`);
+
+  const byNumber = new Map();
+  for (const file of files) {
+    const n = /^(\d+)_/.exec(file)?.[1];
+    assert.ok(n, `${dir}/${file}: migrations are named <NNNN>_<slug>.sql so their order is explicit.`);
+    byNumber.set(n, [...(byNumber.get(n) ?? []), file]);
+  }
+
+  const collisions = [...byNumber.entries()]
+    .filter(([, group]) => group.length > 1)
+    .map(([n, group]) => `${n}: ${group.join(' + ')}`);
+
+  assert.deepEqual(
+    collisions,
+    [],
+    `Two migrations share a number:\n  ${collisions.join('\n  ')}\n\n` +
+      `Both will run, in an order decided by the text after the digits rather than by anyone. ` +
+      `Resolve it the way ADR-013 resolves the ADR case: allocate against the side with no ` +
+      `dependents — rename the file nothing cites yet, and leave the one already named in a ` +
+      `handoff, a test or a comment alone.`,
+  );
+});
+
 test('the layout artifact is gitignored, not committed', async () => {
   // ADR-003: graph.json is reproducible from agents/**. Committing it invites drift.
   const ignore = await readFile(join(ROOT, '.gitignore'), 'utf8');

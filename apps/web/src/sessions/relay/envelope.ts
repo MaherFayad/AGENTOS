@@ -23,6 +23,28 @@ import type { SessionEnvelope, TranscriptEnvelope } from '../types';
  *
  * Adding a key here is a security decision. Justify it in an ADR, not a commit
  * message.
+ *
+ * ONE KEY HAS BEEN PROPOSED AND REFUSED. `Plan §11` wants the session list
+ * grouped by billing account, and Part One offered the route in: "add an
+ * `account_id` to the envelope key list via ADR". **The answer is no.**
+ *
+ * The list is already decrypted and sorted in the browser (ADR-005), so grouping
+ * is a client-side operation on an object we have in the clear anyway — the
+ * account belongs INSIDE `encryptedMetadata`, not beside it. In plaintext it
+ * would hand the relay a stable partition of sessions into work vs personal,
+ * client A vs client B: a correlation key the server does not have today and
+ * needs for nothing. The deciding test, reusable on the next field somebody
+ * wants here: NAME THE OPERATION THE SERVER MUST PERFORM ON IT. There is none.
+ *
+ * Ruling and full reasoning (`project-scoping.md` §5.3 Q19):
+ *   comms/inbox/sessions-relay-engineer/
+ *     20260816-2236-commandcenter-orchestrator-m15-ops-device.md  → ## Answer
+ *
+ * **Cite that path, not an ADR number.** ADR-016 covers `Plan §11`'s three
+ * tables and deliberately does NOT settle this one — it defers it back here. An
+ * ADR number for the ruling is claimed from `commandcenter-orchestrator` and
+ * this comment gets it when it lands. `no-plaintext-boundary.test.mjs` pins the
+ * list exactly, so the key cannot arrive later to make a UI work.
  */
 export const SESSION_ENVELOPE_KEYS = [
   'id',
