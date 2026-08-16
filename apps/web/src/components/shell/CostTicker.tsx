@@ -1,7 +1,9 @@
 'use client';
 
-import type { LedgerState } from '@agnetos/contracts';
+import { COST_TICKER_ROUTE, type LedgerState } from '@agnetos/contracts';
 import { useEndpoint } from './useEndpoint';
+import { useShell } from './ShellContext';
+import { NO_PROJECT_SENTENCE, projectApiUrl } from './useSearchIndex';
 
 /**
  * §2.0 / §3.5: the cost ticker beside the status pill — `$12.40 today`, from
@@ -46,15 +48,41 @@ import { useEndpoint } from './useEndpoint';
  * hover, so `title` reaches nobody on touch; `sr-only` reaches screen readers only. If the
  * five cases looked identical to a sighted touch user, the fix would only have moved the
  * false story somewhere quieter.
+ *
+ * ---
+ *
+ * ## M15 adds a sixth question, on a different axis: *whose* spend is this?
+ *
+ * The five states above answer **what the number is**. The project axis (`Plan §9`,
+ * `Plan §23.10`) asks **what it is a number about** — *this project has spent nothing*
+ * versus *we cannot read this project's spend* — and a project filter that gets it wrong
+ * manufactures a confident **attribution** rather than a confident zero. Same disease,
+ * different organ.
+ *
+ * The answer here is narrower than the one I first built, because the contract is
+ * narrower. `COST_TICKER_ROUTE` is `/api/p/:project/cost/today` and the pre-project
+ * spelling is still mounted, answering 400 `project_scope_missing`, with this attached to
+ * it in as many words:
+ *
+ * > *"It is not a fallback and must not be used as one: the ticker is chrome and must not
+ * > error out on an unknown value, but a missing project segment is a client fault with a
+ * > one-line fix, and answering it with a plausible `usd: null` would hide the migration
+ * > from the only people who can finish it."*
+ *
+ * So there is **no fallback and no `coordinator` scope**. Two states, not three:
+ *
+ * | `data-cost-scope` | when | shown |
+ * |---|---|---|
+ * | `project` | the URL names a project and the scoped route answered | the five readings above, unqualified |
+ * | `unscoped` | the URL names no project | no figure at all, and the reason |
+ *
+ * The consequence is worth stating positively rather than as a caveat: **there is no
+ * state in which this pill shows a real number about the wrong project.** A design with a
+ * fallback would have had one, correctly labelled — and a correct label is a weaker
+ * guarantee than an impossible state.
  */
 
 const COST_INTERVAL_MS = 60_000;
-
-/**
- * One URL constant because `Plan §23.10` gives this pill a project scope in P1 — it
- * becomes `/api/cost/today?project=…`, and the switcher lives in this same bar.
- */
-const COST_URL = '/api/cost/today';
 
 const money = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -166,14 +194,23 @@ const COPY = {
   noLedgerFallback:
     'This runner has no run ledger configured, so there is no spend to read. That is ' +
     'normal on the dev profile, not a fault.',
+  /**
+   * 404 on `/api/p/:project/cost/today`. Two causes and one honest sentence: either
+   * Langfuse has never been asked for this project, or this runner predates the project
+   * axis and only answers the old spelling. Both are "this runner does not answer the
+   * question", and neither is a fact about your spend.
+   */
   notBuilt:
-    "Langfuse isn't reporting spend yet, so there is no number to show here. This fills in the first time an agent run is traced.",
+    "This runner doesn't answer today's spend for this project yet, so there is no number to show here. It fills in the first time a run in this project is traced.",
   malformed:
     "Today's spend came back in a shape this build does not understand — without it, a " +
     'real zero and a ledger outage look identical, so no number is shown. That is a bug ' +
     'here, not a fact about your spend.',
   offline: "Couldn't reach Langfuse for today's spend. This box may be off the tailnet.",
 } as const;
+
+/** Which spend this is. `unscoped` ⇒ the URL named no project, so nothing was asked. */
+type CostScope = 'project' | 'unscoped';
 
 function labelFor(reading: CostReading): string {
   if (reading.kind === 'amount') return `${money.format(reading.usd)} today`;
@@ -199,8 +236,15 @@ function sentenceFor(reading: CostReading): string {
 }
 
 export function CostTicker(): React.JSX.Element {
-  const cost = useEndpoint<CostReading>(COST_URL, {
+  const { route } = useShell();
+  // `null` when the URL names no project — and `null` means *do not ask*, not *ask the
+  // pre-project route*. See the header: that route is now a deliberate 400.
+  const url = projectApiUrl(COST_TICKER_ROUTE.path, route.project);
+  const scope: CostScope = url === null ? 'unscoped' : 'project';
+
+  const cost = useEndpoint<CostReading>(url, {
     intervalMs: COST_INTERVAL_MS,
+    noTargetMessage: NO_PROJECT_SENTENCE,
     parse: parseCost,
     notBuiltMessage: COPY.notBuilt,
     malformedMessage: COPY.malformed,
@@ -208,7 +252,11 @@ export function CostTicker(): React.JSX.Element {
   });
 
   const text =
-    cost.state === 'ready' ? labelFor(cost.data) : cost.state === 'loading' ? LABEL.loading : LABEL.unavailable;
+    cost.state === 'ready'
+      ? labelFor(cost.data)
+      : cost.state === 'loading'
+        ? LABEL.loading
+        : LABEL.unavailable;
 
   const sentence =
     cost.state === 'ready'
@@ -223,7 +271,15 @@ export function CostTicker(): React.JSX.Element {
       // The reading, in one word, for anyone auditing the standing acceptance case
       // ("stop Postgres, confirm no surface shows a plausible zero") without reading copy.
       data-cost-state={cost.state === 'ready' ? cost.data.kind : cost.state}
-      className="pointer-events-auto rounded-pill border border-line bg-card px-3 py-1.5 text-label-sm uppercase tracking-wider-1 text-ink-2 tabular-nums"
+      // The second axis, asserted the same way: "is this figure about the project the URL
+      // names?" is a separate question from "is this figure real", and a test that can
+      // only see the first would pass on a correctly-drawn number about the wrong thing.
+      //
+      // Printed in every state, not only `ready`: scope is decided by the URL before any
+      // request is made, so "we asked about nothing" is exactly the case an auditor most
+      // needs to be able to read off the DOM.
+      data-cost-scope={scope}
+      className="pointer-events-auto whitespace-nowrap rounded-pill border border-line bg-card px-3 py-1.5 text-label-sm uppercase tracking-wider-1 text-ink-2 tabular-nums"
     >
       <span>{text}</span>
       <span className="sr-only">{sentence}</span>

@@ -34,8 +34,8 @@ describe('BreadcrumbStrip (§2.0 / §2.2)', () => {
   });
 
   it('prints the real live count for the department', async () => {
-    stubFetch({ '/api/graph': { json: GRAPH_FIXTURE } });
-    renderShell(<BreadcrumbStrip />, { pathname: '/map/sales' });
+    stubFetch({ '/api/p/agentos/graph': { json: GRAPH_FIXTURE } });
+    renderShell(<BreadcrumbStrip />, { pathname: '/p/agentos/map/sales' });
     await waitFor(() => expect(screen.getByText('4')).toBeTruthy());
     expect(screen.getByText('22')).toBeTruthy();
   });
@@ -49,8 +49,8 @@ describe('BreadcrumbStrip (§2.0 / §2.2)', () => {
   it('YOUR TREE is a toggle that tells the canvas to filter', async () => {
     const filter = vi.fn();
     on('shell:yourTree', filter);
-    stubFetch({ '/api/graph': { json: GRAPH_FIXTURE } });
-    renderShell(<BreadcrumbStrip />, { pathname: '/map/sales' });
+    stubFetch({ '/api/p/agentos/graph': { json: GRAPH_FIXTURE } });
+    renderShell(<BreadcrumbStrip />, { pathname: '/p/agentos/map/sales' });
 
     const toggle = screen.getByRole('button', { name: /your tree/i });
     expect(toggle.getAttribute('aria-pressed')).toBe('false');

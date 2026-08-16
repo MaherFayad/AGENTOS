@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   breadcrumbFor,
   parseShellRoute,
+  projectPrefix,
+  projectTrail,
   searchPlaceholder,
+  splitProject,
+  switchProjectHref,
   VIEWS,
   viewHasLiveCounter,
   viewHasZoom,
   viewHref,
   viewSurface,
+  withProject,
 } from './route';
 
 describe('parseShellRoute', () => {
@@ -42,6 +47,116 @@ describe('parseShellRoute', () => {
 
   it('builds tab hrefs', () => {
     expect(viewHref('sessions')).toBe('/sessions');
+  });
+});
+
+describe('the project segment (M15 · Plan §9)', () => {
+  it('reads /p/:project off the front of every view path', () => {
+    expect(parseShellRoute('/p/agentos/map')).toMatchObject({ project: 'agentos', view: 'map' });
+    expect(parseShellRoute('/p/agentos/map/sales/account-enrichment')).toMatchObject({
+      project: 'agentos',
+      view: 'map',
+      department: 'sales',
+      agent: 'account-enrichment',
+    });
+    expect(parseShellRoute('/p/client-x/chart/marketing')).toMatchObject({
+      project: 'client-x',
+      view: 'chart',
+      department: 'marketing',
+    });
+    expect(parseShellRoute('/p/agentos/dashboards/pipeline')).toMatchObject({
+      project: 'agentos',
+      panel: 'pipeline',
+    });
+    expect(parseShellRoute('/p/agentos/sessions/abc123')).toMatchObject({
+      project: 'agentos',
+      session: 'abc123',
+    });
+  });
+
+  it('reports null — never a default — when the URL does not name a project', () => {
+    // The whole axis rests on this: a missing segment is a question the resolver asks the
+    // coordinator, not a value any pure function is allowed to invent.
+    expect(parseShellRoute('/map/sales').project).toBeNull();
+    expect(parseShellRoute('/').project).toBeNull();
+    expect(projectPrefix(null)).toBe('');
+    expect(withProject('/map/sales', null)).toBe('/map/sales');
+  });
+
+  it('refuses the reserved slugs, so /p/all and /p/api are not projects', () => {
+    // `RESERVED_PROJECT_SLUGS` in packages/contracts. `/p/all/...` is the deliberate
+    // cross-project namespace; reading it as a project called "all" would make the one
+    // URL that means "every project" mean "one project named all".
+    expect(splitProject('/p/all/map')).toEqual({ project: null, rest: ['p', 'all', 'map'] });
+    expect(splitProject('/p/api/map').project).toBeNull();
+    expect(splitProject('/p/p/map').project).toBeNull();
+    // Not a slug at all.
+    expect(splitProject('/p/Not_A_Slug/map').project).toBeNull();
+  });
+
+  it('keeps every generated href inside the project', () => {
+    const route = parseShellRoute('/p/agentos/map/sales/account-enrichment');
+    expect(viewHref('chart', route.project)).toBe('/p/agentos/chart');
+    expect(breadcrumbFor(route)).toEqual({ label: 'ALL JOBS', href: '/p/agentos/map/sales' });
+    expect(breadcrumbFor(parseShellRoute('/p/agentos/map/sales'))).toEqual({
+      label: 'ALL DEPARTMENTS',
+      href: '/p/agentos/map',
+    });
+    expect(breadcrumbFor(parseShellRoute('/p/agentos/dashboards/pipeline'))).toEqual({
+      label: 'ALL DASHBOARDS',
+      href: '/p/agentos/dashboards',
+    });
+  });
+
+  it('is round-trippable: parse ∘ build is the identity on the project', () => {
+    for (const path of ['/p/agentos/map', '/p/client-x/chart/sales', '/p/a1/dashboards/x']) {
+      const route = parseShellRoute(path);
+      expect(parseShellRoute(viewHref(route.view, route.project)).project).toBe(route.project);
+    }
+  });
+});
+
+describe('switchProjectHref — what survives a project change', () => {
+  it('keeps the view and the department', () => {
+    // `project-scoping.md` invariant 6: the shape is shared, the roster is not. Every
+    // project has the same departments, so a department transfers.
+    expect(switchProjectHref(parseShellRoute('/p/a/map/sales'), 'b')).toBe('/p/b/map/sales');
+    expect(switchProjectHref(parseShellRoute('/p/a/chart/marketing'), 'b')).toBe('/p/b/chart/marketing');
+  });
+
+  it('drops the agent, because the same slug in two projects is a different agent', () => {
+    // ADR-014 §2: `agent_ref` is `{project}/{department}/{slug}`. Carrying the leaf across
+    // either 404s or — worse — lands on a same-named agent with a different history and
+    // a different capability ceiling, which is the bug class with no error message.
+    expect(switchProjectHref(parseShellRoute('/p/a/map/sales/account-enrichment'), 'b')).toBe('/p/b/map/sales');
+  });
+
+  it('drops the panel and the session', () => {
+    expect(switchProjectHref(parseShellRoute('/p/a/dashboards/pipeline'), 'b')).toBe('/p/b/dashboards');
+    expect(switchProjectHref(parseShellRoute('/p/a/sessions/xyz'), 'b')).toBe('/p/b/sessions');
+  });
+
+  it('works from an unscoped URL, which is how the first switch ever happens', () => {
+    expect(switchProjectHref(parseShellRoute('/map/sales'), 'b')).toBe('/p/b/map/sales');
+  });
+});
+
+describe('projectTrail', () => {
+  it('is project › department › leaf, with the leaf whatever the view calls it', () => {
+    expect(projectTrail(parseShellRoute('/p/agentos/map/sales/account-enrichment'))).toEqual({
+      project: 'agentos',
+      department: 'sales',
+      leaf: 'account-enrichment',
+    });
+    expect(projectTrail(parseShellRoute('/p/agentos/dashboards/pipeline'))).toEqual({
+      project: 'agentos',
+      department: null,
+      leaf: 'pipeline',
+    });
+  });
+
+  it('never substitutes a project it was not given', () => {
+    expect(projectTrail(parseShellRoute('/map/sales')).project).toBeNull();
   });
 });
 

@@ -7,7 +7,7 @@ import { GRAPH_FIXTURE, renderShell, routerMock, stubFetch } from './test-harnes
 vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
 vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
 
-beforeEach(() => stubFetch({ '/api/graph': { json: GRAPH_FIXTURE } }));
+beforeEach(() => stubFetch({ '/api/p/agentos/graph': { json: GRAPH_FIXTURE } }));
 afterEach(() => {
   vi.unstubAllGlobals();
   routerMock.push.mockClear();
@@ -54,7 +54,9 @@ describe('SearchPill (§2.0)', () => {
         source: 'search',
       }),
     );
-    expect(routerMock.push).toHaveBeenCalledWith('/map/sales/account-enrichment');
+    // M15: a search result is a link into *this project's* map (ADR-014 §2 — the same
+    // slug in two projects is two different agents).
+    expect(routerMock.push).toHaveBeenCalledWith('/p/agentos/map/sales/account-enrichment');
   });
 
   it('walks results with the arrow keys', async () => {
@@ -88,7 +90,7 @@ describe('SearchPill (§2.0)', () => {
 
   it('explains an empty index instead of showing an empty box', async () => {
     vi.unstubAllGlobals();
-    stubFetch({ '/api/graph': 'network-error' });
+    stubFetch({ '/api/p/agentos/graph': 'network-error' });
     renderShell(<SearchPill />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     type('anything');

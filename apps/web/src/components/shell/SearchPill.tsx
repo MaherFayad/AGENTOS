@@ -101,11 +101,16 @@ export function SearchPill(): React.JSX.Element {
   const placeholder = searchPlaceholder(route.view);
 
   return (
-    <div className="relative">
-      {/* 150px on the narrowest phones so the pill and `+ New session` still fit one row
-          at 375px (§3.6); the spec's width from `sm` up. Search is the keyboard path to
-          the canvas, so it is never the control that gets dropped. */}
-      <div className="flex h-8 w-[150px] items-center gap-2 rounded-full border border-line bg-card px-3 transition-colors focus-within:border-line-2 hover:border-line-2 min-[420px]:w-[184px] sm:w-[220px]">
+    <div className="relative min-w-0 flex-1 sm:flex-none">
+      {/* Below `sm` the pill takes whatever the left cluster has left, capped at 150px;
+          from `sm` up it is the spec's fixed 220px.
+
+          It used to be three hardcoded widths. M15 put the project switcher to its left
+          (`Plan §23.10`) and a fourth number would have been a fourth thing to re-measure
+          the next time the cluster changes — so the pill flexes instead and the arithmetic
+          stops being anyone's job. Search is the keyboard path to a canvas galaxy (§2.0),
+          so it is never the control that gets dropped; it is the one that gives ground. */}
+      <div className="flex h-8 w-full min-w-0 max-w-[150px] items-center gap-2 rounded-full border border-line bg-card px-3 transition-colors focus-within:border-line-2 hover:border-line-2 sm:w-[220px] sm:max-w-none">
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" className="shrink-0 text-ink-2">
           <circle cx="7" cy="7" r="4.5" />
           <path d="M10.5 10.5 14 14" strokeLinecap="round" />
@@ -139,8 +144,12 @@ export function SearchPill(): React.JSX.Element {
         {showPanel ? `${results.length} result${results.length === 1 ? '' : 's'} for ${query}` : ''}
       </p>
 
+      {/* `start-0`, not `left-0`: in Arabic the pill sits at the right edge of the bar and
+          a left-anchored panel would open off the far side of the control (§1.4). Same
+          reason for `text-start` on the option rows. Found by `check-rtl` once it learned
+          to see past JSX text nodes; fixed here rather than filed, because it is my file. */}
       {showPanel && (
-        <div className="absolute left-0 top-[38px] z-drawer w-[320px]">
+        <div className="absolute start-0 top-[38px] z-drawer w-[320px]">
         <GlassPanel radius="md" shadow="drawer" className="block overflow-hidden p-1">
           <ul id={listId} role="listbox" aria-label={`${placeholder} results`} className="max-h-[320px] overflow-y-auto">
             {results.map((result, index) => (
@@ -163,7 +172,7 @@ export function SearchPill(): React.JSX.Element {
                   onMouseEnter={() => setActive(index)}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => select(result.item)}
-                  className={`flex w-full items-baseline gap-2 rounded-[10px] px-3 py-2 text-left transition-colors ${
+                  className={`flex w-full items-baseline gap-2 rounded-[10px] px-3 py-2 text-start transition-colors ${
                     index === active ? 'bg-card-2' : 'bg-transparent'
                   }`}
                 >
@@ -186,6 +195,14 @@ export function SearchPill(): React.JSX.Element {
               </li>
             )}
           </ul>
+
+          {/* The index's scope, printed only when it is not this project's (M15).
+              Under a cascade the same (department, slug) in two projects is two different
+              agents (ADR-014 §2), so "which project are these results from" is not a
+              detail — flying the map to a node that is not on it is the failure. */}
+          {search.scopeMessage !== null && (
+            <p className="border-t border-line px-3 py-2 text-meta text-ink-2">{search.scopeMessage}</p>
+          )}
         </GlassPanel>
         </div>
       )}

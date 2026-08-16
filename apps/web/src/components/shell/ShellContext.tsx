@@ -14,6 +14,7 @@ import { emit, on } from '../../lib/shell-bus';
 import { useReducedMotion } from '../primitives/motion';
 import { parseShellRoute, type ShellRoute } from './route';
 import { useGraphIndex, usePanelIndex, useSearchIndex, type DepartmentCounts, type SearchIndex } from './useSearchIndex';
+import { useProjectScope, useProjectsEndpoint, type ProjectScope, type ProjectsReading } from './useProjects';
 import type { Resource } from './useEndpoint';
 import type { GraphIndex } from './useSearchIndex';
 
@@ -37,6 +38,17 @@ export function usePrefersReducedMotion(): boolean {
 
 export interface ShellState {
   route: ShellRoute;
+  /**
+   * Which project the shell is showing, and how sure it is (M15, `Plan §9`).
+   *
+   * Read this rather than `route.project` whenever the answer is going to be *displayed*:
+   * `route.project` is what the URL says, `project` is what the URL says **plus what the
+   * coordinator was willing to confirm about it**, and those are different claims. The
+   * cost ticker, the breadcrumb and the switcher all need the second one.
+   */
+  project: ProjectScope;
+  /** The raw `GET /api/projects` read, for surfaces that need the failure sentence. */
+  projects: Resource<ProjectsReading>;
   /** Camera scale reported by the canvas; `null` until a canvas reports one. */
   zoom: number | null;
   /** `YOUR TREE` filter — installed/live agents only (§2.2). */
@@ -84,9 +96,16 @@ export function ShellProvider({ children }: { children: ReactNode }): React.JSX.
   const pathname = usePathname() ?? '/map';
   const route = useMemo(() => parseShellRoute(pathname), [pathname]);
 
-  const graph = useGraphIndex();
-  const panels = usePanelIndex();
-  const search = useSearchIndex(graph, panels);
+  const projects = useProjectsEndpoint();
+  const project = useProjectScope(route.project, projects);
+
+  // Both index reads are project-scoped: the searchable universe is one project's
+  // resolved library (ADR-014 §2 — the same `(department, slug)` in two projects is two
+  // agents), so a search index that spans projects would offer to fly the map to a node
+  // that is not on it.
+  const graph = useGraphIndex(route.project);
+  const panels = usePanelIndex(route.project);
+  const search = useSearchIndex(graph, panels, route.project);
   const reducedMotion = usePrefersReducedMotion();
 
   const [zoom, setZoom] = useState<number | null>(null);
@@ -119,6 +138,8 @@ export function ShellProvider({ children }: { children: ReactNode }): React.JSX.
   const value = useMemo<ShellState>(
     () => ({
       route,
+      project,
+      projects,
       zoom,
       yourTree,
       toggleYourTree,
@@ -129,7 +150,7 @@ export function ShellProvider({ children }: { children: ReactNode }): React.JSX.
       helpOpen,
       setHelpOpen,
     }),
-    [route, zoom, yourTree, toggleYourTree, counts, message, search, reducedMotion, helpOpen],
+    [route, project, projects, zoom, yourTree, toggleYourTree, counts, message, search, reducedMotion, helpOpen],
   );
 
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;

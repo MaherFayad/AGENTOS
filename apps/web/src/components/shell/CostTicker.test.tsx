@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CostTicker } from './CostTicker';
-import { renderShell, stubFetch } from './test-harness';
+import { PROJECTS_FIXTURE, renderShell, stubFetch } from './test-harness';
 
 vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
 vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
@@ -46,8 +46,20 @@ const ABSENT = {
     'the dev profile. Start the stack with --profile obs if you expected runs here. Runs still work; they are just not recorded.',
 };
 
+/**
+ * The ticker under the state this app is actually in after M15: a project-scoped URL, and
+ * a runner that answers the project-scoped spend route.
+ *
+ * Scope is a second axis, not a sixth reading. Every assertion below is about *what the
+ * number is*; the block at the bottom is about *what it is a number about*, and the two
+ * fail independently on purpose — a correctly-drawn figure about the wrong project would
+ * pass every test in this file before M15.
+ */
 function ticker(json: unknown): void {
-  stubFetch({ '/api/cost/today': { json } });
+  stubFetch({
+    '/api/p/agentos/cost/today': { json },
+    '/api/projects': { json: PROJECTS_FIXTURE },
+  });
   renderShell(<CostTicker />);
 }
 
@@ -83,8 +95,8 @@ describe('CostTicker (§2.0, §3.5)', () => {
     expect(screen.getByText(UNREACHABLE.hint)).toBeTruthy();
     // The three things the old copy did, none of which may come back.
     expect(screen.queryByText(/\$0\.00/)).toBeNull();
-    expect(screen.queryByText(/first time an agent run is traced/i)).toBeNull();
-    expect(screen.queryByText(/isn't reporting spend yet/i)).toBeNull();
+    expect(screen.queryByText(/fills in the first time/i)).toBeNull();
+    expect(screen.queryByText(/doesn't answer today's spend/i)).toBeNull();
   });
 
   it('treats a missing ledger as a configuration, not an outage', async () => {
@@ -116,7 +128,7 @@ describe('CostTicker (§2.0, §3.5)', () => {
     renderShell(<CostTicker />);
     await waitFor(() => expect(screen.getByText('no cost data')).toBeTruthy());
     expect(pill().dataset.costState).toBe('unavailable');
-    expect(screen.getByText(/Langfuse isn't reporting spend yet/i)).toBeTruthy();
+    expect(screen.getByText(/doesn't answer today's spend for this project yet/i)).toBeTruthy();
     expect(screen.queryByText(/\$0\.00/)).toBeNull();
   });
 
@@ -125,7 +137,7 @@ describe('CostTicker (§2.0, §3.5)', () => {
     await waitFor(() => expect(screen.getByText('no cost data')).toBeTruthy());
     // Not the not-built sentence: a route that answers exists.
     expect(screen.getByText(/a bug here, not a fact about your spend/i)).toBeTruthy();
-    expect(screen.queryByText(/first time an agent run is traced/i)).toBeNull();
+    expect(screen.queryByText(/fills in the first time/i)).toBeNull();
   });
 
   it('refuses to guess when `usd` is null and there is no ledger state to read', async () => {
@@ -138,9 +150,63 @@ describe('CostTicker (§2.0, §3.5)', () => {
   });
 
   it('reports a network failure as a network failure', async () => {
-    stubFetch({ '/api/cost/today': 'network-error' });
+    stubFetch({ '/api/p/agentos/cost/today': 'network-error' });
     renderShell(<CostTicker />);
     await waitFor(() => expect(screen.getByText('no cost data')).toBeTruthy());
     expect(screen.getByText(/off the tailnet/i)).toBeTruthy();
+  });
+});
+
+describe("CostTicker — whose spend is this? (M15, `Plan §23.10`)", () => {
+  it('asks only the project-scoped route, and says nothing extra when it answers', async () => {
+    ticker({ usd: 12.4, runs: 3, unpricedRuns: 0, ledger: CONNECTED });
+    await waitFor(() => expect(screen.getByText('$12.40 today')).toBeTruthy());
+    expect(pill().dataset.costScope).toBe('project');
+    const urls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
+      (call) => call[0] as string,
+    );
+    expect(urls).toContain('/api/p/agentos/cost/today');
+    // `LEGACY_COST_TICKER_PATH` is mounted and answers 400 by design: "It is not a
+    // fallback and must not be used as one." So it is never called — not on success, and
+    // (below) not on failure either.
+    expect(urls).not.toContain('/api/cost/today');
+  });
+
+  it('never reads the pre-project route, even when the scoped one is missing', async () => {
+    // The tempting bug: the scoped route 404s, a real number is available one path over,
+    // and the pill shows it. That number is about every project this runner serves.
+    stubFetch({
+      '/api/projects': { json: PROJECTS_FIXTURE },
+      '/api/cost/today': { json: { usd: 99.99, runs: 3, ledger: CONNECTED } },
+    });
+    renderShell(<CostTicker />);
+    await waitFor(() => expect(screen.getByText('no cost data')).toBeTruthy());
+    expect(screen.queryByText(/99\.99/)).toBeNull();
+    const urls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
+      (call) => call[0] as string,
+    );
+    expect(urls).not.toContain('/api/cost/today');
+  });
+
+  it('asks nothing at all when the URL names no project, and says why', async () => {
+    stubFetch({ '/api/cost/today': { json: { usd: 12.4, runs: 1, ledger: CONNECTED } } });
+    renderShell(<CostTicker />, { pathname: '/map' });
+    await waitFor(() => expect(pill().dataset.costScope).toBe('unscoped'));
+    expect(screen.getByText(/does not name a project/i)).toBeTruthy();
+    expect(screen.queryByText(/\$12\.40/)).toBeNull();
+    // Not one request: there is no endpoint for "spend, unscoped" any more.
+    const urls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
+      (call) => call[0] as string,
+    );
+    expect(urls.some((url) => url.includes('cost/today'))).toBe(false);
+  });
+
+  it('does not draw a project zero from a project it never asked about', async () => {
+    // The sixth question, stated as the assertion it reduces to: no path through this
+    // component produces `$0.00` unless the ledger, for *this project*, said so.
+    stubFetch({ '/api/cost/today': { json: { usd: null, runs: 0, ledger: CONNECTED } } });
+    renderShell(<CostTicker />, { pathname: '/map' });
+    await waitFor(() => expect(pill().dataset.costScope).toBe('unscoped'));
+    expect(screen.queryByText(/\$0\.00/)).toBeNull();
   });
 });

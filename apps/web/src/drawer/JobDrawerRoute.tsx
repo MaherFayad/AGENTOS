@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Map-route mount. `/map/:department/:agent` is the drawer, so it can be linked and
- * closed with the back button (shell `route.ts`). The canvas underneath is
+ * Map-route mount. `/p/:project/map/:department/:agent` is the drawer, so it can be
+ * linked and closed with the back button (shell `route.ts`). The canvas underneath is
  * `map-galaxy-engineer`'s.
  *
  * Owner: drawer-engineer
@@ -10,11 +10,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useShell, withProject } from '@/components/shell';
 import { onDrawerOpen } from './events';
 import { JobDrawer, type DrawerSide } from './JobDrawer';
 
 export function JobDrawerRoute({ slug, side = 'left' }: { slug: string; side?: DrawerSide }) {
   const router = useRouter();
+  const { route } = useShell();
   const [current, setCurrent] = useState(slug);
 
   useEffect(() => {
@@ -35,7 +37,8 @@ export function JobDrawerRoute({ slug, side = 'left' }: { slug: string; side?: D
       open
       onClose={() => {
         const department = current.split('/')[0];
-        router.push(department ? `/map/${department}` : '/map');
+        // M15: closing the drawer stays in the project it was opened in.
+        router.push(withProject(department ? `/map/${department}` : '/map', route.project));
       }}
     />
   );

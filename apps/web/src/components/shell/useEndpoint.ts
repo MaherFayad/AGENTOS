@@ -42,6 +42,21 @@ export interface EndpointOptions<T> {
   /** Poll interval in ms. Polling pauses while the tab is hidden. */
   intervalMs: number;
   /**
+   * Shown when the caller passes `url: null` — *there is nothing to ask for*, as opposed
+   * to something being wrong with asking.
+   *
+   * M15 created this case: every data route is now `/api/p/:project/…`, so a URL that
+   * does not name a project has no endpoint at all. The shell must not paper over that by
+   * calling the pre-project spelling. `packages/contracts` mounts those still, answering
+   * **400 `project_scope_missing`**, and says why in as many words:
+   *
+   * > *"It is not a fallback and must not be used as one … answering it with a plausible
+   * > `usd: null` would hide the migration from the only people who can finish it."*
+   *
+   * So the shell does not call them, and this sentence is what it says instead.
+   */
+  noTargetMessage?: string;
+  /**
    * Narrow the JSON to `T`, or return `null` to mean "the shape isn't what we agreed"
    * — which is reported as unavailable, never rendered as a number.
    *
@@ -67,7 +82,7 @@ export interface EndpointOptions<T> {
  * Deliberately not SWR/react-query: two endpoints, no cache sharing, no mutations. A
  * dependency for this would be 40kB to save 40 lines.
  */
-export function useEndpoint<T>(url: string, options: EndpointOptions<T>): Resource<T> {
+export function useEndpoint<T>(url: string | null, options: EndpointOptions<T>): Resource<T> {
   const { intervalMs } = options;
   const [resource, setResource] = useState<Resource<T>>({ state: 'loading' });
 
@@ -77,6 +92,13 @@ export function useEndpoint<T>(url: string, options: EndpointOptions<T>): Resour
 
   const read = useCallback(
     async (signal: AbortSignal) => {
+      if (url === null) {
+        setResource({
+          state: 'unavailable',
+          message: optionsRef.current.noTargetMessage ?? optionsRef.current.notBuiltMessage,
+        });
+        return;
+      }
       try {
         const response = await fetch(url, { signal, headers: { accept: 'application/json' } });
         if (response.status === 404 || response.status === 501) {

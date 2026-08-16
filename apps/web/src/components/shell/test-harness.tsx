@@ -78,7 +78,43 @@ export const GRAPH_FIXTURE = {
   ],
 };
 
+/**
+ * `GET /api/projects` as `packages/contracts` defines it, with the one project this repo
+ * actually has (`Plan §24`: AgentOS becomes `project: AgentOS` in place).
+ *
+ * `scopeEnforced: true` here is a *fixture*, not a claim about the running system — the
+ * real runner reports `false` or `null` today. Tests that care about the honest case say
+ * so explicitly rather than relying on this default, because a fixture that quietly
+ * asserts an isolation guarantee is the same shape of lie the switcher exists to avoid.
+ */
+export const PROJECTS_FIXTURE = {
+  projects: [
+    {
+      id: 'a1b2c3d4-0000-0000-0000-000000000000',
+      slug: 'agentos',
+      name: 'AgentOS',
+      status: 'active',
+      libraryPath: '/repo',
+      libraryRemote: null,
+      hostAffinity: [],
+      hostAffinityEnforced: false,
+      budgetMonthlyUsd: null,
+      budgetEnforced: false,
+      defaultAccountId: null,
+    },
+  ],
+  mounted: 'agentos',
+  scopeEnforced: true,
+};
+
+/**
+ * The default pathname is project-scoped, because after M15 every real URL is
+ * (`Plan §9`). A test that wants the pre-project shape asks for it by name — and several
+ * do, since "a link that does not say which project" is now a first-class case.
+ */
+export const DEFAULT_PATHNAME = '/p/agentos/map';
+
 export function renderShell(ui: ReactNode, options: { pathname?: string } = {}): RenderResult {
-  pathnameRef.current = options.pathname ?? '/map';
+  pathnameRef.current = options.pathname ?? DEFAULT_PATHNAME;
   return render(<ShellProvider>{ui}</ShellProvider>);
 }

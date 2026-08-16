@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { neighbours, type Panel } from '@agnetos/contracts';
+import { useProjectHref } from '@/components/shell/useProjectHref';
 import { ProviderGlyph } from '../lib/icons';
 import { buildPromptFor } from '../lib/prompt';
 import { DashboardQueryProvider } from '../data/use-resolved';
@@ -20,6 +21,8 @@ export function DashboardDetail({
   panels: readonly Panel[];
 }): React.JSX.Element {
   const router = useRouter();
+  // M15: the prev/next ring stays inside the project (`Plan §9`).
+  const href = useProjectHref();
   const ring = neighbours([...panels], panel);
   const filter = panel.filters;
   const [selected, setSelected] = useState(filter?.default ?? filter?.options[0] ?? '');
@@ -46,7 +49,7 @@ export function DashboardDetail({
         <button
           type="button"
           className={cx(s.rail, s.railPrev)}
-          onClick={() => router.push(`/dashboards/${ring.prev.id}`)}
+          onClick={() => router.push(href(`/dashboards/${ring.prev.id}`))}
           aria-label={`Previous: ${ring.prev.railTitle}`}
         >
           {/* `tone="muted"` (--ink-2), not the primitive's `faint` default. §9.3 blesses
@@ -61,7 +64,7 @@ export function DashboardDetail({
         <button
           type="button"
           className={cx(s.rail, s.railNext)}
-          onClick={() => router.push(`/dashboards/${ring.next.id}`)}
+          onClick={() => router.push(href(`/dashboards/${ring.next.id}`))}
           aria-label={`Next: ${ring.next.railTitle}`}
         >
           <span className={s.railDot} aria-hidden="true" />

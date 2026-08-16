@@ -32,7 +32,10 @@ describe('ViewTabs (§2.0 segmented control)', () => {
   it('navigates on click rather than holding its own state', () => {
     renderShell(<ViewTabs />);
     fireEvent.click(screen.getByRole('tab', { name: 'SESSIONS' }));
-    expect(routerMock.push).toHaveBeenCalledWith('/sessions');
+    // M15: the project travels with the tab. Changing view must not change project — a
+    // tab that dropped the segment would land on the legacy resolver and be redirected
+    // back, which looks like a bug and is one.
+    expect(routerMock.push).toHaveBeenCalledWith('/p/agentos/sessions');
   });
 
   // On a 375px phone the four labels overflow and TopBar scrolls them. Landing on

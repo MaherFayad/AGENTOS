@@ -11,6 +11,12 @@ import type { Panel } from '@agnetos/contracts';
 
 export function buildPromptFor(panel: Panel): string {
   const intent = panel.buildPrompt.trim();
+  // rtl-exempt: instructions to a model, not copy for a reader. Every line below is
+  // addressed to Claude Code and names files, widget types and validator commands; it is
+  // never rendered in the product and translating it would break the tool it drives.
+  // Added by rtl-arabic-pdpl-specialist 2026-08-17 when check-rtl learned to see strings
+  // in arrays and object literals — this is the one place in apps/web where that widening
+  // finds prose that is genuinely not user-facing. (§1.4 · check-rtl.mjs rule 3b)
   return [
     `Rebuild the Command Center panel \`${panel.id}\` for AgnetOS.`,
     '',

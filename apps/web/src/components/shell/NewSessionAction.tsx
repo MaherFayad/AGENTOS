@@ -3,6 +3,8 @@
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eyebrow, Pill } from './ui';
+import { withProject } from './route';
+import { useShell } from './ShellContext';
 
 /**
  * §2.0 top-right: the copper eyebrow label plus their "Book a call" slot, which the spec
@@ -16,11 +18,22 @@ import { Eyebrow, Pill } from './ui';
  * `sessions-relay-engineer` owns what happens there. Spawning is a relay concern and the
  * E2E encryption boundary is theirs to keep intact (§3.1).
  */
-export const NEW_SESSION_HREF = '/sessions?new=1';
+/**
+ * `/p/:project/sessions?new=1`, or `/sessions?new=1` while the project is unknown.
+ *
+ * A function rather than the constant it replaced (M15): a session is started *in* a
+ * project — that is which library its agents resolve from and which account pays for it
+ * (`Plan §11`) — so a constant href would have started every session in whichever project
+ * the resolver happened to land on.
+ */
+export function newSessionHref(project: string | null): string {
+  return withProject('/sessions?new=1', project);
+}
 
 export function NewSessionAction(): React.JSX.Element {
   const router = useRouter();
-  const start = useCallback(() => router.push(NEW_SESSION_HREF), [router]);
+  const { route } = useShell();
+  const start = useCallback(() => router.push(newSessionHref(route.project)), [router, route.project]);
 
   return (
     <div className="flex items-center gap-3">

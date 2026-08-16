@@ -21,11 +21,14 @@ export function ViewTabs(): React.JSX.Element {
   const { route, reducedMotion } = useShell();
   const host = useRef<HTMLDivElement>(null);
 
+  // The project travels with the tab (M15): switching MAP → CHART must not silently leave
+  // the project you were in, and `viewHref` degrades to the unscoped path when the URL
+  // never named one, so this call site has no `null` case of its own to get wrong.
   const onChange = useCallback(
     (value: ShellView) => {
-      router.push(viewHref(value));
+      router.push(viewHref(value, route.project));
     },
-    [router],
+    [router, route.project],
   );
 
   /**

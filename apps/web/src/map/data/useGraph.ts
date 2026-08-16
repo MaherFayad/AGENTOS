@@ -6,56 +6,73 @@ import { applyBrainCompleteness, applyGraphDelta } from './delta';
 import { parseGraphPayload } from './parse';
 import { graphArtifactUrl, graphHttpUrl, graphSocketUrl } from './socket';
 
+/**
+ * Why there is no map, in two parts: a catalogue key we can translate, and the
+ * runner's own English sentence when it sent one.
+ *
+ * They are kept apart rather than collapsed into one `message` string because
+ * only one of them survives a change of locale. `serverOrCatalogue` (i18n) picks:
+ * in English the runner's sentence is more specific and wins; in Arabic an
+ * English sentence is not more specific, it is unreadable, and the catalogue
+ * wins. Localising the runner's half means it sends a key and its variables —
+ * `api-contracts.md`, `runner-engineer`'s, filed rather than assumed.
+ */
+export interface GraphUnavailable {
+  state: 'unavailable';
+  reason: MapEmptyKey;
+  /** The runner's own English sentence, or null when it sent none. */
+  serverMessage: string | null;
+}
+
+export type MapEmptyKey = 'map.empty.notBuilt' | 'map.empty.malformed' | 'map.empty.offline';
+
 export type GraphResource =
   | { state: 'loading' }
   | { state: 'ready'; data: GraphPayload }
-  | { state: 'unavailable'; message: string };
+  | GraphUnavailable;
+
+type Failure = { reason: MapEmptyKey; serverMessage: string | null };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-function messageFromBody(json: unknown, fallback: string): string {
-  if (!isRecord(json) || !isRecord(json.error)) return fallback;
+function messageFromBody(json: unknown): string | null {
+  if (!isRecord(json) || !isRecord(json.error)) return null;
   const message = json.error.message;
-  return typeof message === 'string' && message.length > 0 ? message : fallback;
+  return typeof message === 'string' && message.length > 0 ? message : null;
 }
 
-async function fetchPayload(url: string, signal: AbortSignal): Promise<GraphPayload | { message: string } | 'abort'> {
+async function fetchPayload(url: string, signal: AbortSignal): Promise<GraphPayload | Failure | 'abort'> {
   try {
     const response = await fetch(url, { signal, headers: { accept: 'application/json' } });
     if (response.status === 404 || response.status === 501 || response.status === 503) {
       const body: unknown = await response.json().catch(() => null);
-      return {
-        message: messageFromBody(
-          body,
-          'The map layout has not been built yet. Run `npm run graph:build` — until then the galaxy is empty on purpose.',
-        ),
-      };
+      return { reason: 'map.empty.notBuilt', serverMessage: messageFromBody(body) };
     }
     if (!response.ok) {
-      return { message: "Can't reach the runner, so there is no map to draw." };
+      return { reason: 'map.empty.offline', serverMessage: null };
     }
     const parsed = parseGraphPayload(await response.json());
     if (!parsed) {
-      return { message: 'The map layout is not a graph payload, so nothing is drawn.' };
+      return { reason: 'map.empty.malformed', serverMessage: null };
     }
     return parsed;
   } catch (error) {
     if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return 'abort';
-    return { message: "Can't reach the runner, so there is no map to draw." };
+    return { reason: 'map.empty.offline', serverMessage: null };
   }
 }
 
 async function loadGraph(signal: AbortSignal): Promise<GraphResource | 'abort'> {
   const primary = await fetchPayload(graphHttpUrl(), signal);
   if (primary === 'abort') return 'abort';
-  if (!('message' in primary)) return { state: 'ready', data: primary };
+  if (!('reason' in primary)) return { state: 'ready', data: primary };
 
   const fallback = await fetchPayload(graphArtifactUrl(), signal);
   if (fallback === 'abort') return 'abort';
-  if (!('message' in fallback)) return { state: 'ready', data: fallback };
+  if (!('reason' in fallback)) return { state: 'ready', data: fallback };
 
-  return { state: 'unavailable', message: primary.message };
+  return { state: 'unavailable', reason: primary.reason, serverMessage: primary.serverMessage };
 }
 
 function parseDelta(raw: unknown): GraphDelta | null {

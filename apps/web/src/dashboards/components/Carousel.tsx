@@ -18,12 +18,15 @@ import {
   type DragSample,
   type SpringState,
 } from '../lib/carousel';
+import { useProjectHref } from '@/components/shell/useProjectHref';
 import { ProviderGlyph } from '../lib/icons';
 import { Eyebrow, Pill, carouselMotion, cx, useReducedMotion } from '../ui';
 import s from '../dashboards.module.css';
 
 export function Carousel({ panels }: { panels: readonly Panel[] }): React.JSX.Element {
   const router = useRouter();
+  // M15: a dashboard opens inside the project you are looking at (`Plan §9`).
+  const href = useProjectHref();
   const reduced = useReducedMotion();
   const count = panels.length;
   const [position, setPosition] = useState(0);
@@ -106,7 +109,7 @@ export function Carousel({ panels }: { panels: readonly Panel[] }): React.JSX.El
       pin(Math.round(state.current.position));
       const onFront = (event.target as HTMLElement | null)?.closest?.('[role="option"][aria-selected="true"]');
       const card = panels[frontIndex(state.current.position, count)];
-      if (onFront && card) router.push(`/dashboards/${card.id}`);
+      if (onFront && card) router.push(href(`/dashboards/${card.id}`));
       return;
     }
     const velocity = reduced ? 0 : velocityFrom(samples.current);
@@ -125,7 +128,7 @@ export function Carousel({ panels }: { panels: readonly Panel[] }): React.JSX.El
       event.preventDefault();
       go(step(Math.round(position), 1));
     } else if (event.key === 'Enter' && current) {
-      router.push(`/dashboards/${current.id}`);
+      router.push(href(`/dashboards/${current.id}`));
     }
   };
 
