@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../config.ts';
+import { mountedProject } from '../project.ts';
 import { createRunnerServices, startRun } from '../runService.ts';
 import { isPathInsideScratch, pathArgumentsOf, resolveAllowlist } from '../allowlist.ts';
 import type { AgentSessionFactory } from '../agentSession.ts';
@@ -111,7 +112,7 @@ async function attemptEscape(target: (root: string) => string): Promise<{
     });
     services.session = session;
 
-    const state = await startRun(services, { agent: 'sales/workspace-agent', inputs: {} });
+    const state = await startRun(services, mountedProject(services.config), { agent: 'sales/workspace-agent', inputs: {} });
     await new Promise<void>((resolve) => state.stream.whenEnded(resolve));
 
     let written = false;
@@ -181,7 +182,7 @@ test('a run CAN still write its own artifact — the gate confines, it does not 
 
     const services = createRunnerServices(loadConfig(), { info: () => {}, warn: () => {}, error: () => {} });
     services.session = session;
-    const state = await startRun(services, { agent: 'sales/workspace-agent', inputs: {} });
+    const state = await startRun(services, mountedProject(services.config), { agent: 'sales/workspace-agent', inputs: {} });
     await new Promise<void>((resolve) => state.stream.whenEnded(resolve));
 
     assert.equal(relativeOk, true, 'a relative path is inside the scratch dir');

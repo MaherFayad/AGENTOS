@@ -48,6 +48,27 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
    (proposed).** 90d spans / 400d ledger / forever daily rollup, pending the human.
 6. **Cloud Langfuse regions are refused at sink construction.** Part VII.4 is a flag,
    not boilerplate.
+7. **Every metrics route names its project in its path** (`Plan §10`, ADR-015 Q1) — and
+   there is no default. The pre-project spellings stay mounted and answer **400
+   `project_scope_missing`** naming the scoped path, so a stale client gets a sentence
+   rather than another project's rows or a 404 that reads like a forgotten route.
+8. **Two mechanisms hold the project axis, deliberately redundant.** Every statement
+   carries `project_id = $1` as a bind parameter — that is what filters *today*, because
+   the compose Postgres user is a superuser and therefore bypasses migration 0005's
+   row-level security entirely. And `agnetos.project_id` is set transaction-locally for
+   every read — that is what makes a *forgotten* predicate raise instead of widening the
+   answer, once `infra-compose-engineer` lands the non-superuser role. One mechanism
+   would be a filter; two is a filter plus the thing that catches it going missing.
+9. **`unknown` is not `zero`, and neither is `not yours`.** Five states, five answers:
+   *no runs* → `200` with a real `0`; *ledger unreachable/absent* → nulls with
+   `ledger.state`; *no project named* → `400 project_scope_missing`; *project not served*
+   → `404 project_not_found` / `503 project_not_mounted`; *scope unset inside the
+   database* → `500 project_scope_unset`, **never** `metrics_unavailable`.
+10. **The account split is structural, not demonstrated.** `byAccount` and
+    `/metrics/accounts` exist, carry an explicit `unattributed` bucket, and report
+    `accountsRegistered` alongside so an empty split cannot be read as "one account paid
+    for everything". `ops.billing_account` has zero rows and no run has ever recorded a
+    payer — see `contracts/project-scoping.md` §6.
 
 ## Coverage
 
@@ -72,7 +93,15 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
 | REQ-OBS-17 | §3.5 | Dry runs are traced but excluded from cost, LIVE and status derivation | `apps/runner/src/db/queries.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
 | REQ-OBS-18 | §3.5 | A pending named query returns an empty row set and a reason, not a zero | `apps/runner/src/db/registry.ts` · `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
 | REQ-OBS-19 | §3.5 | Durable LAST RUNS (trace link included) is `GET /api/metrics/runs`; `GET /api/runs` is not claimed | `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
-| REQ-OBS-20 | §3.5 | Missing Postgres does not crash the runner; `/api/cost/today` still answers `usd: null` | `apps/runner/src/routes/register-metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-20 | §3.5 | Missing Postgres does not crash the runner; `/api/p/:project/cost/today` still answers `usd: null` | `apps/runner/src/routes/register-metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-21 | §3.5 | Every metrics route is served under `/api/p/:project`; the pre-project spelling answers `400 project_scope_missing` naming the scoped path | `apps/runner/src/routes/metrics.ts` · `apps/runner/src/routes/register-metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-22 | §3.5 | Every ops and named query carries `project_id = $1` as a bind parameter, enforced at bind time and at build time | `apps/runner/src/db/queries.ts` · `apps/runner/src/db/registry.ts` · `scripts/check-metrics.mjs` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-23 | §3.5 | Every metrics read runs inside a READ ONLY transaction with `agnetos.project_id` set transaction-locally, so migration 0005's RLS can fire | `apps/runner/src/db/scope.ts` · `apps/runner/src/db/client.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` · `apps/runner/src/db/__tests__/sql-executes.test.ts` |
+| REQ-OBS-24 | §3.5 | A scope violation (SQLSTATE 42501 from `ops.project_visible`) answers `500 project_scope_unset`, never `503 metrics_unavailable` | `apps/runner/src/db/scope.ts` · `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-25 | §3.5 | Every metrics body carries a `project` sibling naming the project the numbers are about | `apps/runner/src/routes/metrics.ts` · `apps/runner/src/routes/register-metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-26 | §3.5 | A run id belonging to another project answers `404 run_not_in_project`, not an empty span list | `apps/runner/src/db/queries.ts` · `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-27 | §3.5 | *(`Plan §11` — the gate reads the spec of record only, per ADR-013, so this is filed under §3.5, the cost surface it extends)* Cost surfaces split by billing account with an explicit `unattributed` bucket, and report how many accounts are registered | `apps/runner/src/db/queries.ts` · `apps/runner/src/db/registry.ts` · `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
+| REQ-OBS-28 | §3.5 | `check-metrics` prints a provenance banner on every run, green or red (tokens contract §8b) | `scripts/check-metrics.mjs` · `scripts/lib/provenance.mjs` | — *(banner is the evidence; `provenance.mjs` itself is pinned by `scripts/__tests__/provenance.test.mjs`)* |
 
 ## Interfaces we expose
 
@@ -82,14 +111,21 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
 | Surface | Shape |
 |---|---|
 | `obs.startRun(init)` | `{ runId, traceId, traceUrl, tool, usage, event, finish }` |
-| `GET /api/cost/today` | `{ usd: number \| null, runs, unpricedRuns, timezone, asOf }` |
-| `GET /api/metrics/live` | `{ live, liveAgents, byDepartment, failing, failingAgents, totalSource, asOf }` — no `total` |
-| `GET /api/metrics/status` | `{ agents: [{ agent, department, status, errorRate, reason, runs, successfulRuns, lastRunAt }], thresholds, asOf }` |
-| `GET /api/metrics/query?metric=&range=&agent=&department=` | `{ metric, range, filter, value, runs, previous, delta, asOf }` |
-| `GET /api/metrics/activity?limit=&department=` | `{ items: [{ runId, at, time, event, detail, agent, agentName, department, status, traceUrl }] }` |
-| `GET /api/metrics/runs?agent=&limit=` | `{ runs: [{ runId, agent, agentName, startedAt, status, durationMs, costUsd, costSource, traceUrl }] }` |
-| `GET /api/runs/:runId/tools` | `{ toolCalls: [{ seq, name, status, startedAt, durationMs, error }] }` |
-| `GET /api/metrics/sql` / `GET /api/metrics/sql/:name` | named-query catalogue / rows |
+Every path below is prefixed with **`/api/p/:project`**, and every 200 body carries two
+siblings the table does not repeat: `ledger: {state, since, attempts, lastError,
+nextRetryAt, hint}` and `project: {slug, id, state: "mounted"}`. A consumer that renders a
+zero must read `ledger.state` first (`state: "connected"` is the only licence to draw one)
+and should read `project.slug` before labelling it.
+
+| `GET …/cost/today` | `{ usd: number \| null, runs, unpricedRuns, byAccount: [{accountId, account, label, source, usd, runs, unpricedRuns}], timezone, asOf }` |
+| `GET …/metrics/live` | `{ live, liveAgents, byDepartment, failing, failingAgents, totalSource, asOf }` — no `total` |
+| `GET …/metrics/status` | `{ agents: [{ agent, department, status, errorRate, reason, runs, successfulRuns, lastRunAt }], thresholds, asOf }` |
+| `GET …/metrics/query?metric=&range=&agent=&department=&account=` | `{ metric, range, filter, value, runs, previous, delta, asOf }` — `filter` echoes `projectId` |
+| `GET …/metrics/activity?limit=&department=` | `{ items: [{ runId, at, time, event, detail, agent, agentName, department, status, traceUrl }] }` |
+| `GET …/metrics/runs?agent=&limit=` | `{ runs: [{ runId, agent, agentRef, agentName, startedAt, status, durationMs, costUsd, costSource, accountId, accountSource, traceUrl }] }` |
+| `GET …/metrics/accounts?range=` | `{ range, spend: [{accountId, account, label, source, usd, runs, unpricedRuns}], accountsRegistered, accountsEnforced: false, asOf }` |
+| `GET …/runs/:runId/tools` | `{ toolCalls: [{ seq, name, status, startedAt, durationMs, error }] }` · `404 run_not_in_project` when the run is another project's |
+| `GET …/metrics/sql` / `GET …/metrics/sql/:name` | named-query catalogue / rows |
 | `writeOutput(db, output)` | structured business row, redacted on the way in |
 | `METRICS` / `RANGES` / `NAMED_QUERIES` | `apps/runner/src/db/queries.ts`, `apps/runner/src/db/registry.ts` |
 

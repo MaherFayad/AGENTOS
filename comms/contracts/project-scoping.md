@@ -13,11 +13,17 @@ Cite these as `Plan §10`, never `§10`.
 `agent-library-curator`. It owns **resolution**; this file owns the **mount**. The boundary
 is its §0 and it is accepted verbatim in ADR-013.
 
-**Status:** **skeleton.** This file states what Part Two has already fixed and what is still
-open. **It is not yet authoritative and nothing may be built against its open questions.** A
-section marked OPEN is a question, and a consumer who guesses an answer to it has invented a
-contract. Each open question names the single agent who must answer it and the ADR that
-records the answer.
+**Status:** **partly authoritative.** §5.1's Q1–Q8 are **answered** by
+[ADR-015](../decisions/ADR-015-project-scoping.md) (proposed, 2026-08-17) and are built —
+§5.1 now records the answers rather than the questions. **Q8b and §5.3's Q17/Q19 remain OPEN
+and nothing may be built against them.** A section still marked OPEN is a question, and a
+consumer who guesses an answer to it has invented a contract; each names the single agent who
+must answer it and the ADR that will record it.
+
+**What "built" does and does not mean here.** The schema exists, the routes carry a project,
+the cascade resolves and refuses. **None of it is validated.** §6 is the list of what cannot
+be, it is a section of this contract rather than a footnote because consumers need to read
+it, and it has not shrunk.
 
 ---
 
@@ -28,9 +34,9 @@ cannot be separated:
 
 | Half | Plan § | Answered by |
 |---|---|---|
-| **Projects** — `ops.project`, mounting libraries, project-scoping every table and route | §9 · §10 | ADR-015 *(claimed, unwritten)*, this file |
+| **Projects** — `ops.project`, mounting libraries, project-scoping every table and route | §9 · §10 | [ADR-015](../decisions/ADR-015-project-scoping.md) *(proposed 2026-08-17)*, this file |
 | **The cascade** — global → project → project-local override, resolved by slug | §10 | ADR-014 *(proposed)*, `agent-cascade.md` |
-| **Identity** — identity, device and billing account as three orthogonal things | §11 | ADR-016 *(claimed, unwritten)*, **owner unassigned** |
+| **Identity** — identity, device and billing account as three orthogonal things | §11 | [ADR-016](../decisions/ADR-016-identity-device-billing-account.md), `identity-access-engineer` |
 
 ---
 
@@ -104,19 +110,29 @@ These are constraints, not preferences. A design that violates one is a bug.
 
 ---
 
-## 3. `ops.project` — the columns Part Two already names
+## 3. `ops.project` — the columns, and what enforces each claim
 
-Types, keys, nullability and migration order are **open** (§5.1).
+Types, keys, nullability and migration order are **fixed** by ADR-015 and built in
+`apps/runner/src/db/migrations/0005_project_axis.sql`.
 
-| Column | Meaning |
-|---|---|
-| `id`, `slug`, `name` | identity |
-| `library_path` / `library_remote` | the git repo holding `agents/`, `panels/`, `company/` |
-| `workspace_root` | where runs get their scratch space |
-| `host_affinity[]` | which execution hosts may run this project |
-| `default_account_id` | which billing account pays, by default |
-| `budget_monthly` | hard cap, enforced by the scheduler and the runner |
-| `status` | `active · paused · archived` |
+The third column is the point of this table. Two of these columns are **declared and read by
+nothing**, and both say so in the API rather than looking enforced — a cap rendered next to
+no enforcement is a UI telling a lie it was handed.
+
+| Column | Meaning | What enforces the claim |
+|---|---|---|
+| `id` | `md5('agnetos.project:' || slug)::uuid`, derived then **stored** — so renaming a slug keeps the id and every ledger row on it | `project-id.test.ts` reads the migration and asserts the SQL expression against `projectIdForSlug` character-for-character |
+| `slug`, `name` | kebab, and never `all` / `p` / `api` | `CHECK slug_is_a_slug`, `CHECK slug_is_not_reserved`, mirrored by `isProjectSlug` and asserted equal |
+| `library_path` | the repo holding `agents/`, `panels/`, `company/` on **this** host | `NOT NULL` |
+| `library_remote` | **cannot be stored.** A git remote is an egress event of the same class as a `deliver:` target leaving the tailnet | `CHECK library_remote_needs_egress_adr (library_remote IS NULL)` — until that ADR lands, no code path can act on one |
+| `workspace_root` | where runs get their scratch space | `NOT NULL`; confined per run by `isPathInsideScratch` |
+| `host_affinity[]` | which execution hosts may run this project | **Declared, read by nothing.** `ProjectSummary.hostAffinityEnforced: false` |
+| `default_account_id` | which billing account pays, by default | composite FK to `ops.billing_account (id, kind)`, so it cannot point at a connector secret |
+| `budget_monthly` | a hard cap | **Declared, not enforced in M15** (ADR-015 Q6). `ProjectSummary.budgetEnforced: false`. The one enforced ceiling is Part V's workspace cap in the runner |
+| `status` | `active · paused · archived` | `CHECK` on the enum; `CHECK archived_has_a_date`; `project_not_active` (409) is a distinct refusal |
+
+Deleting a row is **refused** while any history hangs off it: every foreign key into this
+table is `ON DELETE RESTRICT`. Archiving is the removal path (ADR-015 Q4).
 
 ---
 
@@ -160,45 +176,41 @@ Read that contract before building anything that consumes a resolved agent.
 Grouped by the one agent who owns the answer. Each says what it costs to specify loosely,
 because that is the only way to tell a question worth an ADR from a preference.
 
-### 5.1 `ops.project` and project-scoped routes — `runner-engineer` → ADR-015
+### 5.1 `ops.project` and project-scoped routes — **ANSWERED by ADR-015**
 
-- **Q1. How does a request name its project?** Path segment (`/api/p/:project/runs`), an
-  explicit header, or server-side session state? *Loose costs:* a header is invisible in a
-  log and in a bug report; server-side session state is an **ambient default**, and an
-  ambient default is the mechanism by which one project's data is served under another
-  project's name. A path segment is greppable, cacheable, and impossible to forget.
-  Recommend the path segment; it is the reversible choice.
+Q1–Q8 are decided and implemented. Kept here as answers rather than deleted, because a
+consumer reading this section needs the ruling and the reason, and the reason is what stops
+someone re-opening it out of convenience. The full argument is in
+[ADR-015](../decisions/ADR-015-project-scoping.md); this is the summary a consumer can build
+against.
 
-- **Q2. Is there a server-side "current project" at all?** *Loose costs:* if yes, every
-  route has two ways to be scoped and only one of them appears in tests.
+| Q | Answer | The mechanism, not the intention |
+|---|---|---|
+| **Q1** How does a request name its project? | **Path segment, `/api/p/:project/…`. There is no default, no header and no session state.** Coordinator-scoped routes (`/api/status`, `/api/projects`) carry no segment and say so; deliberately cross-project routes live under `/api/all/` and there are exactly two. | `resolveProject` in `lib/project.ts`, called at the head of every scoped handler — a **function, not a hook**, so a route that forgets it fails to compile rather than serving unguarded. Asserted at the wire in `routes/__tests__/api.test.ts`. |
+| **Q2** Is there a server-side "current project"? | **No.** Not a cookie, not a header, not "the only one we mount". An ambient default is how one client's data gets served under another client's name. | There is no such variable to find. The pre-project paths stay mounted and answer **400 `project_scope_missing`** naming the scoped path — never a 404 (reads as a deleted feature) and never a redirect to a default. Registered from `LEGACY_UNSCOPED_PATHS`, so the contract decides which exist. |
+| **Q3** The project of a row that predates projects? | **Backfill to `agentos`, then `NOT NULL`.** Decided before the first migration, as this section demanded. | `UPDATE … WHERE project_id IS NULL` then `ALTER COLUMN … SET NOT NULL` in `0005_project_axis.sql`. The backfill is written although zero rows exist, because the migration will only ever be re-applied to a database that has some. |
+| **Q4** Delete cascade or tombstone? | **Neither. The delete is refused while history exists; archiving is the removal path.** `Plan §9` guarantees the library survives; this extends the same promise to history. | Every FK into `ops.project` is `ON DELETE RESTRICT`, so `DELETE FROM ops.project` with one ledger row behind it **fails in the database**. `CHECK archived_has_a_date`. |
+| **Q5** Is `library_remote` a clone the coordinator performs? | **Not in M15, and it cannot even be recorded.** A `git push` sends a project library to a third party — the same class of event as a `deliver:` target leaving the tailnet (BOARD, Part VII.4). | `CONSTRAINT library_remote_needs_egress_adr CHECK (library_remote IS NULL)`. Until that ADR lands and a later migration drops it, **no remote can be stored, so no code path can act on one.** Dropping a constraint is reviewable; ignoring a comment is not. |
+| **Q6** Which of the two enforcement points is authoritative? | **Part V's capped API-key workspace in the runner, and it is the only enforced one.** `ops.project.budget_monthly` is declared and **not** enforced in M15: spend-per-project can only be computed from ledger rows, and zero runs have ever executed, so any cap derived from it is a false refusal or a silent pass. | `ProjectSummary.budgetEnforced: false` ships next to the number on every response. A cap rendered beside no enforcement is a UI telling a lie it was handed. |
+| **Q7** `host_affinity[]` now or later? | **Built now, read by nothing.** Deferring means a migration on a live ledger later; the column is free. | `ProjectSummary.hostAffinityEnforced: false`, same rule as Q6. `project_not_mounted` (503, not 404) is the refusal a project on another host gets, so "wrong machine" never reads as "wrong name". |
+| **Q8** Are `panels/*.json` cascaded like agents? | **No — not in M15.** Panels are mounted per project, not resolved through layers. ADR-014's rules are written about `agents/**` and depend on properties panels do not have: a capability ceiling, a `status` derived from runs, an `agent_ref`. | If they ever do cascade, they need their own resolution rules from `dashboards-engineer` against ADR-004's six Command Centers. Answering it now would mean designing it with one project to test against. |
 
-- **Q3. What is the project of a row that predates projects?** `ops.run_ledger` and the
-  metrics tables need a backfill or a NOT NULL default. *Loose costs:* a nullable
-  `project_id` is invariant 8's failure mode with the safety off. Decide backfill-to-AgentOS
-  vs NOT NULL-with-default **before** the first migration, not after.
+**Still OPEN in this subsection — one question, and it is the highest-stakes one:**
 
-- **Q4. Does deleting a project cascade-delete its ops rows, or tombstone them?** Plan §9
-  guarantees the *library* survives and says nothing about history. *Loose costs:* history
-  you cannot read is history you have lost, and this is discovered exactly once.
+- **Q8b. Does each project get its own `COMPANY.md`, or is there one brain across projects?**
+  (`Plan §15` says both: a **global** tier that follows you across every project *and* a
+  **project** tier.) *Loose costs:* the brain is injected into **every run** (spec §3.3).
+  Getting this wrong is not a display bug — it is client A's company context reaching an
+  agent running for client B, on every single invocation, which is the PDPL boundary rather
+  than a scoping preference. Owner: `rtl-arabic-pdpl-specialist` answers the isolation half;
+  `runner-engineer` implements the mount half. **This is the highest-stakes question in the
+  contract and it does not look like it.**
 
-- **Q5. Is `library_remote` a clone the coordinator performs?** If yes: cloned where, with
-  whose credentials, and **is a git remote an egress decision?** The BOARD already holds an
-  open question that any `deliver:` target leaving the tailnet needs its own ADR (Part
-  VII.4). A `git push` to GitHub is the same class of event.
-
-- **Q6. `budget_monthly` is enforced in two places** — the runner refuses to start at the
-  cap (Part V, already built) and the scheduler refuses to fire (Plan §14). *Loose costs:*
-  two enforcement points reading one number will disagree, and the disagreement will look
-  like a bug in whichever one you are watching. Name the authoritative one.
-
-- **Q7. `host_affinity[]` with exactly one host.** Build the column now against a single
-  localhost, or defer it? *Loose costs:* deferring means a migration on a live table later;
-  building it now means a column nothing reads. Cheap either way — but decide, don't drift.
-
-- **Q8. Are `panels/*.json` cascaded like agents?** ADR-004 fixed six Command Centers. Are
-  those six global, per-project, or global-with-project-overrides? *Loose costs:* §2.5.6
-  says a seventh centre or a rename is a rail-order change in six files. Multiply that by N
-  projects before choosing.
+  **What M15 built while it waits, and why that direction:** `company/` resolves **per
+  project, with no global fallback**. That is the conservative side of an unanswered
+  question — if the ruling is "one brain", adding a fallback is additive; if a global brain
+  had been assumed and the ruling goes the other way, the leak would already have happened,
+  on every run, with no error message. Nothing in ADR-015 depends on the answer.
 
 ### 5.2 The cascade — **not asked here.** → [`agent-cascade.md`](agent-cascade.md), ADR-014
 
@@ -230,11 +242,19 @@ is tracked as Q8b below.
   isolation half; `runner-engineer` implements the mount half. **This is the highest-stakes
   question in the contract and it does not look like it.**
 
-### 5.3 Identity, device, billing account — **owner unassigned** → ADR-016
+### 5.3 Identity, device, billing account — owner: `identity-access-engineer` → ADR-016
 
-**This is the real gap in M15 and it is recorded here rather than papered over.** Plan §22
-creates five specialists and none of them owns §11; the plan's intended owner,
-`identity-access-engineer`, is carried over from Part One §6 and was never defined.
+**The gap this section recorded is closed.** `identity-access-engineer` was written on
+2026-08-16 and now owns §11 and [ADR-016](../decisions/ADR-016-identity-device-billing-account.md).
+The interim split below is kept as history, because the transfer was a written exchange rather
+than a drift — and because Q17 and Q19 are still open under their new owner.
+
+**What ADR-015 settled here, and why it is here rather than in ADR-016:** `Plan §11` names one
+`ops.credential`; ADR-014 §3.1 needs it keyed `(project_id, connector)`. Those are two tables,
+not one, because a **billing account is deliberately cross-project** (one work account pays for
+four clients) and a **connector credential is deliberately project-only**. One table would have
+forced a nullable `project_id`, which is invariant 8's failure mode with the safety off. So:
+`ops.billing_account` and `ops.credential`, split in ADR-015, named in ADR-016.
 
 | Concept | Question it answers | Table | M15 interim owner |
 |---|---|---|---|
@@ -243,8 +263,9 @@ creates five specialists and none of them owns §11; the plan's intended owner,
 | Billing account | who *pays* for this run? | `ops.credential` | `runner-engineer` |
 
 - **Q16. Which of the three tables does M15 build, and which does it only define?**
-  Recommend: define all three; populate `credential` and `device`; build **no scopes
-  enforcement**. Reason in Q17.
+  **ANSWERED (ADR-015):** all three are defined; `billing_account` and `credential` are built
+  and project-scoped; `ops.identity` is a foreign-key target that nobody populates; **no
+  scopes enforcement** is built. Reason in Q17.
 
 - **Q17. Scopes live on the device — enforced at what point?** BOARD #5 says there is no
   auth boundary in v1 by design. *Loose costs:* **a scope with no enforcement point is a
@@ -254,9 +275,19 @@ creates five specialists and none of them owns §11; the plan's intended owner,
   shipping a decorative column.
 
 - **Q18. `ops.credential` is "encrypted at rest with the key outside Postgres" — outside
-  where?** An env var on the runner means a container recreated without it is a lockout with
-  no recovery path. A file on a mounted volume means the volume is now a secret. *Loose
-  costs:* this is discovered during an outage, at the worst possible moment.
+  where?** **ANSWERED (ADR-015): nowhere, because there is no ciphertext.** Neither table
+  stores secret material; `secret_ref` is the *name* of a secret — an env var, a file on a
+  mounted volume — resolved at dispatch. "The key is outside Postgres" is then **structurally
+  true** rather than a claim about an encryption routine nobody has written: there is no
+  column to decrypt and no key to lose. A `secret_ref` that resolves to nothing fails the run
+  with `connector_uncredentialed` and names the ref in the hint.
+
+  **And there is no global credential fallback.** A project that declares `hubspot` and holds
+  no credential for it fails; it does not reach another project's. *The mechanism is the
+  absence of a fallback path*: the primary key has no nullable `project_id` to fall through
+  to, and the lookup has no second branch (ADR-014 §3.1). Stated as a rule precisely because
+  "fall back to the global one" is the convenience a future implementer adds at 2am to unblock
+  one project.
 
 - **Q19. Does `account_id` join the E2E envelope allowlist (§3.1)?** `sessions/relay/
   envelope.ts` **rebuilds** rows from an allowlist rather than filtering them, and its own
@@ -264,11 +295,14 @@ creates five specialists and none of them owns §11; the plan's intended owner,
   the best-designed files in the repo and the E2E boundary is CLAUDE.md rule 5. Whoever
   answers this must be `sessions-relay-engineer`.
 
-- **Q20. How is the paying account chosen per run?** Project default only, a run input, or a
-  frontmatter field? *Loose costs:* a frontmatter field makes billing part of an agent's
-  *identity*, which is very likely wrong — the same agent in two projects should be able to
-  bill to two accounts. Recommend project default plus a per-run override, no frontmatter
-  field.
+- **Q20. How is the paying account chosen per run?** **ANSWERED (ADR-015): project default
+  plus a per-run override, and no frontmatter field** — billing is not part of an agent's
+  identity, and the same agent in two projects must be able to bill to two accounts.
+  Recorded on `ops.agent_runs.account_source`, whose third value is **`unattributed`** and is
+  a named state rather than a `NULL`: "we do not know who paid" must be its own bucket on a
+  cost-by-account surface, not rows the chart quietly drops. *Enforced by:*
+  `CHECK account_provenance`, which makes `account_id IS NULL` legal **only** when
+  `account_source = 'unattributed'`.
 
 ---
 

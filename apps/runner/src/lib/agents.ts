@@ -76,20 +76,22 @@ function readDeliver(value: unknown): { slack?: string; email?: string } {
   };
 }
 
-/** Load one agent by `department/agent-slug`. */
-export async function loadAgent(config: RunnerConfig, slug: string): Promise<AgentRecord> {
-  const absolutePath = agentSkillPath(config, slug);
-
-  let source: string;
-  try {
-    source = await readFile(absolutePath, 'utf8');
-  } catch {
-    throw new ApiError('agent_not_found', `No agent at "${slug}".`, {
-      hint: `Nothing exists at agents/${slug}/SKILL.md. Check the id on the map — it is the folder path, not the display name.`,
-      retryable: false,
-    });
-  }
-
+/**
+ * Build an `AgentRecord` from bytes that have **already been read**, at a path the caller
+ * chose.
+ *
+ * Split out of `loadAgent` for the cascade (ADR-014 §1): at dispatch the file that runs is
+ * whichever layer won, which may be the project library, an `_overrides/` file or a global
+ * one — and it is the *same bytes the ceiling was derived from*, not a re-read. Re-reading
+ * between the capability check and the run would open exactly the window the check exists
+ * to close.
+ */
+export function recordFromSource(
+  config: RunnerConfig,
+  slug: string,
+  source: string,
+  absolutePath: string,
+): AgentRecord {
   let parsed;
   try {
     parsed = parseFrontmatter(source);
@@ -137,6 +139,23 @@ export async function loadAgent(config: RunnerConfig, slug: string): Promise<Age
     inputs: readInputs(data.inputs),
     deliver: readDeliver(data.deliver),
   };
+}
+
+/** Load one agent by `department/agent-slug`, from this project's library layer. */
+export async function loadAgent(config: RunnerConfig, slug: string): Promise<AgentRecord> {
+  const absolutePath = agentSkillPath(config, slug);
+
+  let source: string;
+  try {
+    source = await readFile(absolutePath, 'utf8');
+  } catch {
+    throw new ApiError('agent_not_found', `No agent at "${slug}".`, {
+      hint: `Nothing exists at agents/${slug}/SKILL.md. Check the id on the map — it is the folder path, not the display name.`,
+      retryable: false,
+    });
+  }
+
+  return recordFromSource(config, slug, source, absolutePath);
 }
 
 /** Every agent in the library. Unparseable files are skipped with a warning, not thrown. */

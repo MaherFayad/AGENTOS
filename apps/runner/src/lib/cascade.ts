@@ -38,11 +38,12 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { sourceRef, type CascadeLayer } from '@agnetos/contracts';
+import { agentRef as makeAgentRef, sourceRef, type CascadeLayer } from '@agnetos/contracts';
 import { ApiError } from './errors';
-import type { RunnerConfig } from './config';
+import { isAgentSlug, type RunnerConfig } from './config';
 import type { MountedProject } from './project';
 import { parseFrontmatter } from './frontmatter';
+import { recordFromSource, type AgentRecord } from './agents';
 
 /** The roots read for one project, least- to most-specific (ADR-014 §1). */
 export interface CascadeRoots {
@@ -91,8 +92,25 @@ export interface Ceiling {
 export interface CascadeResolution {
   winner: LayerFile;
   ceiling: Ceiling;
+  /**
+   * The winning file's own Class C declaration, read **by the same function** that read the
+   * ceiling.
+   *
+   * This is not a convenience. If the caller derived this side itself — from
+   * `resolveAllowlist`, say — the two sides of the comparison would be parsed by two code
+   * paths, and the day they disagreed about what `wired_into: hubspot` (a bare string, not
+   * a list) or `Shell` (capitalised) means, the check would pass a widening it could not
+   * see. One parser, two readings, is the defect class this whole milestone keeps meeting.
+   *
+   * Note it carries the *raw* connector names, not resolved tools: a name the registry does
+   * not know is still a widening if the ceiling does not contain it, and it must be refused
+   * as one rather than dropped as unknown.
+   */
+  resolved: Ceiling;
   /** `{layer}:{path}@sha256:…` for the ledger. Recorded on the run, never on the agent. */
   sourceRef: string;
+  /** Parsed frontmatter of the winning file, so the caller does not parse it a second time. */
+  winnerData: Record<string, unknown>;
 }
 
 const ORDER: readonly CascadeLayer[] = ['global', 'project', 'override'];
@@ -209,19 +227,31 @@ export async function resolveThroughCascade(
     });
   }
 
-  const introducingData = frontmatterOf(introducing);
   const relative = (absolute: string): string =>
     absolute.startsWith(repoRoot) ? absolute.slice(repoRoot.length + 1).split('\\').join('/') : absolute;
 
+  const classCOf = (file: LayerFile): Ceiling => {
+    const data = frontmatterOf(file);
+    return {
+      layer: file.layer,
+      path: relative(file.absolutePath),
+      connectors: connectorsOf(data),
+      approvalRequired: approvalOf(data),
+    };
+  };
+
+  // Read in this order deliberately: if the *introducing* layer's frontmatter is
+  // unreadable we must refuse before we have any opinion about the winner, because the
+  // alternative is a run that proceeds on a ceiling nobody derived.
+  const ceiling = classCOf(introducing);
+  const resolved = introducing === winner ? ceiling : classCOf(winner);
+
   return {
     winner,
-    ceiling: {
-      layer: introducing.layer,
-      path: relative(introducing.absolutePath),
-      connectors: connectorsOf(introducingData),
-      approvalRequired: approvalOf(introducingData),
-    },
+    ceiling,
+    resolved,
     sourceRef: sourceRef(winner.layer, relative(winner.absolutePath), winner.digest),
+    winnerData: frontmatterOf(winner),
   };
 }
 
@@ -266,4 +296,59 @@ export function assertNarrowsDownward(
       },
     );
   }
+}
+
+/** What dispatch needs: the agent that will run, and the provenance of the file it came from. */
+export interface DispatchAgent {
+  record: AgentRecord;
+  /** `{project}/{department}/{slug}` — the foreign key of every operations row (ADR-014 §2). */
+  agentRef: string;
+  /** `{layer}:{path}@sha256:…` — recorded on the run, never on the agent. */
+  sourceRef: string;
+  /** The layer whose file actually ran, for the provenance badge (`⌂` · `▣`). */
+  layer: CascadeLayer;
+  /** The introducing layer's Class C declaration, for the drawer and for the error hint. */
+  ceiling: Ceiling;
+}
+
+/**
+ * **The only way the run pipeline may obtain a runnable agent.**
+ *
+ * Resolution and enforcement are one call on purpose. If they were two, a future caller
+ * could resolve without asserting and would get a working run — the check would then be
+ * something a reviewer has to notice, which is the definition of not-a-mechanism. Here the
+ * `AgentRecord` does not exist until `assertNarrowsDownward` has returned.
+ *
+ * The record is built from **the same bytes** the ceiling was derived from. Nothing is
+ * re-read between the check and the run.
+ */
+export async function resolveForDispatch(
+  config: RunnerConfig,
+  project: MountedProject,
+  slug: string,
+): Promise<DispatchAgent> {
+  if (!isAgentSlug(slug)) {
+    throw new ApiError('bad_request', `"${slug}" is not a valid agent id.`, {
+      hint: 'Use department/agent-slug, exactly as it appears in the repo — for example sales/account-enrichment.',
+      retryable: false,
+    });
+  }
+  const [department, name] = slug.split('/') as [string, string];
+
+  const resolution = await resolveThroughCascade(
+    cascadeRoots(config, project),
+    department,
+    name,
+    config.repoRoot,
+  );
+
+  assertNarrowsDownward(resolution.ceiling, resolution.resolved);
+
+  return {
+    record: recordFromSource(config, slug, resolution.winner.source, resolution.winner.absolutePath),
+    agentRef: makeAgentRef(project.slug, slug),
+    sourceRef: resolution.sourceRef,
+    layer: resolution.winner.layer,
+    ceiling: resolution.ceiling,
+  };
 }

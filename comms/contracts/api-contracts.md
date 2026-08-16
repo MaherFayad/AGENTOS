@@ -11,13 +11,93 @@ safe on the public internet is not a reason to relax this.
 
 ---
 
-## `POST /api/run` → SSE
+## The project axis — read this before any route below
+
+**Added by [ADR-015](../decisions/ADR-015-project-scoping.md), 2026-08-17.** Every path in
+this document that reads or writes a project's data is now prefixed. The rule, and it has no
+exceptions:
+
+> **A request names its project in its path, and there is no default.**
+
+```
+/api/p/:project/…     project-scoped. The great majority.
+/api/all/…            deliberately cross-project. Exactly two routes.
+/api/…                the coordinator itself, not a project's data. /api/status, /api/projects.
+```
+
+There is no `currentProject`, no cookie, no header and no fallback. A header is invisible in
+a log and in a bug report; a server-side "current project" is an **ambient default**, and an
+ambient default is the mechanism by which one project's data gets served under another
+project's name. A path segment is greppable, cacheable, and impossible to forget — the route
+does not exist without it.
+
+**Four refusals, deliberately distinct.** Collapsing any two of them sends different people
+to look in the same wrong place:
+
+| Code | Status | What it actually means to the person reading it |
+|---|---|---|
+| `project_scope_missing` | 400 | *You did not say which project.* The hint names the scoped path to use. |
+| `project_not_found` | 404 | *That is a typo* — not a slug, or a reserved one (`all`, `p`, `api`). |
+| `project_not_mounted` | 503 | *Right name, wrong machine.* The project may exist perfectly well on another host (`host_affinity`). Never `404`, which would send someone hunting a typo in a correct name. |
+| `project_not_active` | 409 | Paused or archived. It keeps all its history and its whole library; it just does not start runs. |
+
+**The pre-project paths stay mounted and answer `400 project_scope_missing`.** This is the
+only visible surface of the migration and it is not decoration. A `404` reads as a deleted
+feature; a redirect to a default project would serve one client's rows under another client's
+name, silently, and look like it worked. Delete a legacy path only when no client can still
+send it — and never replace one with a redirect.
+
+The list of legacy paths lives in `LEGACY_UNSCOPED_PATHS` in the code half, so the contract
+decides which exist; `apps/runner/src/routes/__tests__/api.test.ts` walks that list and
+asserts each one refuses, names its replacement, and **does not also carry a result set**.
+
+### `GET /api/projects` *(coordinator-scoped)*
+
+What the switcher lists. A mount registry describes this process, not a project's data.
+
+```jsonc
+{
+  "projects": [{
+    "id": "…uuid…", "slug": "agentos", "name": "AgentOS", "status": "active",
+    "libraryPath": "/repo",
+    "libraryRemote": null,        // always null — a git remote is an egress decision (ADR-015 Q5)
+    "hostAffinity": [], "hostAffinityEnforced": false,
+    "budgetMonthlyUsd": null,     // declared; NOT enforced in M15
+    "budgetEnforced": false,
+    "defaultAccountId": null
+  }],
+  "mounted": "agentos",
+  "scopeEnforced": null           // null = we could not ask. Not false.
+}
+```
+
+**Every field that is declared and read by nothing carries a sibling boolean saying so.** A
+cap rendered next to no enforcement is a UI telling a lie it was handed; the flag is what
+makes that a decision rather than an accident. `scopeEnforced` is `null` — not `false` — when
+there is no ledger to ask: with no database we have not *learned* that isolation is bypassed,
+we have failed to ask, and those are different facts.
+
+---
+
+## `POST /api/p/:project/run` → SSE
 
 ```jsonc
 // request
 { "agent": "sales/account-enrichment", "inputs": { "account_url": "https://…" },
   "dryRun": false }
 ```
+
+**Step 0, before anything in the list below: the agent is resolved through the cascade for
+this project, and its capability ceiling is re-derived and enforced** (ADR-014 §3, §7.3;
+ADR-015 decision 5). A resolved `wired_into` that exceeds the introducing layer's is
+`capability_widened` (403); an introducing layer that cannot be **read** is
+`cascade_unresolved` (422) and the run is refused rather than trusted. A global library that
+is simply **not configured** is not an error — the cascade has two real levels until a global
+library exists.
+
+Resolution and enforcement are one call (`resolveForDispatch`), so no future caller can
+obtain a runnable agent without the check. That is the difference between a boundary and a
+step a reviewer has to notice.
 
 Runner behavior (§3.2):
 1. Load `SKILL.md` + `company/COMPANY.md` → system prompt. **Every** invocation injects
@@ -38,7 +118,7 @@ SSE event names — the drawer console renders these and nothing else:
 
 | event | data |
 |---|---|
-| `start` | `{runId, agent, traceUrl, startedAt, tools[], approvalRequired}` |
+| `start` | `{runId, agent, agentRef, sourceRef, traceUrl, startedAt, tools[], approvalRequired}` |
 | `token` | `{text}` — a fragment; append to console |
 | `tool` | `{name, input, status:"start"\|"ok"\|"error", durationMs?, error?}` |
 | `plan` | `{summary, awaitingApproval}` — when `approval: required` the run pauses here |
@@ -49,6 +129,19 @@ SSE event names — the drawer console renders these and nothing else:
 `tools[]` on `start` is the resolved allowlist, echoed so the console can show what the
 run was permitted to touch. `done.status` carries `denied` because **a denied run is
 data, not a discard** — the queue and LAST RUNS both show it.
+
+`agentRef` and `sourceRef` on `start` are the cascade's provenance (ADR-014 §2), and they are
+on the **first** frame, before any token, for a specific reason: *"I ran the wrong
+code-reviewer"* is a bug class with **no error message** (`Plan §21.9`), and the console is
+where a human is already looking.
+
+- **`agentRef` = `{project}/{department}/{slug}`** — the addressable agent, and the foreign
+  key every ledger row hangs off. Distinct from `agent`, and the distinction is the point:
+  two projects' `sales/database-mining` are two agents, two histories, two halos. Run history
+  never follows a fork or a promotion.
+- **`sourceRef` = `{layer}:{path}@sha256:…`** — which file actually won, at what content.
+  Recorded on the **run**, never on the agent. `drawer-engineer` renders the layer half as
+  the provenance badge (`⌂` global · `▣` project) in the drawer header.
 
 **Replay.** SSE `id:` is the run's event sequence number (base-10, from 1), unique per
 run. Reconnect with `Last-Event-ID: <n>` to receive `n+1` onward then live events; the
@@ -254,10 +347,17 @@ a stack trace. Codes and their statuses (`ApiErrorCode` / `API_ERROR_STATUS` in
 |---|---|---|
 | `bad_request` | 400 | malformed body, missing required `inputs` key |
 | `not_found` | 404 | no such route |
-| `agent_not_found` | 404 | no `agents/<slug>/SKILL.md` |
+| `project_scope_missing` | 400 | a pre-project path was used. The hint names the `/api/p/:project/…` form |
+| `project_not_found` | 404 | not a slug, or a reserved one (`all`, `p`, `api`) |
+| `project_not_mounted` | 503 | a real project whose library is not on this host — **not** 404 |
+| `project_not_active` | 409 | paused or archived: keeps its history and library, does not start runs |
+| `agent_not_found` | 404 | no `agents/<slug>/SKILL.md` in any layer of this project's cascade |
 | `invalid_frontmatter` | 422 | SKILL.md failed the schema contract — excluded from the map too |
 | `tool_not_allowed` | 403 | a tool outside `wired_into` was requested mid-run |
 | `unknown_connector` | 422 | a `wired_into` name has no connector wired (schema invariant 5) |
+| `cascade_unresolved` | 422 | the introducing layer could not be **read**, so the capability ceiling is unknown. Fails closed rather than trusting the copy it can read (ADR-014 §3) |
+| `capability_widened` | 403 | a lower layer grants a connector, or loosens `approval`, beyond the layer that introduced the agent. The hint names the one legal route: a new slug |
+| `connector_uncredentialed` | 422 | this project declares a connector it holds no `ops.credential` row for. **There is no global fallback**, and the mechanism is the absence of one |
 | `run_not_found` | 404 | unknown `runId`, or its buffer expired |
 | `run_not_pending_approval` | 409 | decided a run that isn't at its gate |
 | `approval_already_decided` | 409 | second decision on the same run |

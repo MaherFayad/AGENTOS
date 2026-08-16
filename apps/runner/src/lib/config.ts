@@ -46,6 +46,23 @@ function findRepoRoot(): string {
 
 export interface RunnerConfig {
   repoRoot: string;
+  /**
+   * The project this process mounts (ADR-015). Configuration, not a request default —
+   * `resolveProject` still refuses a request that names no project. It exists because the
+   * coordinator must be able to say *which* library it has on disk with no Postgres at all
+   * (`--profile dev`), and `ops.project` cannot answer that.
+   */
+  projectSlug: string;
+  projectName: string;
+  /**
+   * `<global>/agents` — cascade layer L0, or `null` when no global library is configured.
+   *
+   * `null` is **not** an error and must never be conflated with "the global library could
+   * not be read". BOARD scopes M15 to two real layers until a global library repo exists;
+   * until then the project layer is the introducing layer and sets its own ceiling. The
+   * other case — configured but unreadable — fails closed with `cascade_unresolved`.
+   */
+  globalLibraryDir: string | null;
   agentsDir: string;
   companyDir: string;
   companyFile: string;
@@ -103,8 +120,17 @@ function numberFromEnv(name: string, fallback: number | null): number | null {
 
 export function loadConfig(): RunnerConfig {
   const repoRoot = findRepoRoot();
+  const globalLibraryRoot = process.env.AGNETOS_GLOBAL_LIBRARY?.trim();
   return {
     repoRoot,
+    // `agentos` is what migration 0005 seeds and what `Plan §24` fixes: AgentOS becomes
+    // `project: AgentOS` in place, nothing moves on disk.
+    projectSlug: process.env.AGNETOS_PROJECT_SLUG?.trim() || 'agentos',
+    projectName: process.env.AGNETOS_PROJECT_NAME?.trim() || 'AgentOS',
+    globalLibraryDir:
+      globalLibraryRoot === undefined || globalLibraryRoot === ''
+        ? null
+        : join(resolve(globalLibraryRoot), 'agents'),
     agentsDir: join(repoRoot, 'agents'),
     companyDir: join(repoRoot, 'company'),
     companyFile: join(repoRoot, 'company', 'COMPANY.md'),

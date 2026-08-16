@@ -14,11 +14,24 @@
  *   3. No panel file contains raw SQL, under any key.
  *   4. Every registered query is parameterised — no interpolation in the SQL string.
  *   5. Migrations are contiguously numbered, so none was dropped in a merge.
+ *   6. Every served query carries a **project predicate** and reserves `$1` for it.
+ *
+ * Check 6 is M15's, and it is the cheapest available version of `project-scoping.md`
+ * invariant 8. Forty registered queries is more than anyone re-reads, and a missing
+ * `WHERE project_id = …` does not throw — it widens an answer. `bindNamedQuery` refuses
+ * such a query at runtime; this refuses it at build time, which is the half that gets
+ * noticed before a dashboard is looked at.
  *
  * An unregistered `sql` name is a WARNING, not an error. The panel contract says phase 1
  * ships `langfuse` + `static`; a panel that names a business query ahead of the data is
  * scaffolding, and the widget renders its empty state until the query is registered.
  * `--strict` turns those warnings into errors — use it once the business schema lands.
+ *
+ * Every run prints a provenance banner (`scripts/lib/provenance.mjs`, tokens contract §8b).
+ * The reason is not bookkeeping: two agents read 0 and 31 out of `check-tokens` hours apart
+ * and spent real time suspecting the tooling, because a count with no identity is a
+ * sentence rather than evidence. **A stale FAIL gets investigated; a stale PASS gets
+ * cited** — so the banner prints on green runs too, which is when it matters.
  *
  * Usage: node scripts/check-metrics.mjs [--json] [--strict]
  */
@@ -26,6 +39,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { provenance } from './lib/provenance.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PANELS_DIR = join(ROOT, 'panels');
@@ -51,8 +65,16 @@ async function loadRegistry() {
     metrics: queries.METRICS,
     ranges: Object.keys(queries.RANGES),
     bind: registry.bindNamedQuery,
+    projectSlot: registry.PROJECT_ID_SLOT,
   };
 }
+
+/**
+ * A real project id, used only to prove a panel's parameters bind. It is a checker
+ * fixture, never a value that reaches a database — `bindNamedQuery` needs *a* project
+ * because a query without one is the thing this file is checking for.
+ */
+const PROBE_PROJECT_ID = '00000000-0000-0000-0000-000000000000';
 
 function walkQueries(node, path, visit) {
   if (!node || typeof node !== 'object') return;
@@ -90,9 +112,10 @@ function scanForRawSql(node, path, file) {
 }
 
 async function main() {
-  const { named, metrics, ranges, bind } = await loadRegistry();
+  const { named, metrics, ranges, bind, projectSlot } = await loadRegistry();
 
   // 4. The registry itself must be free of interpolation.
+  // 6. …and every served query must be about exactly one project.
   for (const [name, query] of Object.entries(named)) {
     if (!query.sql) continue; // pending entries have no SQL on purpose
     if (/\$\{/.test(query.sql)) {
@@ -103,6 +126,23 @@ async function main() {
     if (placeholders.size !== expected) {
       errors.push(
         `registry.ts: "${name}" declares ${expected} binds (${query.fixed?.length ?? 0} fixed + ${query.params.length} params) but uses ${placeholders.size} placeholders.`,
+      );
+    }
+
+    // The predicate, and the slot it binds to. Both, because either alone can be true
+    // while the query is still wrong: a predicate reading some other `$n` would filter by
+    // whatever `days` happened to be, and a reserved slot with no predicate would bind a
+    // project id that nothing uses.
+    if (!/\bproject_id\s*=\s*\$1::uuid/.test(query.sql)) {
+      errors.push(
+        `registry.ts: "${name}" has no project predicate. Every served query reads a project-scoped ` +
+          `table and must carry \`project_id = $1::uuid\` (project-scoping.md invariant 8) — a query ` +
+          `without one does not fail, it widens the answer.`,
+      );
+    }
+    if (query.fixed?.[0] !== projectSlot) {
+      errors.push(
+        `registry.ts: "${name}" does not reserve $1 for the project id. Start \`fixed\` with PROJECT_ID_SLOT.`,
       );
     }
   }
@@ -163,7 +203,7 @@ async function main() {
 
       if (source === 'sql') {
         try {
-          bind(query.name, query.params ?? {});
+          bind(query.name, PROBE_PROJECT_ID, query.params ?? {});
         } catch (e) {
           errors.push(`${file}: ${path} — ${e.message}${e.hint ? ` ${e.hint}` : ''}`);
         }
@@ -174,7 +214,18 @@ async function main() {
     });
   }
 
+  // What this result is a result ABOUT (tokens contract §8b).
+  //
+  // Repo-wide rather than scoped, unlike `check-tokens`. This checker reads **two** trees
+  // that can each invalidate its answer — `panels/` and `apps/runner/src/db/` — and
+  // `provenance()` takes one pathspec. Reporting dirtiness for only one of them would be
+  // worse than reporting it for all of them: a clean-looking banner beside a result that a
+  // change in the other tree had already invalidated is exactly the stale PASS this line
+  // exists to prevent. Over-reporting is noise; under-reporting is a lie.
+  const prov = provenance(ROOT);
+
   const summary = {
+    provenance: prov,
     panels: panelFiles.length,
     queries: queryCount,
     registeredQueries: Object.keys(named).length,
@@ -187,6 +238,7 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2));
   } else {
     console.log('\nMetrics contract');
+    console.log(`  scanned at         ${prov.line}`);
     console.log(`  panel files        ${summary.panels}`);
     console.log(`  panel queries      ${summary.queries}`);
     console.log(`  registered queries ${summary.registeredQueries}`);

@@ -8,6 +8,8 @@ test('SSE ids are per-run sequence numbers starting at 1', () => {
   const first = stream.emit('start', {
     runId: 'run-1',
     agent: 'sales/x',
+    agentRef: 'agentos/sales/x',
+    sourceRef: 'project:agents/sales/x/SKILL.md@sha256:0',
     traceUrl: null,
     startedAt: new Date().toISOString(),
     tools: ['Read'],

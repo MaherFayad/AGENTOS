@@ -8,7 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/__tests__/allowlist.test.ts src/lib/__tests__/brain.test.ts src/lib/__tests__/company-interview.test.ts src/lib/__tests__/ledgerConnection.test.ts src/lib/__tests__/observed-not-configured.test.ts src/lib/__tests__/runService.test.ts src/lib/__tests__/sse.test.ts src/lib/__tests__/workspace-confinement.test.ts src/routes/__tests__/api.test.ts src/observability/__tests__/instrument.test.ts src/observability/__tests__/metrics.test.ts src/observability/__tests__/redaction.test.ts src/observability/__tests__/status.test.ts"
+    "test": "tsx --test src/lib/__tests__/allowlist.test.ts src/lib/__tests__/brain.test.ts src/lib/__tests__/cascade-ceiling.test.ts src/lib/__tests__/company-interview.test.ts src/lib/__tests__/ledgerConnection.test.ts src/lib/__tests__/observed-not-configured.test.ts src/lib/__tests__/project-id.test.ts src/lib/__tests__/runService.test.ts src/lib/__tests__/sse.test.ts src/lib/__tests__/workspace-confinement.test.ts src/routes/__tests__/api.test.ts src/observability/__tests__/instrument.test.ts src/observability/__tests__/metrics.test.ts src/observability/__tests__/redaction.test.ts src/observability/__tests__/status.test.ts"
   },
   "dependencies": {
     "@agnetos/contracts": "*",

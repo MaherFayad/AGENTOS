@@ -23,6 +23,21 @@
  * `needs.fields` is not documentation. It is the write contract: the agent that will
  * light this widget up must put exactly those keys in its `writeOutput` payload. Change
  * a field name here and you have changed an agent's obligation — message its owner.
+ *
+ * ## The fourth property, added in M15: **every query is about exactly one project.**
+ *
+ * `app.agent_outputs` is the business-widget data plane and therefore the table most
+ * likely to hold a client's actual data (`Plan §10`, migration 0005 §4c). Every statement
+ * below reserves `$1` for the project id, and it is reserved *structurally*: `scopeOf`
+ * pushes a `PROJECT_ID_SLOT` sentinel into `fixed[0]` before any other bind exists, and
+ * `bindNamedQuery` refuses to bind a query whose first slot is not that sentinel. A new
+ * query cannot be added without a project predicate, because the numbering it inherits
+ * already assumes one — and `scripts/check-metrics.mjs` fails the build if the assumption
+ * and the SQL ever come apart.
+ *
+ * A registry of forty queries is exactly the place a missing `WHERE` hides: forty is more
+ * than anyone re-reads. So the project is not something each query remembers, it is
+ * something the builders cannot omit.
  */
 
 /* -------------------------------------------------------------------------- *
@@ -93,11 +108,24 @@ type Scope = {
 /** How a query is bounded in time. `null` means "current state, not a window". */
 type Window = { field: string; days: number } | null;
 
+/**
+ * Reserves `$1` on every registered query for the project id.
+ *
+ * A sentinel rather than an empty string or a `null`: those are values a careless edit
+ * could produce by accident and Postgres would happily bind. This one can only arrive by
+ * having been put there on purpose, so `bindNamedQuery`'s check that `fixed[0]` is exactly
+ * this symbol is a real assertion about the query's shape rather than a spelling test.
+ */
+export const PROJECT_ID_SLOT: unique symbol = Symbol('agnetos.project_id');
+
 /** Allocates bind slots in order and renders the WHERE clause. */
 function scopeOf(scope: Scope) {
-  const fixed: unknown[] = [];
+  // `$1` is the project, always, before anything else can claim it. Every `$n` a builder
+  // allocates below is therefore already offset past it — which is why no builder in this
+  // file has to know the project exists.
+  const fixed: unknown[] = [PROJECT_ID_SLOT];
   const p = (v: unknown) => `$${fixed.push(v)}`;
-  const clauses = [`kind = ${p(scope.kind)}`];
+  const clauses = [`project_id = $1::uuid`, `kind = ${p(scope.kind)}`];
 
   for (const [field, value] of Object.entries(scope.eq ?? {})) {
     clauses.push(`payload->>${p(field)} = ${p(value)}`);
@@ -432,8 +460,12 @@ function rows(cfg: {
   const { sql, fixed, params } = build(cfg.scope, cfg.window, ({ where, p, nextIndex }) => `
       SELECT o.entity_key, o.occurred_at, o.agent, o.department, o.payload, r.trace_url
       FROM ${OUTPUTS} o
-      LEFT JOIN ops.agent_runs r ON r.run_id = o.run_id
-      WHERE ${where.replace(/\bkind =/g, 'o.kind =').replace(/\bpayload->>/g, 'o.payload->>').replace(/\boccurred_at\b/g, 'o.occurred_at')}
+      LEFT JOIN ops.agent_runs r ON r.run_id = o.run_id AND r.project_id = $1::uuid
+      WHERE ${where
+        .replace(/\bproject_id =/g, 'o.project_id =')
+        .replace(/\bkind =/g, 'o.kind =')
+        .replace(/\bpayload->>/g, 'o.payload->>')
+        .replace(/\boccurred_at\b/g, 'o.occurred_at')}
       ORDER BY ${cfg.orderBy === 'occurred_at' ? 'o.occurred_at' : `app.safe_ts(o.payload->>${p(cfg.orderBy)})`} ${direction}
       LIMIT $-${nextIndex() * -1}
   `, [{ name: 'limit', type: 'int', default: cfg.limit ?? 20 }]);
@@ -482,11 +514,12 @@ export const NAMED_QUERIES: Record<string, NamedQuery> = {
     status: 'served',
     returns: 'labelled',
     params: [{ name: 'days', type: 'int', default: 30 }],
-    fixed: [],
+    fixed: [PROJECT_ID_SLOT],
     sql: `
       SELECT kind AS label, count(*)::float8 AS value
       FROM app.agent_outputs
-      WHERE occurred_at >= now() - make_interval(days => $1)
+      WHERE project_id = $1::uuid
+        AND occurred_at >= now() - make_interval(days => $2)
       GROUP BY 1
       ORDER BY value DESC
     `,
@@ -497,11 +530,12 @@ export const NAMED_QUERIES: Record<string, NamedQuery> = {
     status: 'served',
     returns: 'labelled',
     params: [{ name: 'days', type: 'int', default: 30 }],
-    fixed: [],
+    fixed: [PROJECT_ID_SLOT],
     sql: `
       SELECT department AS label, count(*)::float8 AS value
       FROM app.agent_outputs
-      WHERE occurred_at >= now() - make_interval(days => $1)
+      WHERE project_id = $1::uuid
+        AND occurred_at >= now() - make_interval(days => $2)
       GROUP BY 1
       ORDER BY value DESC
     `,
@@ -515,14 +549,15 @@ export const NAMED_QUERIES: Record<string, NamedQuery> = {
       { name: 'kind', type: 'string' },
       { name: 'limit', type: 'int', default: 20 },
     ],
-    fixed: [],
+    fixed: [PROJECT_ID_SLOT],
     sql: `
       SELECT o.entity_key, o.occurred_at, o.agent, o.department, o.payload, r.trace_url
       FROM app.agent_outputs o
-      LEFT JOIN ops.agent_runs r ON r.run_id = o.run_id
-      WHERE o.kind = $1
+      LEFT JOIN ops.agent_runs r ON r.run_id = o.run_id AND r.project_id = $1::uuid
+      WHERE o.project_id = $1::uuid
+        AND o.kind = $2
       ORDER BY o.occurred_at DESC
-      LIMIT $2
+      LIMIT $3
     `,
   },
 
@@ -531,17 +566,48 @@ export const NAMED_QUERIES: Record<string, NamedQuery> = {
     status: 'served',
     returns: 'labelled',
     params: [{ name: 'days', type: 'int', default: 28 }],
-    fixed: [],
+    fixed: [PROJECT_ID_SLOT],
     sql: `
       SELECT agent AS label,
              sum(cost_usd)::float8 AS value,
              count(*)::int AS runs,
              (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced
       FROM ops.agent_runs
-      WHERE dry_run = false AND status <> 'awaiting-approval'
-        AND started_at >= now() - make_interval(days => $1)
+      WHERE project_id = $1::uuid
+        AND dry_run = false AND status <> 'awaiting-approval'
+        AND started_at >= now() - make_interval(days => $2)
       GROUP BY 1
       ORDER BY value DESC
+    `,
+  },
+
+  /**
+   * Spend per **billing account** over the window (`Plan §11`) — the account half of the
+   * cost split, as a registered query so a panel can render it without a bespoke route.
+   *
+   * `coalesce(a.slug, 'unattributed')` is the honest label for a run whose payer was never
+   * recorded. It is a bucket, not a rounding: dropping those rows would make this chart's
+   * total quietly smaller than the cost ticker's.
+   */
+  cost_by_account: {
+    description:
+      'Runner spend per billing account over the last N days, with an explicit `unattributed` bucket for runs whose payer was never recorded.',
+    status: 'served',
+    returns: 'labelled',
+    params: [{ name: 'days', type: 'int', default: 28 }],
+    fixed: [PROJECT_ID_SLOT],
+    sql: `
+      SELECT coalesce(a.slug, 'unattributed') AS label,
+             sum(r.cost_usd)::float8 AS value,
+             count(*)::int AS runs,
+             (count(*) FILTER (WHERE r.cost_usd IS NULL))::int AS unpriced
+      FROM ops.agent_runs r
+      LEFT JOIN ops.billing_account a ON a.id = r.account_id
+      WHERE r.project_id = $1::uuid
+        AND r.dry_run = false AND r.status <> 'awaiting-approval'
+        AND r.started_at >= now() - make_interval(days => $2)
+      GROUP BY 1
+      ORDER BY value DESC NULLS LAST
     `,
   },
 
@@ -550,12 +616,13 @@ export const NAMED_QUERIES: Record<string, NamedQuery> = {
     status: 'served',
     returns: 'series',
     params: [{ name: 'days', type: 'int', default: 28 }],
-    fixed: [],
+    fixed: [PROJECT_ID_SLOT],
     sql: `
       SELECT date_trunc('day', started_at) AS t, count(*)::float8 AS v
       FROM ops.agent_runs
-      WHERE dry_run = false AND status <> 'awaiting-approval'
-        AND started_at >= now() - make_interval(days => $1)
+      WHERE project_id = $1::uuid
+        AND dry_run = false AND status <> 'awaiting-approval'
+        AND started_at >= now() - make_interval(days => $2)
       GROUP BY 1
       ORDER BY 1
     `,
@@ -965,14 +1032,45 @@ export type BoundQuery = {
 /**
  * Validate and order a named query's parameters. Rejects unknown names, wrong types and
  * missing values — before anything is bound, let alone executed.
+ *
+ * `projectId` is a **positional** argument rather than another entry in `supplied`, and
+ * that is deliberate: a project that travels in the same bag as `days` and `limit` is a
+ * project a panel could supply, and a panel supplying its own project id is the whole
+ * isolation boundary handed to the least trusted input in the system. It comes from the
+ * resolved path segment and from nowhere else.
  */
-export function bindNamedQuery(name: string, supplied: Record<string, unknown> = {}): BoundQuery {
+export function bindNamedQuery(
+  name: string,
+  projectId: string,
+  supplied: Record<string, unknown> = {},
+): BoundQuery {
   const query = NAMED_QUERIES[name];
   if (!query) {
     throw Object.assign(new Error(`Unknown query "${name}".`), {
       code: 'unknown_query',
       hint: `Register it in apps/runner/src/db/registry.ts. Known queries: ${Object.keys(NAMED_QUERIES).join(', ')}.`,
     });
+  }
+
+  if (typeof projectId !== 'string' || projectId === '') {
+    throw Object.assign(new Error(`Query "${name}" was bound with no project.`), {
+      code: 'project_scope_unset',
+      hint: 'Named queries read project-scoped tables. The project comes from the resolved /api/p/:project segment.',
+    });
+  }
+
+  // A served query whose first bind slot is not the project sentinel has been written
+  // without a project predicate, or has had one edited out. Refusing to bind it is the
+  // difference between a build failure and a widget that quietly shows every client's
+  // rows under one client's heading.
+  if (query.status === 'served' && query.fixed[0] !== PROJECT_ID_SLOT) {
+    throw Object.assign(
+      new Error(`Query "${name}" does not reserve $1 for the project id.`),
+      {
+        code: 'unscoped_query',
+        hint: 'Every served query in registry.ts must start `fixed` with PROJECT_ID_SLOT and carry `project_id = $1::uuid`.',
+      },
+    );
   }
 
   const bound = query.params.map((spec) => {
@@ -1021,7 +1119,9 @@ export function bindNamedQuery(name: string, supplied: Record<string, unknown> =
     needs: query.needs,
     blockedBy: query.blockedBy,
     sql: query.sql,
-    params: [...query.fixed, ...bound],
+    // The sentinel is replaced here and only here, so the project id has exactly one entry
+    // point into a registered query.
+    params: [...query.fixed.map((v) => (v === PROJECT_ID_SLOT ? projectId : v)), ...bound],
   };
 }
 

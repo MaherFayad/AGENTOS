@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../config.ts';
+import { mountedProject } from '../project.ts';
 import { createRunnerServices, startRun } from '../runService.ts';
 import type { AgentSessionEvent, AgentSessionFactory } from '../agentSession.ts';
 
@@ -73,7 +74,7 @@ test('dryRun injects COMPANY.md, echoes wired_into tools, and never calls the se
     const services = createRunnerServices(loadConfig(), silent());
     services.session = session;
 
-    const state = await startRun(services, {
+    const state = await startRun(services, mountedProject(services.config), {
       agent: 'sales/test-agent',
       inputs: { account_url: 'https://example.com' },
       dryRun: true,
@@ -104,7 +105,7 @@ test('a missing required input is bad_request before anything is spawned', async
   try {
     const services = createRunnerServices(loadConfig(), silent());
     await assert.rejects(
-      () => startRun(services, { agent: 'sales/test-agent', inputs: {}, dryRun: true }),
+      () => startRun(services, mountedProject(services.config), { agent: 'sales/test-agent', inputs: {}, dryRun: true }),
       (err: { code?: string }) => err.code === 'bad_request',
     );
   } finally {
@@ -120,7 +121,7 @@ test('an unknown agent is agent_not_found', async () => {
   try {
     const services = createRunnerServices(loadConfig(), silent());
     await assert.rejects(
-      () => startRun(services, { agent: 'sales/does-not-exist', dryRun: true }),
+      () => startRun(services, mountedProject(services.config), { agent: 'sales/does-not-exist', dryRun: true }),
       (err: { code?: string }) => err.code === 'agent_not_found',
     );
   } finally {
@@ -138,7 +139,7 @@ test('a real run without an API key is refused with runner_not_configured', asyn
   try {
     const services = createRunnerServices(loadConfig(), silent());
     await assert.rejects(
-      () => startRun(services, { agent: 'sales/test-agent', inputs: { account_url: 'https://x' } }),
+      () => startRun(services, mountedProject(services.config), { agent: 'sales/test-agent', inputs: { account_url: 'https://x' } }),
       (err: { code?: string }) => err.code === 'runner_not_configured',
     );
   } finally {

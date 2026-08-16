@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../config.ts';
+import { mountedProject } from '../project.ts';
 import { loadAgent } from '../agents.ts';
 import { resolveAllowlist } from '../allowlist.ts';
 import { buildPrompt } from '../prompt.ts';
@@ -136,7 +137,7 @@ test('company-interview: approval: required stops the run at the plan and a deni
       notified = summary;
     };
 
-    const state = await startRun(services, {
+    const state = await startRun(services, mountedProject(services.config), {
       agent: INTERVIEW_AGENT_SLUG,
       inputs: { mode: 'first-run', answers: 'not yet' },
       dryRun: true,
@@ -147,7 +148,7 @@ test('company-interview: approval: required stops the run at the plan and a deni
 
     assert.equal(state.status, 'awaiting-approval', 'the run parks at the gate, it does not proceed');
     assert.ok(notified, 'a human is told there is something to decide (§3.2 push)');
-    assert.equal(services.store.pendingApprovals().length, 1, 'GET /api/approvals has a row');
+    assert.equal(services.store.pendingApprovals(services.config.projectSlug).length, 1, 'GET /api/approvals has a row');
     assert.equal(sessionCalled, false, 'nothing is spawned before a human answers');
 
     services.store.decide(state.runId, 'deny', 'Not until the twenty questions are answered.');
@@ -177,7 +178,7 @@ test('company-interview: an approval resumes the run, and the frontmatter on dis
       yield { type: 'token' as const, text: 'x' };
     };
 
-    const state = await startRun(services, {
+    const state = await startRun(services, mountedProject(services.config), {
       agent: INTERVIEW_AGENT_SLUG,
       inputs: { mode: 'review-gaps' },
       dryRun: true,

@@ -141,6 +141,21 @@ export interface SseStartData {
   runId: string;
   /** `department/agent-slug`. */
   agent: string;
+  /**
+   * `{project}/{department}/{slug}` — the addressable agent (ADR-014 §2). Distinct from
+   * `agent`, and the distinction is the point: two projects' `sales/database-mining` are
+   * two agents with two histories.
+   */
+  agentRef: string;
+  /**
+   * `{layer}:{path}@sha256:…` — **which file actually won the cascade for this run.**
+   *
+   * Emitted on `start`, before any token, because "I ran the wrong code-reviewer" is a bug
+   * class with no error message (Plan §21.9) and the console is where a human is already
+   * looking. `drawer-engineer` renders the layer half of this as the provenance badge
+   * (`⌂` global · `▣` project) in the drawer header.
+   */
+  sourceRef: string;
   /** Langfuse trace for this run. `null` when observability is not configured. */
   traceUrl: string | null;
   /** ISO 8601. */
@@ -649,7 +664,23 @@ export const LEGACY_UNSCOPED_PATHS: readonly { method: 'GET' | 'POST'; path: str
  * deliberately absent above. It reads Langfuse directly; the runner does not proxy it,
  * because two owners of one number is how the ticker starts lying.
  */
-export const COST_TICKER_ROUTE = { method: 'GET', path: '/api/cost/today' } as const;
+export const COST_TICKER_ROUTE = {
+  method: 'GET',
+  path: '/api/p/:project/cost/today',
+  scope: 'project',
+} as const;
+
+/**
+ * The pre-project spelling, still mounted and answering **400 `project_scope_missing`**,
+ * exactly like `LEGACY_UNSCOPED_PATHS` above. Kept as a named constant rather than a bare
+ * string so a client can grep for the thing it must stop calling.
+ *
+ * It is not a fallback and must not be used as one: the ticker is chrome and must not
+ * error out on an *unknown value*, but a missing project segment is a client fault with a
+ * one-line fix, and answering it with a plausible `usd: null` would hide the migration
+ * from the only people who can finish it.
+ */
+export const LEGACY_COST_TICKER_PATH = '/api/cost/today' as const;
 
 /**
  * `POST /api/ops/prune` (ADR-008 nightly retention) is **`observability-engineer`'s**.

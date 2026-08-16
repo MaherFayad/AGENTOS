@@ -23,7 +23,17 @@ export interface ApprovalGate {
 
 export interface RunState {
   runId: string;
+  /**
+   * The project slug this run belongs to. Present on **every** run, set from the resolved
+   * `:project` path segment — never defaulted, because the store is process-wide and a run
+   * with no project would be a row that `/api/all/approvals` could not label.
+   */
+  project: string;
   agent: string;
+  /** `{project}/{department}/{slug}` — what the ledger keys off (ADR-014 §2). */
+  agentRef: string;
+  /** `{layer}:{path}@sha256:…` — which file won the cascade for this run. */
+  sourceRef: string;
   agentName: string;
   department: string;
   inputs: Record<string, RunInputValue>;
@@ -56,7 +66,10 @@ export class RunStore {
   create(input: {
     /** When observability starts the trace first, reuse its id so LAST RUNS and SSE agree. */
     runId?: string;
+    project: string;
     agent: string;
+    agentRef: string;
+    sourceRef: string;
     agentName: string;
     department: string;
     inputs: Record<string, RunInputValue>;
@@ -65,7 +78,10 @@ export class RunStore {
     const runId = input.runId ?? randomUUID();
     const state: RunState = {
       runId,
+      project: input.project,
       agent: input.agent,
+      agentRef: input.agentRef,
+      sourceRef: input.sourceRef,
       agentName: input.agentName,
       department: input.department,
       inputs: input.inputs,
@@ -110,12 +126,20 @@ export class RunStore {
     return state;
   }
 
-  list(filter: { agent?: string; limit?: number } = {}): RunSummary[] {
+  /**
+   * `project` is a required part of the filter's meaning, not an option: this store is
+   * process-wide and will hold N projects' runs the day a second library is mounted. A
+   * caller that wants every project asks for `'*'` in so many words, so the cross-project
+   * read is greppable — the same shape migration 0005 gives the RLS predicate, for the same
+   * reason.
+   */
+  list(filter: { project: string; agent?: string; limit?: number }): RunSummary[] {
     const limit = Math.min(Math.max(filter.limit ?? 5, 1), 100);
     const out: RunSummary[] = [];
     for (const runId of this.order) {
       const state = this.runs.get(runId);
       if (!state) continue;
+      if (filter.project !== '*' && state.project !== filter.project) continue;
       if (filter.agent && state.agent !== filter.agent) continue;
       out.push({
         runId: state.runId,
@@ -168,13 +192,16 @@ export class RunStore {
     return state;
   }
 
-  pendingApprovals(): PendingApproval[] {
+  /** `project: '*'` is the deliberate cross-project read behind `GET /api/all/approvals`. */
+  pendingApprovals(project: string): PendingApproval[] {
     const out: PendingApproval[] = [];
     for (const runId of this.order) {
       const state = this.runs.get(runId);
       if (!state?.gate || state.gate.decided || state.status !== 'awaiting-approval') continue;
+      if (project !== '*' && state.project !== project) continue;
       out.push({
         runId: state.runId,
+        project: state.project,
         agent: state.agent,
         agentName: state.agentName,
         department: state.department,
@@ -186,9 +213,13 @@ export class RunStore {
     return out;
   }
 
-  /** Agents with a gate open — the map pulses these amber. */
-  agentsAwaitingApproval(): string[] {
-    return [...new Set(this.pendingApprovals().map((a) => a.agent))];
+  /**
+   * Agents with a gate open — the map pulses these amber. Project-scoped, because the map
+   * it feeds is one project's: an amber halo sourced from another client's run would be a
+   * cross-project leak rendered as a UI state.
+   */
+  agentsAwaitingApproval(project: string): string[] {
+    return [...new Set(this.pendingApprovals(project).map((a) => a.agent))];
   }
 
   counts(): { active: number; queued: number; pendingApprovals: number } {
@@ -198,7 +229,9 @@ export class RunStore {
       if (state.status === 'running' || state.status === 'awaiting-approval') active += 1;
       if (state.status === 'queued') queued += 1;
     }
-    return { active, queued, pendingApprovals: this.pendingApprovals().length };
+    // `/api/status` is coordinator-scoped by design (ADR-015): it describes this process,
+    // not a project's data, so its counts span every mounted project.
+    return { active, queued, pendingApprovals: this.pendingApprovals('*').length };
   }
 
   /** Drop streams past their replay window. Called on a timer by the server. */

@@ -39,11 +39,38 @@ export function isMetric(value: string): value is MetricName {
   return (METRICS as string[]).includes(value);
 }
 
+/**
+ * The bucket a run lands in when nobody recorded who paid for it.
+ *
+ * `unattributed` is a **value**, not a `NULL` and not an absence — migration 0005's
+ * `account_provenance` CHECK makes the database say it too. A cost-by-account chart that
+ * dropped these rows would show a total smaller than the ticker's and neither number would
+ * be wrong, which is the worst kind of disagreement to debug. (ADR-015 Q20.)
+ */
+export const UNATTRIBUTED_ACCOUNT = 'unattributed';
+
+/**
+ * Every ops query is scoped to exactly one project, and `projectId` is **required** rather
+ * than an optional field on the filter.
+ *
+ * That is the whole mechanism and it is worth one sentence: an optional project is a
+ * project you can forget, and a forgotten project on a metrics read does not throw, it
+ * quietly widens the answer. Making it a required property means the type checker refuses
+ * every call site that has not thought about it — the cheapest possible version of
+ * `project-scoping.md` invariant 8, bought at compile time.
+ */
 export type MetricFilter = {
+  /** `ops.project.id` — the deterministic uuid from the slug. Never a slug. */
+  projectId: string;
   agent?: string;
   department?: string;
   /** `mission-control.json` has a "Failed runs" tile: `filter: {status: "error"}`. */
   status?: string;
+  /**
+   * `ops.billing_account.id`, or the literal `unattributed` for runs whose payer was never
+   * recorded. Validated at the route before it reaches here (`Plan §11`).
+   */
+  account?: string;
 };
 
 /** Columns a metric may be grouped by. A closed set — never a value from a request. */
@@ -92,20 +119,71 @@ const EXPRESSION: Record<MetricName, string> = {
 const hoursAgo = (param: string) => `(${param}::float8 * interval '1 hour')`;
 
 /**
- * Window + filter predicate shared by every ops query. `$1` and `$2` are the window
- * bounds in hours ago; `$3`–`$5` are the optional filters, each a no-op when null.
+ * The project predicate. `$1` on **every** ops statement in this file, in the same slot,
+ * so "does this query carry a project?" is answerable by looking at one character.
+ *
+ * It is a bind parameter and it is not optional. Compare `account`, which genuinely is
+ * optional: an unfiltered account means "every account in this project" and that is a
+ * sentence someone might mean. There is no reading of "every project" that a dashboard
+ * widget or a KPI tile ever means, so no query here offers one.
+ */
+const PROJECT_PREDICATE = `project_id = $1::uuid`;
+
+/**
+ * The account predicate. Optional, and it has to handle `unattributed` specially because
+ * that bucket is stored as `account_id IS NULL` alongside `account_source =
+ * 'unattributed'` — comparing against the text form rather than casting to uuid keeps a
+ * malformed parameter a no-match instead of a 500.
+ */
+const ACCOUNT_PREDICATE = `
+      AND ($7::text IS NULL
+           OR ($7 = '${UNATTRIBUTED_ACCOUNT}' AND account_id IS NULL)
+           OR account_id::text = $7)`;
+
+/**
+ * Window + filter predicate shared by every ops query.
+ *
+ * `$1` is the project. `$2`/`$3` are the window bounds in hours ago; `$4`–`$7` are the
+ * optional filters, each a no-op when null.
  */
 const RUN_SCOPE = `
-    ${REAL_RUNS}
-      AND started_at >= now() - ${hoursAgo('$1')}
-      AND started_at <  now() - ${hoursAgo('$2')}
-      AND ($3::text IS NULL OR agent = $3)
-      AND ($4::text IS NULL OR department = $4)
-      AND ($5::text IS NULL OR status = $5)
+    ${PROJECT_PREDICATE}
+      AND ${REAL_RUNS}
+      AND started_at >= now() - ${hoursAgo('$2')}
+      AND started_at <  now() - ${hoursAgo('$3')}
+      AND ($4::text IS NULL OR agent = $4)
+      AND ($5::text IS NULL OR department = $5)
+      AND ($6::text IS NULL OR status = $6)${ACCOUNT_PREDICATE}
 `;
 
 const scopeParams = (filter: MetricFilter, from: number, to: number) =>
-  [from, to, filter.agent ?? null, filter.department ?? null, filter.status ?? null] as const;
+  [
+    requireProject(filter),
+    from,
+    to,
+    filter.agent ?? null,
+    filter.department ?? null,
+    filter.status ?? null,
+    filter.account ?? null,
+  ] as const;
+
+/**
+ * The runtime half of the required-`projectId` rule.
+ *
+ * TypeScript stops a *typed* caller forgetting the project. This stops an untyped one —
+ * the checker script, a JSON body, a `as never` in a test — and it throws rather than
+ * defaulting, because there is no project this could default to that would not be a guess
+ * about whose data the caller wanted.
+ */
+function requireProject(filter: MetricFilter): string {
+  const id = filter.projectId;
+  if (typeof id !== 'string' || id === '') {
+    throw Object.assign(new Error('An ops query was built with no project id.'), {
+      code: 'project_scope_unset',
+    });
+  }
+  return id;
+}
 
 /**
  * One metric over one window. The metric name selects a fixed SQL expression from a
@@ -189,7 +267,7 @@ export async function metricBreakdown(
     WHERE ${RUN_SCOPE}
     GROUP BY 1
     ORDER BY value DESC NULLS LAST
-    LIMIT $6
+    LIMIT $8
   `;
   const { rows } = await db.query<{ label: string; value: number | null; runs: number; unpriced: number }>(
     sql,
@@ -209,6 +287,7 @@ export async function metricBreakdown(
  */
 export async function costToday(
   db: DbClient,
+  projectId: string,
   timezone: string,
 ): Promise<{ usd: number | null; runs: number; unpricedRuns: number }> {
   // `sum` of no rows (or of only-NULL costs) is NULL. Do not coalesce to 0:
@@ -219,16 +298,119 @@ export async function costToday(
            count(*)::int AS runs,
            (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced_runs
     FROM ops.agent_runs
-    WHERE ${REAL_RUNS}
-      AND started_at >= date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1
+    WHERE ${PROJECT_PREDICATE}
+      AND ${REAL_RUNS}
+      AND started_at >= date_trunc('day', now() AT TIME ZONE $2) AT TIME ZONE $2
   `;
-  const { rows } = await db.query<{ usd: number | null; runs: number; unpriced_runs: number }>(sql, [timezone]);
+  const { rows } = await db.query<{ usd: number | null; runs: number; unpriced_runs: number }>(sql, [
+    requireProject({ projectId }),
+    timezone,
+  ]);
   const row = rows[0] ?? { usd: null, runs: 0, unpriced_runs: 0 };
   return {
     usd: row.usd === null ? null : Number(row.usd),
     runs: row.runs,
     unpricedRuns: row.unpriced_runs,
   };
+}
+
+/** One row of the per-account cost split (`Plan §11`, ADR-015 Q20). */
+export type AccountSpend = {
+  /** `null` for the `unattributed` bucket — no account was recorded, not "account zero". */
+  accountId: string | null;
+  /** `ops.billing_account.slug`, or `unattributed`. What a chip renders. */
+  account: string;
+  label: string | null;
+  /** `project-default` · `run-override` · `unattributed`. How the payer was chosen. */
+  source: string;
+  usd: number | null;
+  runs: number;
+  unpricedRuns: number;
+};
+
+const ACCOUNT_SPEND_SELECT = `
+    SELECT r.account_id,
+           coalesce(a.slug, '${UNATTRIBUTED_ACCOUNT}') AS account,
+           a.label,
+           r.account_source AS source,
+           sum(r.cost_usd)::float8 AS usd,
+           count(*)::int AS runs,
+           (count(*) FILTER (WHERE r.cost_usd IS NULL))::int AS unpriced_runs
+    FROM ops.agent_runs r
+    LEFT JOIN ops.billing_account a ON a.id = r.account_id
+`;
+
+const toAccountSpend = (r: Record<string, unknown>): AccountSpend => ({
+  accountId: (r.account_id as string | null) ?? null,
+  account: String(r.account ?? UNATTRIBUTED_ACCOUNT),
+  label: (r.label as string | null) ?? null,
+  source: String(r.source ?? UNATTRIBUTED_ACCOUNT),
+  usd: r.usd === null || r.usd === undefined ? null : Number(r.usd),
+  runs: Number(r.runs ?? 0),
+  unpricedRuns: Number(r.unpriced_runs ?? 0),
+});
+
+/**
+ * "Which account paid for today's runs, in this project" — the ticker's second axis
+ * (`Plan §11`: `work $12.40 · personal $3.10`).
+ *
+ * Two axes, not one: the same account pays across several projects, so a per-account
+ * number is only meaningful with a project beside it. `ops.billing_account` is
+ * deliberately *not* row-level-scoped (migration 0005 §5) because a billing account is
+ * cross-project by design — the LEFT JOIN is a label lookup, and the rows being counted
+ * are `ops.agent_runs`, which is scoped.
+ *
+ * An empty array means **no runs today in this project**. It never means "no accounts":
+ * that would be a claim about `ops.billing_account`, which this query does not make.
+ */
+export async function costTodayByAccount(
+  db: DbClient,
+  projectId: string,
+  timezone: string,
+): Promise<AccountSpend[]> {
+  const sql = `${ACCOUNT_SPEND_SELECT}
+    WHERE r.${PROJECT_PREDICATE}
+      AND r.dry_run = false AND r.status <> 'awaiting-approval'
+      AND r.started_at >= date_trunc('day', now() AT TIME ZONE $2) AT TIME ZONE $2
+    GROUP BY 1, 2, 3, 4
+    ORDER BY usd DESC NULLS LAST, runs DESC
+  `;
+  const { rows } = await db.query(sql, [requireProject({ projectId }), timezone]);
+  return rows.map(toAccountSpend);
+}
+
+/** The same split over an arbitrary window — the account chips on a cost surface. */
+export async function costByAccount(
+  db: DbClient,
+  projectId: string,
+  fromHoursAgo: number,
+  toHoursAgo = 0,
+): Promise<AccountSpend[]> {
+  const sql = `${ACCOUNT_SPEND_SELECT}
+    WHERE r.${PROJECT_PREDICATE}
+      AND r.dry_run = false AND r.status <> 'awaiting-approval'
+      AND r.started_at >= now() - ${hoursAgo('$2')}
+      AND r.started_at <  now() - ${hoursAgo('$3')}
+    GROUP BY 1, 2, 3, 4
+    ORDER BY usd DESC NULLS LAST, runs DESC
+  `;
+  const { rows } = await db.query(sql, [requireProject({ projectId }), fromHoursAgo, toHoursAgo]);
+  return rows.map(toAccountSpend);
+}
+
+/**
+ * How many billing accounts this coordinator knows about at all.
+ *
+ * Reported next to the split so an empty `byAccount` cannot be read as "one account paid
+ * for everything". `registered: 0` and `runs: 0` together say *the split has never had
+ * anything to split* — which is the true state today and is not the same sentence as
+ * "everything was paid by the default account".
+ */
+export async function billingAccountCount(db: DbClient): Promise<number> {
+  const { rows } = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM ops.billing_account WHERE revoked_at IS NULL`,
+  );
+  return Number(rows[0]?.n ?? 0);
 }
 
 /**
@@ -245,18 +427,20 @@ export async function lastRuns(
   fromHoursAgo: number | null = null,
 ) {
   const sql = `
-    SELECT run_id, agent, agent_name, department, status, started_at, duration_ms,
-           cost_usd, cost_source, tool_call_count, trace_url
+    SELECT run_id, agent, agent_ref, agent_name, department, status, started_at, duration_ms,
+           cost_usd, cost_source, account_id, account_source, tool_call_count, trace_url
     FROM ops.agent_runs
-    WHERE ${REAL_RUNS}
-      AND ($1::text IS NULL OR agent = $1)
-      AND ($2::text IS NULL OR department = $2)
-      AND ($3::text IS NULL OR status = $3)
-      AND ($4::float8 IS NULL OR started_at >= now() - ${hoursAgo('$4')})
+    WHERE ${PROJECT_PREDICATE}
+      AND ${REAL_RUNS}
+      AND ($2::text IS NULL OR agent = $2)
+      AND ($3::text IS NULL OR department = $3)
+      AND ($4::text IS NULL OR status = $4)
+      AND ($5::float8 IS NULL OR started_at >= now() - ${hoursAgo('$5')})
     ORDER BY started_at DESC
-    LIMIT $5
+    LIMIT $6
   `;
   const { rows } = await db.query(sql, [
+    requireProject(filter),
     filter.agent ?? null,
     filter.department ?? null,
     filter.status ?? null,
@@ -267,18 +451,24 @@ export async function lastRuns(
 }
 
 /** The activity feed (§2.5). Agent runs are the activity in phase 1. */
-export async function activityFeed(db: DbClient, department: string | null, limit: number) {
+export async function activityFeed(
+  db: DbClient,
+  projectId: string,
+  department: string | null,
+  limit: number,
+) {
   const sql = `
-    SELECT run_id, agent, agent_name, department, status, started_at,
+    SELECT run_id, agent, agent_ref, agent_name, department, status, started_at,
            activity_event, activity_detail, trace_url
     FROM ops.agent_runs
-    WHERE ${REAL_RUNS}
+    WHERE ${PROJECT_PREDICATE}
+      AND ${REAL_RUNS}
       AND activity_event IS NOT NULL
-      AND ($1::text IS NULL OR department = $1)
+      AND ($2::text IS NULL OR department = $2)
     ORDER BY started_at DESC
-    LIMIT $2
+    LIMIT $3
   `;
-  const { rows } = await db.query(sql, [department, limit]);
+  const { rows } = await db.query(sql, [requireProject({ projectId }), department, limit]);
   return rows;
 }
 
@@ -287,40 +477,75 @@ export async function activityFeed(db: DbClient, department: string | null, limi
  * runs per agent, not the last N days — a weekly agent should not read as healthy
  * merely because it has been idle.
  */
-export async function agentEvidence(db: DbClient, window: number) {
+export async function agentEvidence(db: DbClient, projectId: string, window: number) {
   const sql = `
     WITH ranked AS (
       SELECT agent, department, status, started_at,
              row_number() OVER (PARTITION BY agent ORDER BY started_at DESC) AS rn
       FROM ops.agent_runs
-      WHERE ${REAL_RUNS}
+      WHERE ${PROJECT_PREDICATE}
+        AND ${REAL_RUNS}
     )
     SELECT agent,
            min(department) AS department,
            count(*)::int AS total_runs,
            (count(*) FILTER (WHERE status = 'ok'))::int AS successful_runs,
-           (count(*) FILTER (WHERE rn <= $1))::int AS recent_runs,
-           (count(*) FILTER (WHERE rn <= $1 AND status = 'error'))::int AS recent_errors,
+           (count(*) FILTER (WHERE rn <= $2))::int AS recent_runs,
+           (count(*) FILTER (WHERE rn <= $2 AND status = 'error'))::int AS recent_errors,
            max(started_at) AS last_run_at,
            max(started_at) FILTER (WHERE status = 'ok') AS last_success_at
     FROM ranked
     GROUP BY agent
     ORDER BY agent
   `;
-  const { rows } = await db.query(sql, [window]);
+  const { rows } = await db.query(sql, [requireProject({ projectId }), window]);
   return rows;
 }
 
-/** Tool spans for one run — what the drawer expands into. */
-export async function runToolCalls(db: DbClient, runId: string) {
+/**
+ * Tool spans for one run — what the drawer expands into.
+ *
+ * `ops.agent_run_tools` deliberately has **no** `project_id` of its own (migration 0005
+ * §5: two copies of one fact eventually disagree, and here the disagreement would be a
+ * tool span attributed to the wrong client). So the project arrives through the parent
+ * row, as a join rather than as a second column.
+ *
+ * That join is not decoration. A `runId` is a global identifier with no project in it: a
+ * run id copied out of one project's drawer and pasted into another project's URL would
+ * otherwise return that run's spans under the wrong project's name — a cross-project read
+ * with no error message, which is the exact bug class `Plan §21.9` is about. With the
+ * join, the answer is an empty span list for a run that is not this project's, and the
+ * route turns that into `run_not_in_project` rather than into an empty drawer.
+ */
+export async function runToolCalls(db: DbClient, projectId: string, runId: string) {
   const sql = `
-    SELECT seq, name, status, started_at, duration_ms, error
-    FROM ops.agent_run_tools
-    WHERE run_id = $1
-    ORDER BY seq
+    SELECT t.seq, t.name, t.status, t.started_at, t.duration_ms, t.error
+    FROM ops.agent_run_tools t
+    JOIN ops.agent_runs r ON r.run_id = t.run_id AND r.${PROJECT_PREDICATE}
+    WHERE t.run_id = $2
+    ORDER BY t.seq
   `;
-  const { rows } = await db.query(sql, [runId]);
+  const { rows } = await db.query(sql, [requireProject({ projectId }), runId]);
   return rows;
+}
+
+/**
+ * Does this run belong to this project at all?
+ *
+ * Asked separately from the spans so that "this run has no tool calls" and "this run is
+ * not yours" are two answers rather than one empty array. The second is the one that must
+ * never render as an empty state.
+ */
+export async function runExistsInProject(
+  db: DbClient,
+  projectId: string,
+  runId: string,
+): Promise<boolean> {
+  const { rows } = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM ops.agent_runs WHERE ${PROJECT_PREDICATE} AND run_id = $2`,
+    [requireProject({ projectId }), runId],
+  );
+  return Number(rows[0]?.n ?? 0) > 0;
 }
 
 /* ------------------------------------------------------------------------- *

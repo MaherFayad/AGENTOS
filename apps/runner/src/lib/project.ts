@@ -160,6 +160,39 @@ export function scopeMissing(config: RunnerConfig, scopedPath?: string): ApiErro
   );
 }
 
+/**
+ * Is migration 0005's row-level security actually in force on this connection?
+ *
+ * **Asked, never assumed.** RLS is bypassed entirely by a superuser or a `BYPASSRLS` role,
+ * and compose's default Postgres user is a superuser — so on the stack as it ships today
+ * every policy in that migration is inert. Reporting `bypassed` from a probe is a task
+ * somebody can close; writing `false` from a comment is a claim that ages into a lie.
+ *
+ * `'unknown'` is its own answer and is not `'bypassed'`: with no ledger we have not learned
+ * that isolation is off, we have failed to ask. Collapsing those two is the same disease as
+ * a `0` where the truth is *unknown* (BOARD rule 9).
+ */
+export type ScopeEnforcement = 'enforced' | 'bypassed' | 'unknown';
+
+export async function probeScopeEnforcement(
+  db: { query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) => Promise<{ rows: R[] }> } | null,
+): Promise<ScopeEnforcement> {
+  if (!db) return 'unknown';
+  try {
+    const { rows } = await db.query<{ enforced: boolean | null }>(
+      'SELECT ops.project_scope_enforced() AS enforced',
+    );
+    const enforced = rows[0]?.enforced;
+    if (enforced === true) return 'enforced';
+    if (enforced === false) return 'bypassed';
+    return 'unknown';
+  } catch {
+    // The function is missing (migration 0005 not applied) or the query failed. Either way
+    // we do not know, and saying so is the only honest answer available.
+    return 'unknown';
+  }
+}
+
 /** `GET /api/projects` row for a mounted project. Declared-but-unread fields say so. */
 export function toProjectSummary(project: MountedProject): ProjectSummary {
   return {

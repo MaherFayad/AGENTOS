@@ -17,7 +17,19 @@ import type { DbClient } from '../observability/types.ts';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 
-export type PoolHandle = DbClient & { end(): Promise<void> };
+export type PoolHandle = DbClient & {
+  end(): Promise<void>;
+  /**
+   * Lend one pooled connection for the length of `fn`.
+   *
+   * `pool.query` picks whatever connection is free, which is correct for a single
+   * statement and wrong for anything with per-connection state. The project scope
+   * (`agnetos.project_id`, migration 0005 §5) is exactly that: setting it through
+   * `pool.query` sets it on one connection and then reads from another, which looks like
+   * enforcement and is not. `db/scope.ts` is the only caller.
+   */
+  session<T>(fn: (client: DbClient) => Promise<T>): Promise<T>;
+};
 
 export interface ConnectOptions {
   /**
@@ -53,6 +65,20 @@ export async function connect(
   return {
     query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) =>
       pool.query(sql, params ? [...params] : undefined) as unknown as Promise<{ rows: R[] }>,
+    async session<T>(fn: (client: DbClient) => Promise<T>): Promise<T> {
+      const client = await pool.connect();
+      try {
+        return await fn({
+          query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) =>
+            client.query(sql, params ? [...params] : undefined) as unknown as Promise<{ rows: R[] }>,
+        });
+      } finally {
+        // Release unconditionally. A connection leaked on an error path is a pool that
+        // runs out eight requests later, at which point the metrics API stops answering
+        // for a reason that has nothing to do with the query that broke.
+        client.release();
+      }
+    },
     end: () => pool.end(),
   };
 }

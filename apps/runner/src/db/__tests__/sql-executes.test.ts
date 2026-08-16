@@ -54,6 +54,7 @@ import { migrate } from '../client.ts';
 import { createLedger, writeOutput } from '../ledger.ts';
 import { pruneRetention } from '../prune.ts';
 import type { DbClient } from '../../observability/types.ts';
+import { projectIdForSlug } from '../../lib/project.ts';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const SKIP = !DATABASE_URL;
@@ -91,12 +92,25 @@ function recorder(): { db: DbClient; statements: Statement[]; label: (l: string)
   };
 }
 
+/**
+ * The seeded project's id, computed the same way `ops.project_id_for` computes it. Every
+ * query below carries it, because after migration 0005 a query with no project predicate
+ * does not return fewer rows — it raises (`project-scoping.md` invariant 8). A suite that
+ * omitted it would be testing SQL no route can legally emit.
+ */
+const PROJECT_ID = projectIdForSlug('agentos');
+
 /** Every filter shape a route can produce, including "all filters at once". */
 const FILTERS: Q.MetricFilter[] = [
-  {},
-  { agent: 'sales/follow-up-coordinator' },
-  { department: 'sales' },
-  { agent: 'sales/follow-up-coordinator', department: 'sales', status: 'error' },
+  { projectId: PROJECT_ID },
+  { projectId: PROJECT_ID, agent: 'sales/follow-up-coordinator' },
+  { projectId: PROJECT_ID, department: 'sales' },
+  { projectId: PROJECT_ID, agent: 'sales/follow-up-coordinator', department: 'sales', status: 'error' },
+  // The account axis (`Plan §11`) in both of its readings. They take different branches of
+  // the predicate: a real id compares `account_id::text`, while `unattributed` is stored as
+  // `account_id IS NULL` and would silently match nothing if the branch were wrong.
+  { projectId: PROJECT_ID, account: PROJECT_ID },
+  { projectId: PROJECT_ID, account: Q.UNATTRIBUTED_ACCOUNT },
 ];
 
 async function harvestOpsQueries(): Promise<Statement[]> {
@@ -135,24 +149,36 @@ async function harvestOpsQueries(): Promise<Statement[]> {
 
   for (const range of Object.keys(Q.RANGES) as Q.Range[]) {
     label(`metric over range ${range}`);
-    await Q.metric(db, 'runs', {}, Q.RANGES[range], 0);
+    await Q.metric(db, 'runs', { projectId: PROJECT_ID }, Q.RANGES[range], 0);
     // The KPI chip's previous window: `hours * 2` to `hours`.
     label(`metric over previous window of ${range}`);
-    await Q.metric(db, 'runs', {}, Q.RANGES[range] * 2, Q.RANGES[range]);
+    await Q.metric(db, 'runs', { projectId: PROJECT_ID }, Q.RANGES[range] * 2, Q.RANGES[range]);
   }
 
   label('costToday');
-  await Q.costToday(db, 'Asia/Riyadh');
+  await Q.costToday(db, PROJECT_ID, 'Asia/Riyadh');
   label('costToday (UTC)');
-  await Q.costToday(db, 'UTC');
+  await Q.costToday(db, PROJECT_ID, 'UTC');
   label('activityFeed (all departments)');
-  await Q.activityFeed(db, null, 12);
+  await Q.activityFeed(db, PROJECT_ID, null, 12);
   label('activityFeed (one department)');
-  await Q.activityFeed(db, 'sales', 12);
+  await Q.activityFeed(db, PROJECT_ID, 'sales', 12);
   label('agentEvidence — status derivation');
-  await Q.agentEvidence(db, 20);
+  await Q.agentEvidence(db, PROJECT_ID, 20);
   label('runToolCalls — the drawer span expansion');
-  await Q.runToolCalls(db, 'run_0000000000');
+  await Q.runToolCalls(db, PROJECT_ID, 'run_0000000000');
+  label('runExistsInProject — "not yours" vs "no spans"');
+  await Q.runExistsInProject(db, PROJECT_ID, 'run_0000000000');
+
+  // The account split (`Plan §11`). These join `ops.billing_account`, which is deliberately
+  // NOT row-level-scoped — so this is also the statement that would break first if someone
+  // added an RLS policy to that table without noticing it is cross-project by design.
+  label('costTodayByAccount — the ticker\'s second axis');
+  await Q.costTodayByAccount(db, PROJECT_ID, 'Asia/Riyadh');
+  label('costByAccount — the account chips over a window');
+  await Q.costByAccount(db, PROJECT_ID, 168, 0);
+  label('billingAccountCount — how many accounts exist at all');
+  await Q.billingAccountCount(db);
 
   return rec.statements;
 }
@@ -168,7 +194,7 @@ function harvestNamedQueries(): Statement[] {
       // required, and a panel would have to pass it. `kind` is the only such case.
       if (spec.default === undefined) supplied[spec.name] = spec.type === 'int' ? 1 : 'deal';
     }
-    const bound = bindNamedQuery(name, supplied);
+    const bound = bindNamedQuery(name, PROJECT_ID, supplied);
     assert.ok(bound.sql, `${name} is served but carries no SQL`);
     out.push({ label: `NAMED_QUERIES.${name}`, sql: bound.sql!, params: bound.params });
   }
@@ -178,6 +204,89 @@ function harvestNamedQueries(): Statement[] {
 /* -------------------------------------------------------------------------- *
  * The suite
  * -------------------------------------------------------------------------- */
+
+/**
+ * `project-scoping.md` invariant 8, asked of the database itself:
+ *
+ *   > A query that reaches a project-scoped table without a project predicate **fails**,
+ *   > in a test, rather than returning another project's rows.
+ *
+ * The honest complication, and the reason this test reports rather than simply asserts:
+ * **on the stack as it ships today the guarantee is inert.** Compose's Postgres user is a
+ * superuser, superusers bypass row-level security, and migration 0005 §6 says so in the
+ * file and reports it on `GET /api/status` as `projects.scopeEnforcement`. Closing it is
+ * one line of infra — a non-superuser role for the app connection — filed to
+ * `infra-compose-engineer`.
+ *
+ * So this test asserts the *reachable* half unconditionally: the predicate function exists
+ * and raises `42501` when asked directly, which is what the RLS policy calls. It asserts
+ * the policy end-to-end only when the connection cannot bypass RLS, and it says out loud
+ * which of the two it did. A test that quietly passed under a superuser would be reporting
+ * an isolation guarantee that is not switched on — the exact class of claim this repo
+ * exists to stop making.
+ */
+test('an unscoped read raises rather than returning rows', { skip: SKIP && SKIP_REASON }, async (t) => {
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: DATABASE_URL, max: 2 });
+
+  try {
+    await migrate({
+      query: (sql, params) => pool.query(sql, params ? [...params] : undefined) as never,
+    });
+
+    // 1. The predicate itself, called with no scope set. Always checkable.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN READ ONLY');
+      await assert.rejects(
+        () => client.query(`SELECT ops.project_visible(ops.project_id_for('agentos'))`),
+        (error: { code?: string; message?: string }) => {
+          assert.equal(error.code, '42501', 'an unscoped read must look like a fault, not an empty state');
+          assert.match(String(error.message), /project_scope_missing/);
+          return true;
+        },
+      );
+      await client.query('ROLLBACK');
+
+      // 2. The scope, set the way `readInProject` sets it, makes the same call succeed —
+      //    so the raise above is about the missing scope and not about the function.
+      await client.query('BEGIN READ ONLY');
+      await client.query('SELECT set_config($1, $2, true)', ['agnetos.project_id', PROJECT_ID]);
+      const { rows } = await client.query<{ visible: boolean }>(
+        `SELECT ops.project_visible(ops.project_id_for('agentos')) AS visible`,
+      );
+      assert.equal(rows[0].visible, true);
+      await client.query('ROLLBACK');
+
+      // 3. The policy end-to-end — only meaningful on a connection that cannot bypass it.
+      const { rows: enforced } = await client.query<{ on: boolean }>(
+        'SELECT ops.project_scope_enforced() AS on',
+      );
+      if (!enforced[0].on) {
+        t.diagnostic(
+          'RLS is BYPASSED on this connection (superuser or BYPASSRLS), so migration 0005 §5 is ' +
+            'inert here and the end-to-end half of this test was NOT run. The predicate above is ' +
+            'proven; the policy is not. Filed to infra-compose-engineer: a non-superuser role for ' +
+            'the app connection is the one line that turns this on.',
+        );
+        return;
+      }
+
+      await client.query('BEGIN READ ONLY');
+      await assert.rejects(
+        () => client.query('SELECT count(*) FROM ops.agent_runs'),
+        (error: { code?: string }) => error.code === '42501',
+        'a scoped table read with no scope must raise, not answer zero',
+      );
+      await client.query('ROLLBACK');
+      t.diagnostic('RLS is enforced on this connection — the policy was proven end to end.');
+    } finally {
+      client.release();
+    }
+  } finally {
+    await pool.end();
+  }
+});
 
 test('every SQL statement the runner can emit is accepted by a real Postgres', { skip: SKIP && SKIP_REASON }, async (t) => {
   const { Pool } = await import('pg');
@@ -201,6 +310,11 @@ test('every SQL statement the runner can emit is accepted by a real Postgres', {
       // READ ONLY: this suite reads a live ledger. It must not be able to change it,
       // and a "query" that tries to write must fail rather than succeed quietly.
       await client.query('BEGIN READ ONLY');
+      // The same scope `readInProject` sets, for the same reason: without it these
+      // statements would pass today (RLS is inert under a superuser) and every one of them
+      // would start failing the day the non-superuser role lands — which is the one day
+      // nobody would be looking at this suite.
+      await client.query('SELECT set_config($1, $2, true)', ['agnetos.project_id', PROJECT_ID]);
       for (const s of statements) {
         try {
           await client.query({ text: s.sql, values: [...s.params] });
@@ -209,8 +323,12 @@ test('every SQL statement the runner can emit is accepted by a real Postgres', {
           failures.push(`${s.label}: ${message}\n${s.sql.trim()}`);
           // A failed statement aborts the transaction; restart it so the remaining
           // statements are still checked. One run, every problem, not a bisect.
+          // The scope is transaction-local, so it has to be re-set with the transaction —
+          // otherwise every statement after the first failure would be running unscoped
+          // and the rest of the run would be measuring something else.
           await client.query('ROLLBACK');
           await client.query('BEGIN READ ONLY');
+          await client.query('SELECT set_config($1, $2, true)', ['agnetos.project_id', PROJECT_ID]);
         }
       }
       await client.query('ROLLBACK');
@@ -331,10 +449,14 @@ test('the harvester covers every query function exported by queries.ts', () => {
     'metricSeries',
     'metricBreakdown',
     'costToday',
+    'costTodayByAccount',
+    'costByAccount',
+    'billingAccountCount',
     'lastRuns',
     'activityFeed',
     'agentEvidence',
     'runToolCalls',
+    'runExistsInProject',
   ]);
 
   const exported = Object.entries(Q)

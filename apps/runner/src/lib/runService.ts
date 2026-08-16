@@ -1,6 +1,7 @@
 /**
  * The run pipeline (§3.2), in the order the spec states it:
  *
+ *   0. Resolve the agent **through the cascade**, for this project    (ADR-014, ADR-015)
  *   1. Load SKILL.md + company/COMPANY.md → system prompt   (§3.3 injects the brain here)
  *   2. Tool allowlist = frontmatter `wired_into`, exactly    (the security boundary)
  *   3. cwd = a fresh per-run scratch workspace
@@ -11,11 +12,19 @@
  * Plus the approval gate, which sits between 3 and 4 when frontmatter says
  * `approval: required` — the run pauses at the plan stage, and nothing is spent until a
  * human answers.
+ *
+ * Step 0 is new in M15 and is the reason the pipeline no longer calls `loadAgent`.
+ * `resolveForDispatch` is the only door: it reads the layers, derives the capability
+ * ceiling from the introducing layer, refuses a widening, and hands back a record built
+ * from the winning file's bytes. There is deliberately no code path here that produces a
+ * runnable agent without going through it.
  */
 import type { RunInputValue, RunRequest } from '@agnetos/contracts';
 import { ApiError, toApiError } from './errors';
 import type { RunnerConfig } from './config';
-import { loadAgent, validateInputs, type AgentRecord } from './agents';
+import { validateInputs, type AgentRecord } from './agents';
+import { resolveForDispatch } from './cascade';
+import type { MountedProject } from './project';
 import { isPathInsideScratch, isToolAllowed, unknownConnectorError } from './allowlist';
 import { readCompanyBrain } from './brain';
 import { buildPlanSummary, buildPrompt } from './prompt';
@@ -107,7 +116,11 @@ function slotsFor(limit: number): Slots {
  * event is buffered, so the caller can attach the SSE response before any work happens —
  * a client that connects late still gets the whole stream from the buffer.
  */
-export async function startRun(services: RunnerServices, request: RunRequest): Promise<RunState> {
+export async function startRun(
+  services: RunnerServices,
+  project: MountedProject,
+  request: RunRequest,
+): Promise<RunState> {
   const { config, store, ledger, langfuse } = services;
 
   if (typeof request?.agent !== 'string' || request.agent.trim() === '') {
@@ -117,7 +130,11 @@ export async function startRun(services: RunnerServices, request: RunRequest): P
     });
   }
 
-  const record = await loadAgent(config, request.agent.trim());
+  // Step 0. Resolution *and* the Class C ceiling check, in one call that cannot be
+  // half-performed (ADR-014 §3, §7.3). A widening is refused here, before a scratch
+  // workspace exists and before a single token is spent.
+  const dispatch = await resolveForDispatch(config, project, request.agent.trim());
+  const record = dispatch.record;
 
   // Schema invariant 5: an unknown `wired_into` name is refused, never silently dropped.
   // Dropping it would start the run with fewer permissions than its author intended and
@@ -150,7 +167,10 @@ export async function startRun(services: RunnerServices, request: RunRequest): P
 
   const state = store.create({
     ...(obsTrace ? { runId: obsTrace.runId } : {}),
+    project: project.slug,
     agent: record.slug,
+    agentRef: dispatch.agentRef,
+    sourceRef: dispatch.sourceRef,
     agentName: record.name,
     department: record.department,
     inputs,
@@ -165,6 +185,8 @@ export async function startRun(services: RunnerServices, request: RunRequest): P
   state.stream.emit('start', {
     runId: state.runId,
     agent: record.slug,
+    agentRef: dispatch.agentRef,
+    sourceRef: dispatch.sourceRef,
     traceUrl: state.traceUrl,
     startedAt: state.startedAt,
     tools: record.allowlist.tools,
