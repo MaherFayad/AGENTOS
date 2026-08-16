@@ -6,6 +6,7 @@
  * ============================================================================= */
 
 import { DEFAULT_LOCALE, type Locale } from './config';
+import { isolate } from './format';
 import { isPlural, isTodo, type Entry } from './entry';
 import { en, type StringKey } from './strings.en';
 import { ar } from './strings.ar';
@@ -16,11 +17,36 @@ const CATALOGUES: Record<Locale, Record<string, Entry>> = { en, ar };
 
 export type Vars = Readonly<Record<string, string | number>>;
 
-/** `{name}` → the matching var. An unmatched placeholder is left visible on
- *  purpose: a stray `{count}` in a screenshot is a bug report; a silently
- *  emptied one is a mystery. */
-const interpolate = (template: string, vars?: Vars): string =>
-  vars ? template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : template;
+/**
+ * `{name}` → the matching var. An unmatched placeholder is left visible on
+ * purpose: a stray `{count}` in a screenshot is a bug report; a silently
+ * emptied one is a mystery.
+ *
+ * EVERY INTERPOLATED VALUE IS BIDI-ISOLATED IN AN RTL LOCALE, and that is the
+ * answer to a question `design-system-guardian` asked about one string
+ * (`'نسخة متفرّعة {commit}'` — a Latin hex run inside an Arabic sentence).
+ *
+ * Answering it per-string would have meant isolation marks typed into the
+ * catalogue, which is a thing translators delete, reorder and forget. Answering
+ * it here covers `{commit}`, `{parent}`, `{name}`, `{id}`, `{query}`, `{tool}`,
+ * `{amount}` and every future one, in both catalogues, with no call site
+ * knowing. It is the same decision `format.ts` already made for numbers, moved
+ * one layer up so it applies to values the formatters never see.
+ *
+ * `isolate()` uses U+2068 FIRST STRONG ISOLATE, so an Arabic-valued variable is
+ * unaffected — the isolate takes the direction of the first strong character in
+ * the value itself. Applying it to everything is therefore safe rather than
+ * merely convenient, and nesting it inside an already-isolated number is a no-op.
+ *
+ * Nothing should ever parse the result. `stripIsolates()` exists for tests and
+ * for anything that will be read back.
+ */
+const interpolate = (locale: Locale, template: string, vars?: Vars): string =>
+  vars
+    ? template.replace(/\{(\w+)\}/g, (m, k: string) =>
+        k in vars ? isolate(String(vars[k]), locale) : m,
+      )
+    : template;
 
 const pluralRules = new Map<Locale, Intl.PluralRules>();
 const rulesFor = (locale: Locale): Intl.PluralRules => {
@@ -40,16 +66,16 @@ const rulesFor = (locale: Locale): Intl.PluralRules => {
  * objects rather than "1 run / N runs" — see entry.ts.
  */
 const resolve = (locale: Locale, entry: Entry, vars?: Vars): string => {
-  if (isTodo(entry)) return interpolate(entry.todo, vars);
+  if (isTodo(entry)) return interpolate(locale, entry.todo, vars);
 
   if (isPlural(entry)) {
     const count = Number(vars?.count ?? 0);
     const category = count === 0 && entry.zero !== undefined ? 'zero' : rulesFor(locale).select(count);
     const chosen = entry[category as keyof typeof entry] ?? entry.other;
-    return interpolate(String(chosen), vars);
+    return interpolate(locale, String(chosen), vars);
   }
 
-  return interpolate(entry, vars);
+  return interpolate(locale, entry, vars);
 };
 
 /**

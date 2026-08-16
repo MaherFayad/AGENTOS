@@ -96,16 +96,47 @@ export function siblingAnchor(
  * The label a screen reader hears. Everything the sighted treatments encode — the copper
  * ring, the 45% dim, the amber halo, the clock badge — has to be in this string, or the
  * non-visual map is a different map.
+ *
+ * Two i18n properties this function has to hold and did not before 2026-08-17:
+ *
+ *   1. The fragments come from the catalogue (`map.node.aria.*`). They are their own keys
+ *      rather than reuses of `map.node.state.*`: a chip that reads "Failing" and a phrase
+ *      spoken as "failing its audit" are two registers, and MSA separates them further
+ *      than English does.
+ *   2. The join is `Intl.ListFormat`, never `', '`. The Arabic list separator is `، `
+ *      (U+060C) — hardcoding the Latin comma is the same class of mistake as hardcoding a
+ *      left margin, and it is the kind that survives a visual RTL review because the glyph
+ *      is nearly invisible at label size.
+ *
+ * Stays pure: the caller passes `t` and `locale`, so this file still has no React import
+ * and the keyboard tests can call it with a stub.
  */
-export function nodeAriaLabel(node: GraphNode, departmentLabel: string): string {
+export function nodeAriaLabel(
+  node: GraphNode,
+  departmentLabel: string,
+  t: (key: NodeAriaKey) => string,
+  locale = 'en',
+): string {
   const parts: string[] = [node.label];
-  if (node.kind === 'anchor') parts.push('department branch');
+  if (node.kind === 'anchor') parts.push(t('map.node.aria.branch'));
   else parts.push(departmentLabel);
   if (node.cluster) parts.push(node.cluster);
   parts.push(
-    node.status === 'live' ? 'live' : node.status === 'failing' ? 'failing its audit' : 'dormant, not yet live',
+    node.status === 'live'
+      ? t('map.node.aria.live')
+      : node.status === 'failing'
+        ? t('map.node.aria.failing')
+        : t('map.node.aria.dormant'),
   );
-  if (node.scheduled) parts.push('scheduled');
-  if (node.approvalPending) parts.push('waiting for approval');
-  return parts.join(', ');
+  if (node.scheduled) parts.push(t('map.node.aria.scheduled'));
+  if (node.approvalPending) parts.push(t('map.node.aria.awaitingApproval'));
+  return new Intl.ListFormat(locale, { style: 'narrow', type: 'unit' }).format(parts);
 }
+
+export type NodeAriaKey =
+  | 'map.node.aria.branch'
+  | 'map.node.aria.live'
+  | 'map.node.aria.failing'
+  | 'map.node.aria.dormant'
+  | 'map.node.aria.scheduled'
+  | 'map.node.aria.awaitingApproval';

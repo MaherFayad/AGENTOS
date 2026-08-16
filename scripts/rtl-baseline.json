@@ -1,0 +1,44 @@
+{
+  "//": "THE RATCHET. Read scripts/check-rtl.mjs section 3c before touching this file.",
+  "why": "check-rtl exited 1 all of 2026-08-16 and was in no npm script that anything ran, so four agents shipped uncatalogued copy and the counter did not move. This file is what makes it a gate again: verify runs check-rtl --gate, which fails on NEW debt only. Existing debt is a scheduled migration with named owners (comms/handoffs/M8-rtl-arabic-pdpl-checker-blind-spot.md). Raising a number here is a reviewable act; a checker that quietly re-baselines itself is a checker that measures nothing.",
+  "howToLower": "Catalogue the strings, then re-run node scripts/check-rtl.mjs --json and paste the new totals here in the same commit as the fix.",
+  "recordedAt": "2026-08-17 00:32 +03:00",
+  "sha": "4e0bbe6",
+  "recordedBy": "rtl-arabic-pdpl-specialist",
+  "total": 261,
+  "byRule": {
+    "hardcoded-string": 236,
+    "physical-utility": 18,
+    "physical-property": 7
+  },
+  "byModule": {
+    "app/(views)": 3,
+    "app/api": 8,
+    "chart/components": 18,
+    "chart/data": 3,
+    "chart/model": 18,
+    "components/shell": 76,
+    "dashboards/components": 41,
+    "dashboards/dashboards.module.css": 7,
+    "dashboards/data": 3,
+    "dashboards/lib": 1,
+    "drawer/data": 7,
+    "drawer/JobDrawer.tsx": 2,
+    "drawer/run": 10,
+    "drawer/sections": 39,
+    "lib/push.ts": 3,
+    "lib/pwa.ts": 3,
+    "sessions/components": 1,
+    "sessions/data": 3,
+    "sessions/lib": 1,
+    "sessions/push": 4,
+    "sessions/relay": 10
+  },
+  "notCounted": {
+    "expression-attribute": 84,
+    "assembled-template": 99,
+    "server-copy": "unknown",
+    "unscanned-roots": 149,
+    "arabic-quality": "unknown"
+  }
+}

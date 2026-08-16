@@ -18,6 +18,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useT } from '@/i18n';
+import { useProjectHref } from '@/components/shell/useProjectHref';
 import { formatCost, formatElapsed, shortenRepo } from '../lib/format';
 import { countWaiting } from '../lib/sort';
 import { STATE_KEY } from '../lib/stateKey';
@@ -38,6 +39,9 @@ export function SessionsTab({
   const { list } = useSessionList(key);
   const now = useNow();
   const router = useRouter();
+  // M15: a session belongs to a project — which library its agents resolve from and
+  // which account pays for it (`Plan §11`) — so its route carries one.
+  const href = useProjectHref();
 
   if (status === 'checking') {
     // One frame of nothing beats a spinner that flashes: the key lookup is a
@@ -96,7 +100,7 @@ export function SessionsTab({
                 key={session.envelope.id}
                 session={session}
                 now={now}
-                onOpen={() => router.push(`/sessions/${encodeURIComponent(session.envelope.id)}`)}
+                onOpen={() => router.push(href(`/sessions/${encodeURIComponent(session.envelope.id)}`))}
               />
             ))
           : null}

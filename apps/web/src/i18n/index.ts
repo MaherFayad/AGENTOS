@@ -65,6 +65,8 @@ export {
   type DrawerAnchor,
 } from './direction';
 
+export { serverOrCatalogue, prefersServerCopy } from './server-copy';
+
 export { I18nProvider, useI18n, useT, Accented, type I18n } from './provider';
 
 export { en } from './strings.en';

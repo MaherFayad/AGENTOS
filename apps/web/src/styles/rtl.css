@@ -149,6 +149,14 @@ html {
 :lang(ar) .u-label,
 :lang(ar) .u-eyebrow,
 :lang(ar) .u-tab,
+/* SVG text carries its tracking as a `letterSpacing` PRESENTATION ATTRIBUTE, not
+ * a class — the map's type is counter-scaled against the camera, so it cannot
+ * take a CSS font-size and cannot use `.u-eyebrow` as-is. The belt above already
+ * flattens the attribute (any CSS declaration outranks a presentation attribute);
+ * this hook is the other half — the compensation §1.4 requires, so an Arabic SVG
+ * eyebrow is not simply a Latin one with its emphasis deleted. Added 2026-08-17
+ * with map/svg/BrainEmptyState.tsx, the first §3.3 empty state in the SVG layer. */
+:lang(ar) .u-svg-eyebrow,
 :lang(ar) [class*='tracking-wider-'] {
   word-spacing: var(--word-space-label-ar);
   font-weight: 600;

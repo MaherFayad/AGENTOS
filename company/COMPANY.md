@@ -107,10 +107,33 @@ interview may add to it; nothing may soften it (Part VII.4, §3.5).
 8. **Cross-border:** processing and storage stay in-region. An agent may not send client
    data to a tool whose processing location is unknown; if a connector's region is
    unclear, it does not belong in a `wired_into` list.
+9. **This file is two tiers, and only one of them is global.** Under N projects
+   (`Plan §9`–§10) the brain splits: a **global tier — this file, sections 5 and 7 —
+   holding facts about *us*, and a **project tier**, `<project>/company/COMPANY.md`,
+   holding facts about *that client*. §3.3 injects both into every run of that project;
+   the global tier is injected into **every run of every project**, which is precisely why
+   nothing client-identifying may ever be written into it. A client name, a client's
+   pricing, a client's red line or a client's ICP in the global tier is a breach of rule 4
+   on every subsequent invocation for every other client, with no code defect required.
+   The global tier answers *who is writing*; the project tier answers *who it is for*.
+   Sections 1–4, 6, 8 and 9 of this file are **project-tier by default**; sections 5
+   (Voice) and 7 (this block) are global.
 
 Tool-level consequence: `wired_into` is the runner's allowlist (§3.2). A connector that
 processes client data outside the region is not a configuration question — it is a red
 line, and the fix is removing the name from the frontmatter.
+
+Write-path consequence of rule 9, because a rule that names no enforcer enforces nothing:
+the interview's write-back (`apps/runner/src/lib/brain.ts`, ADR-007) is gated on an agent
+**slug** and confined to one **configured** company directory. Under a cascade every
+project has its own `intelligence/company-interview`, and both halves of that gate are
+project-blind — `agentSlug !== INTERVIEW_AGENT_SLUG` compares a `department/slug` that is
+identical in every project, and `config.companyFile` is one path. Project two's interview
+therefore overwrites project one's brain, and the git commit that follows records the
+overwrite as the brain's new history. The gate must key on the **`agent_ref`**
+(`{project}/{department}/{slug}`, ADR-014 §2) and write through the **mounted project's**
+`companyFile`, and a write to the global tier must be refused outright — the interview is
+a client-facing agent and the global tier is not its to edit.
 
 ## 8. Operations
 

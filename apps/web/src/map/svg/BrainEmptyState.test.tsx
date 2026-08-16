@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { I18nProvider } from '@/i18n';
 import { buildGalaxy, particleBrightness } from '../lib/particles';
 import { BrainEmptyState, brainCountSentence } from './BrainEmptyState';
 
@@ -14,7 +15,11 @@ const core = (over: Partial<{ brainCompleteness: number; brainAnswered: number |
 
 describe('the Second Brain at 0 of 20 (§3.3)', () => {
   it('says how empty it is, in words, from the payload count', () => {
-    const markup = renderToStaticMarkup(<BrainEmptyState core={core()} scale={1} />);
+    const markup = renderToStaticMarkup(
+      <I18nProvider>
+        <BrainEmptyState core={core()} scale={1} />
+      </I18nProvider>,
+    );
     expect(markup).toContain('data-testid="brain-empty-state"');
     expect(markup).toContain('0 of 20 questions answered');
     expect(markup).toContain('Run the company interview');
@@ -30,7 +35,9 @@ describe('the Second Brain at 0 of 20 (§3.3)', () => {
 
   it('disappears the moment a single question is answered', () => {
     const markup = renderToStaticMarkup(
-      <BrainEmptyState core={core({ brainCompleteness: 0.05, brainAnswered: 1 })} scale={1} />,
+      <I18nProvider>
+        <BrainEmptyState core={core({ brainCompleteness: 0.05, brainAnswered: 1 })} scale={1} />
+      </I18nProvider>,
     );
     expect(markup).toBe('');
     expect(buildGalaxy({ completeness: 0.05 }).length).toBeGreaterThan(0);
@@ -41,13 +48,19 @@ describe('the Second Brain at 0 of 20 (§3.3)', () => {
       'No interview answers yet',
     );
     const markup = renderToStaticMarkup(
-      <BrainEmptyState core={core({ brainTotal: null, brainAnswered: null })} scale={1} />,
+      <I18nProvider>
+        <BrainEmptyState core={core({ brainTotal: null, brainAnswered: null })} scale={1} />
+      </I18nProvider>,
     );
     expect(markup).not.toContain(' of 20');
   });
 
   it('counter-scales with the camera so the sentence stays readable when zoomed out', () => {
-    const markup = renderToStaticMarkup(<BrainEmptyState core={core()} scale={0.5} />);
+    const markup = renderToStaticMarkup(
+      <I18nProvider>
+        <BrainEmptyState core={core()} scale={0.5} />
+      </I18nProvider>,
+    );
     expect(markup).toContain('scale(2)');
   });
 });

@@ -25,6 +25,7 @@ import { presentation, DORMANT_OPACITY, LIVE_RING_OFFSET, LIVE_RING_WIDTH } from
 import { NODE_LABEL, LEAF_LABEL } from '../lib/map-type';
 import { APPROVAL_PULSE_MS } from '../lib/map-motion';
 import { nodeAriaLabel } from '../lib/keyboard';
+import { useI18n } from '@/i18n';
 
 export interface NodesProps {
   nodes: readonly GraphNode[];
@@ -111,6 +112,9 @@ const NodeShape = memo(function NodeShape({
   onActivate: NodesProps['onActivate'];
   onGrab: NodesProps['onGrab'];
 }): React.JSX.Element {
+  // The screen-reader label is assembled from catalogue fragments and joined with
+  // Intl.ListFormat, so it needs both the translator and the locale (§1.4).
+  const { t, locale } = useI18n();
   const look = presentation(node);
   const r = node.r;
   const isLeaf = node.kind === 'leaf';
@@ -132,7 +136,7 @@ const NodeShape = memo(function NodeShape({
       role="button"
       tabIndex={focused ? 0 : -1}
       data-node-id={node.id}
-      aria-label={nodeAriaLabel(node, departmentLabel)}
+      aria-label={nodeAriaLabel(node, departmentLabel, t, locale)}
       onPointerEnter={() => onHover(node.id)}
       onPointerLeave={() => onHover(null)}
       onFocus={() => onHover(node.id)}

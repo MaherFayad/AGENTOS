@@ -20,6 +20,8 @@
  */
 
 import type { GraphCore } from '@agnetos/contracts';
+import { DEFAULT_LOCALE, translate, type Locale } from '@/i18n';
+import { useI18n } from '@/i18n';
 import { BRAIN_EMPTY } from '../lib/map-type';
 
 export interface BrainEmptyStateProps {
@@ -28,26 +30,45 @@ export interface BrainEmptyStateProps {
   scale: number;
 }
 
-/** `0 of 20 questions answered`, or an honest sentence when there is no denominator. */
-export function brainCountSentence(core: GraphCore): string {
+/**
+ * `0 of 20 questions answered`, or an honest sentence when there is no denominator.
+ *
+ * Takes a locale rather than reading a hook so it stays a pure function the tests
+ * can call directly. It defaults to English for exactly one caller — a test — and
+ * never for a rendered surface: the component below passes the reader's locale.
+ */
+export function brainCountSentence(core: GraphCore, locale: Locale = DEFAULT_LOCALE): string {
   const total = core.brainTotal;
-  if (typeof total !== 'number' || total <= 0) return 'No interview answers yet';
+  if (typeof total !== 'number' || total <= 0) return translate(locale, 'map.brain.noCount');
   const answered = typeof core.brainAnswered === 'number' ? core.brainAnswered : 0;
-  return `${answered} of ${total} questions answered`;
+  return translate(locale, 'map.brain.count', { answered, total, count: total });
 }
 
 export function BrainEmptyState({ core, scale }: BrainEmptyStateProps): React.JSX.Element | null {
+  const { t, locale } = useI18n();
   if (core.brainCompleteness > 0) return null;
 
   const k = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  const sentence = brainCountSentence(core);
+  const sentence = brainCountSentence(core, locale);
+  const total = core.brainTotal;
+  // One key, one whole sentence. The label is NOT the eyebrow plus the count plus
+  // the hint concatenated: clause order differs between languages, and a label
+  // assembled at the call site can only ever come out in English's order.
+  const label =
+    typeof total === 'number' && total > 0
+      ? t('map.brain.aria', {
+          answered: typeof core.brainAnswered === 'number' ? core.brainAnswered : 0,
+          total,
+          count: total,
+        })
+      : t('map.brain.aria.noCount');
 
   return (
     <g
       data-testid="brain-empty-state"
       transform={`translate(${core.x} ${core.y}) scale(${1 / k})`}
       role="note"
-      aria-label={`Second brain: ${sentence}. Run the company interview to fill the galaxy.`}
+      aria-label={label}
       className="pointer-events-none select-none"
     >
       <text
@@ -57,9 +78,12 @@ export function BrainEmptyState({ core, scale }: BrainEmptyStateProps): React.JS
         fontSize={BRAIN_EMPTY.eyebrow.size}
         letterSpacing={BRAIN_EMPTY.eyebrow.tracking}
         fill="var(--ink-2)"
-        className="uppercase"
+        // `letterSpacing` is a presentation attribute here, so no CSS class carries it and
+        // check-rtl's tracking rule cannot see it. rtl.css flattens it under :lang(ar) and
+        // `u-svg-eyebrow` puts the emphasis back as weight + word-spacing (§1.4).
+        className="uppercase u-svg-eyebrow"
       >
-        Second brain
+        {t('map.brain.eyebrow')}
       </text>
       <text
         y={BRAIN_EMPTY.offset + BRAIN_EMPTY.row + 4}
@@ -77,7 +101,7 @@ export function BrainEmptyState({ core, scale }: BrainEmptyStateProps): React.JS
         fontSize={BRAIN_EMPTY.hint.size}
         fill="var(--ink-2)"
       >
-        Run the company interview — the galaxy fills as answers land
+        {t('map.brain.hint')}
       </text>
     </g>
   );

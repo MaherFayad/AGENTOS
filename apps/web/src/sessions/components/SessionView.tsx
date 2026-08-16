@@ -19,6 +19,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useT, type StringKey } from '@/i18n';
+import { useProjectHref } from '@/components/shell/useProjectHref';
 import { PermissionCard } from './PermissionCard';
 import { Transcript } from './Transcript';
 import { KeyGate } from './KeyGate';
@@ -39,6 +40,8 @@ export function SessionView({ sessionId }: { sessionId: string }): React.JSX.Ele
   const { status, key, error: keyError, unlock } = useSessionKey();
   const transcript = useTranscript(sessionId, key);
   const router = useRouter();
+  // M15: back to the list of *this project's* sessions (`Plan §9`).
+  const href = useProjectHref();
   const [draft, setDraft] = useState('');
 
   if (status === 'checking') return <div className={s.view} aria-busy="true" />;
@@ -65,7 +68,7 @@ export function SessionView({ sessionId }: { sessionId: string }): React.JSX.Ele
         <button
           type="button"
           className={`u-tab ${s.back}`}
-          onClick={() => router.push('/sessions')}
+          onClick={() => router.push(href('/sessions'))}
         >
           {t('sessions.view.back')}
         </button>

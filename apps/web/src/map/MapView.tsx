@@ -12,7 +12,9 @@ import { useRouter } from 'next/navigation';
 import type { GraphNode, GraphPayload } from '@agnetos/contracts';
 import { findDepartment } from '@agnetos/contracts';
 import { DURATION, useReducedMotion, withReducedMotion } from '@/components/primitives/motion';
+import { useProjectHref } from '@/components/shell/useProjectHref';
 import { openDrawer } from '@/drawer/events';
+import { useT } from '@/i18n';
 import { emit, on } from '@/lib/shell-bus';
 import { GalaxyCanvas } from './canvas/GalaxyCanvas';
 import { DepartmentRails } from './chrome/DepartmentRails';
@@ -63,6 +65,8 @@ export function MapView({
   payload: provided,
 }: MapViewProps): React.JSX.Element {
   const router = useRouter();
+  const href = useProjectHref();
+  const t = useT();
   const reduced = useReducedMotion();
   const { resource, arrivingIds } = useGraph(provided);
 
@@ -273,11 +277,12 @@ export function MapView({
     return () => svg.removeEventListener('wheel', onWheel);
   }, [commitTransform, payload]);
 
+  // M15: the galaxy drills in without leaving its project (`Plan §9`).
   const drillTo = useCallback(
     (dept: string, slug?: string | null) => {
-      router.push(slug ? `/map/${dept}/${agentSegment(slug)}` : `/map/${dept}`);
+      router.push(href(slug ? `/map/${dept}/${agentSegment(slug)}` : `/map/${dept}`));
     },
-    [router],
+    [router, href],
   );
 
   const onActivate = useCallback(
@@ -439,13 +444,15 @@ export function MapView({
     <div ref={rootRef} data-testid="map-galaxy" className="relative h-full w-full overflow-hidden bg-bg">
       <GalaxyCanvas core={core} transform={transform} />
 
-      {resource.state === 'unavailable' && <MapEmptyState message={resource.message} />}
+      {resource.state === 'unavailable' && (
+        <MapEmptyState reason={resource.reason} serverMessage={resource.serverMessage} />
+      )}
 
       {payload && (
         <svg
           ref={svgRef}
           role="group"
-          aria-label="Agent galaxy"
+          aria-label={t('a11y.galaxyGroup')}
           tabIndex={0}
           className="absolute inset-0 z-canvas h-full w-full touch-none"
           onPointerDown={onPointerDown}

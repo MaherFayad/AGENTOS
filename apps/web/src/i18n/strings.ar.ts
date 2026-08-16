@@ -64,6 +64,35 @@ export const ar: Catalog = {
   },
   'shell.cost.today': '{amount} اليوم',
 
+  /* مؤشّر الكلفة — القراءات الخمس وثلاث حالات لغياب القراءة.
+   * الصيغة اسميّة: «تعذّر» و«غير معروف» بدل صيغة الأمر. */
+  'shell.cost.state.unpriced': 'بلا تسعير',
+  'shell.cost.state.outage': 'الإنفاق غير معروف',
+  'shell.cost.state.noLedger': 'لا سجلّ',
+  'shell.cost.state.unavailable': 'لا بيانات كلفة',
+  'shell.cost.loading': 'جارٍ قراءة إنفاق الوكلاء اليوم.',
+  'shell.cost.amount': 'إنفاق الوكلاء حتى الآن اليوم: {amount}.',
+  'shell.cost.zero':
+    'لم تُسجَّل أيّ عملية تشغيل اليوم، فلم يُنفَق شيء. سجلّ التشغيل متّصل، فهذا الصفر قراءة لا تخمين.',
+  'shell.cost.unpriced':
+    'سُجِّلت عمليات تشغيل اليوم ولا يحمل أيّ منها سعرًا بعد، فإنفاق اليوم غير معروف. وهذا ليس صفرًا.',
+  'shell.cost.outage':
+    'سجلّ التشغيل لا يستجيب، فإنفاق اليوم غير معروف — وليس صفرًا. التشغيل مستمرّ وسيُسجَّل فور عودة قاعدة البيانات.',
+  'shell.cost.noLedger':
+    'لا سجلّ تشغيل مهيّأ لهذا المشغّل، فلا إنفاق يُقرأ. هذا وضع طبيعي في ملفّ التطوير، لا خلل.',
+  'shell.cost.notBuilt':
+    'لا يُبلِغ Langfuse عن الإنفاق بعد، فلا رقم يُعرض هنا. سيمتلئ هذا الحقل مع أوّل عملية تشغيل تُرصَد.',
+  'shell.cost.malformed':
+    'وصل إنفاق اليوم بصيغة لا تفهمها هذه النسخة — وبدونها يتطابق الصفر الحقيقي مع انقطاع السجلّ، فلا يُعرض رقم. هذا خلل هنا، لا واقعة عن إنفاقك.',
+  'shell.cost.offline': 'تعذّر الوصول إلى Langfuse لقراءة إنفاق اليوم. قد يكون هذا الجهاز خارج شبكة Tailnet.',
+
+  'shell.status.malformed':
+    'ردّ المشغّل بشيء لا تفهمه هذه النسخة، فحالته غير معروفة لا غير متّصلة.',
+  'shell.search.graph.malformed':
+    'وصل فهرس الوكلاء بصيغة لا تفهمها هذه النسخة، فالبحث فارغ لا خاطئ.',
+  'shell.search.panels.malformed':
+    'وصل فهرس اللوحات بصيغة لا تفهمها هذه النسخة، فالبحث فارغ لا خاطئ.',
+
   'shell.breadcrumb.allDepartments': 'كل الأقسام',
   'shell.counter.live': '{live} من {total} قيد التشغيل',
   'shell.counter.yourTree': 'شجرتك',
@@ -79,6 +108,42 @@ export const ar: Catalog = {
   'map.node.state.scheduled': 'مجدول',
   'map.node.state.awaitingApproval': 'بانتظار الموافقة',
   'map.node.open': 'فتح {name}',
+
+  'map.empty.title': 'لم تُبنَ المجرّة بعد',
+  'map.empty.notBuilt':
+    'لم يُبنَ مخطّط الخريطة بعد. شغّل {command} — وحتى ذلك الحين تبقى المجرّة فارغة عن قصد.',
+  'map.empty.malformed': 'مخطّط الخريطة ليس حمولة رسم بياني، فلا شيء يُرسَم.',
+  'map.empty.offline': 'تعذّر الوصول إلى المشغّل، فلا خريطة تُرسَم.',
+  'map.focus.previous': 'التركيز على القسم السابق',
+  'map.focus.next': 'التركيز على القسم التالي',
+
+  /* §3.3 الدماغ الثاني عند الصفر. الأرقام غربيّة ومعزولة LTR داخل السطر. */
+  'map.brain.eyebrow': 'الدماغ الثاني',
+  'map.brain.count': {
+    one: 'سؤال واحد مُجاب من {total}',
+    two: 'سؤالان مُجابان من {total}',
+    few: '{answered} أسئلة مُجابة من {total}',
+    many: '{answered} سؤالًا مُجابًا من {total}',
+    other: '{answered} من {total} سؤال مُجاب',
+  },
+  'map.brain.noCount': 'لا إجابات مقابلة بعد',
+  'map.brain.hint': 'شغّل مقابلة الشركة — تمتلئ المجرّة كلّما وصلت الإجابات',
+  'map.brain.aria': {
+    one: 'الدماغ الثاني، سؤال واحد مُجاب من {total}. شغّل مقابلة الشركة لملء المجرّة.',
+    two: 'الدماغ الثاني، سؤالان مُجابان من {total}. شغّل مقابلة الشركة لملء المجرّة.',
+    few: 'الدماغ الثاني، {answered} أسئلة مُجابة من {total}. شغّل مقابلة الشركة لملء المجرّة.',
+    many: 'الدماغ الثاني، {answered} سؤالًا مُجابًا من {total}. شغّل مقابلة الشركة لملء المجرّة.',
+    other: 'الدماغ الثاني، {answered} من {total} سؤال مُجاب. شغّل مقابلة الشركة لملء المجرّة.',
+  },
+  'map.brain.aria.noCount': 'الدماغ الثاني، لا إجابات مقابلة بعد. شغّل مقابلة الشركة لملء المجرّة.',
+
+  'map.node.aria.branch': 'فرع قسم',
+  'map.node.aria.live': 'قيد التشغيل',
+  'map.node.aria.failing': 'متعطّل في التدقيق',
+  'map.node.aria.dormant': 'خامل، ليس قيد التشغيل بعد',
+  'map.node.aria.scheduled': 'مجدول',
+  'map.node.aria.awaitingApproval': 'بانتظار الموافقة',
+  'a11y.galaxyGroup': 'مجرّة الوكلاء',
 
   /* §2.3 / §2.6.5 Drawers --------------------------------------------------- */
   'drawer.section.breaksInto': 'التفرّعات',
@@ -290,7 +355,35 @@ export const ar: Catalog = {
   'empty.inputs.title': 'لا مدخلات لهذا الوكيل',
   'empty.inputs.body': 'اضغط تشغيل. هو يعرف أين يبحث.',
 
+  /* Provenance (Plan §10) ---------------------------------------------------
+   * Filed by design-system-guardian as `todo()` and correctly so — fork, drift
+   * and orphan are terms of art in a cascade nobody has shipped, and the MSA
+   * noun is a register decision, not a lookup. Answered 2026-08-17 by the owner.
+   *
+   * The register choices, written down so the next person does not re-litigate:
+   *   fork      → «نسخة متفرّعة» (a branched copy), not «شوكة». The Latin metaphor
+   *               is a garden fork; the Arabic technical register has no such
+   *               idiom and importing it is the textual equivalent of a faux
+   *               italic — obviously translated rather than written.
+   *   drifted   → «متباعدة» (grown apart), which keeps the sense of distance from
+   *               the parent rather than of error. A drifted fork is not broken.
+   *   orphaned  → «يتيمة». The metaphor exists in MSA technical usage and carries
+   *               the same finality, so this one does transfer.
+   * Nominal throughout, and `{commit}` / `{parent}` stay Western-digit LTR runs
+   * isolated inside the RTL line (format.ts `isolate`). -------------------- */
+  'provenance.badge.global': 'عامّة',
+  'provenance.badge.project': 'المشروع',
+  'provenance.badge.fork': 'نسخة متفرّعة {commit}',
+  'provenance.badge.drifted': 'نسخة متباعدة {commit}',
+  'provenance.badge.orphaned': 'نسخة يتيمة {commit}',
+
   /* Accessibility ----------------------------------------------------------- */
+  'a11y.provenance.global': 'مأخوذ من المكتبة العامّة.',
+  'a11y.provenance.project': 'مأخوذ من مكتبة هذا المشروع.',
+  'a11y.provenance.fork': 'متفرّع عن {parent} عند {commit}، ولا يزال مطابقًا لأصله.',
+  'a11y.provenance.drifted': 'متفرّع عن {parent} عند {commit}. وقد تغيّر الأصل منذ ذلك الحين.',
+  'a11y.provenance.orphaned': 'متفرّع عن {parent} عند {commit}. ولم يعد الأصل موجودًا.',
+
   'a11y.mapCanvas': 'مجرّة الوكلاء. استخدم مفاتيح الأسهم للتنقّل بين الأقسام.',
   'a11y.drawer': 'تفاصيل الوكيل',
   'a11y.carousel': 'مراكز القيادة',

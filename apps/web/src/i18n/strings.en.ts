@@ -64,6 +64,45 @@ export const en = {
   } satisfies Plural,
   'shell.cost.today': '{amount} today',
 
+  /* §2.0 cost ticker — the five readings and the three ways there is no reading.
+   * Filed by `shell-navigation-engineer` 2026-08-16 with the proposed key names
+   * kept verbatim, because a key rename during a handoff is a merge conflict
+   * nobody learns anything from. The pill labels are lower case: the caps come
+   * from `text-transform`, which does nothing in Arabic (rule 1 above).
+   *
+   * `shell.cost.outage` and `shell.cost.noLedger` are NOT fallbacks in Arabic.
+   * The runner ships an English `ledger.hint` carrying a live retry count, and
+   * under a non-English locale the catalogue sentence wins over it — see
+   * i18n/server-copy.ts. Both are therefore written to stand alone. */
+  'shell.cost.state.unpriced': 'not priced',
+  'shell.cost.state.outage': 'spend unknown',
+  'shell.cost.state.noLedger': 'no ledger',
+  'shell.cost.state.unavailable': 'no cost data',
+  'shell.cost.loading': 'Checking today’s agent spend.',
+  'shell.cost.amount': 'Agent spend so far today: {amount}.',
+  'shell.cost.zero':
+    'No agent run has been recorded today, so nothing has been spent. The run ledger is connected, so this zero is a reading rather than a guess.',
+  'shell.cost.unpriced':
+    'Runs were recorded today but none of them carries a price yet, so today’s spend is not known. This is not zero.',
+  'shell.cost.outage':
+    'The run ledger is not answering, so today’s spend is unknown — not zero. Runs still work and will be recorded once the database is back.',
+  'shell.cost.noLedger':
+    'This runner has no run ledger configured, so there is no spend to read. That is normal on the dev profile, not a fault.',
+  'shell.cost.notBuilt':
+    'Langfuse isn’t reporting spend yet, so there is no number to show here. This fills in the first time an agent run is traced.',
+  'shell.cost.malformed':
+    'Today’s spend came back in a shape this build does not understand — without it, a real zero and a ledger outage look identical, so no number is shown. That is a bug here, not a fact about your spend.',
+  'shell.cost.offline': 'Couldn’t reach Langfuse for today’s spend. This box may be off the tailnet.',
+
+  /* The same shape on the other three polled endpoints. A body this build cannot
+   * read is its own sentence — it is not "nothing happened yet". */
+  'shell.status.malformed':
+    'The runner answered with something this build does not understand, so its state is unknown rather than offline.',
+  'shell.search.graph.malformed':
+    'The agent index came back in a shape this build does not understand, so search is empty rather than wrong.',
+  'shell.search.panels.malformed':
+    'The dashboard index came back in a shape this build does not understand, so search is empty rather than wrong.',
+
   /* Context breadcrumb strip (§2.0, appears in drill-ins). */
   'shell.breadcrumb.allDepartments': 'All departments',
   'shell.counter.live': '{live} of {total} live',
@@ -82,6 +121,49 @@ export const en = {
   'map.node.state.scheduled': 'Scheduled',
   'map.node.state.awaitingApproval': 'Waiting for approval',
   'map.node.open': 'Open {name}',
+
+  /* The galaxy chrome. `map.empty.body` is the fallback under `map.empty.title`
+   * when the runner sends no sentence of its own; when it does send one, §1.4's
+   * server-copy rule decides which wins (see i18n/server-copy.ts). */
+  'map.empty.title': 'The galaxy is not built yet',
+  'map.empty.notBuilt':
+    'The map layout has not been built yet. Run {command} — until then the galaxy is empty on purpose.',
+  'map.empty.malformed': 'The map layout is not a graph payload, so nothing is drawn.',
+  'map.empty.offline': 'Can’t reach the runner, so there is no map to draw.',
+  'map.focus.previous': 'Focus previous department',
+  'map.focus.next': 'Focus next department',
+
+  /* §3.3 the Second Brain at zero — the honest empty state at the galaxy's centre.
+   * Each is a whole sentence: the aria label is NOT the eyebrow plus the count
+   * plus the hint glued together, because that glue does not survive a language
+   * whose clause order is different. */
+  'map.brain.eyebrow': 'Second brain',
+  'map.brain.count': {
+    one: '{answered} of {total} question answered',
+    other: '{answered} of {total} questions answered',
+  } satisfies Plural,
+  'map.brain.noCount': 'No interview answers yet',
+  'map.brain.hint': 'Run the company interview — the galaxy fills as answers land',
+  'map.brain.aria': {
+    one: 'Second brain, {answered} of {total} question answered. Run the company interview to fill the galaxy.',
+    other: 'Second brain, {answered} of {total} questions answered. Run the company interview to fill the galaxy.',
+  } satisfies Plural,
+  'map.brain.aria.noCount':
+    'Second brain, no interview answers yet. Run the company interview to fill the galaxy.',
+
+  /* The node label a screen reader hears (§2.1). Separate keys from
+   * `map.node.state.*` on purpose: a chip is a label and this is a phrase in a
+   * spoken list, and the two registers differ in Arabic more than in English.
+   * They are joined by Intl.ListFormat, never by ', ' — the Arabic separator is
+   * '، ' and hardcoding a comma is the same class of mistake as hardcoding a
+   * left margin. */
+  'map.node.aria.branch': 'department branch',
+  'map.node.aria.live': 'live',
+  'map.node.aria.failing': 'failing its audit',
+  'map.node.aria.dormant': 'dormant, not yet live',
+  'map.node.aria.scheduled': 'scheduled',
+  'map.node.aria.awaitingApproval': 'waiting for approval',
+  'a11y.galaxyGroup': 'Agent galaxy',
 
   /* ---------------------------------------------------------------------------
    * §2.3 MAP job drawer + §2.6.5 chart drawer. Same vocabulary, two sides.
@@ -290,9 +372,31 @@ export const en = {
   'empty.inputs.body': 'Press run. It knows where to look.',
 
   /* ---------------------------------------------------------------------------
+   * Plan §10 — provenance. Which library the agent in front of you came from.
+   *
+   * One key per state, never two concatenated (rule 2): the severity word leads,
+   * so "Drifted fork a1b2c3" survives truncation with the important half intact
+   * and a translator can put the commit wherever their grammar wants it.
+   * `{commit}` is a short git SHA and renders uppercase with the rest of the
+   * label — hex is case-insensitive, and one casing across the badge is worth
+   * more than matching `git log`.
+   * ------------------------------------------------------------------------ */
+  'provenance.badge.global': 'Global',
+  'provenance.badge.project': 'Project',
+  'provenance.badge.fork': 'Fork {commit}',
+  'provenance.badge.drifted': 'Drifted fork {commit}',
+  'provenance.badge.orphaned': 'Orphaned fork {commit}',
+
+  /* ---------------------------------------------------------------------------
    * Accessibility labels. Never rendered, always translated — a screen reader
    * in Arabic reading an English label is the same bug as a visible one.
    * ------------------------------------------------------------------------ */
+  'a11y.provenance.global': 'Resolved from the global library.',
+  'a11y.provenance.project': "Resolved from this project's library.",
+  'a11y.provenance.fork': 'Forked from {parent} at {commit}, and it still matches its parent.',
+  'a11y.provenance.drifted': 'Forked from {parent} at {commit}. The parent has changed since.',
+  'a11y.provenance.orphaned': 'Forked from {parent} at {commit}. The parent no longer exists.',
+
   'a11y.mapCanvas': 'Agent galaxy. Use the arrow keys to move between departments.',
   'a11y.drawer': 'Agent detail',
   'a11y.carousel': 'Command centers',
