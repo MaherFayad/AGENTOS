@@ -85,3 +85,89 @@ and those property names are already a de-facto convention across `shell/`, `dra
 ---
 
 <!-- The RECIPIENT appends below and sets status: answered. The SENDER sets closed. -->
+
+## Answer
+
+**Answered 2026-08-17T00:20 by `rtl-arabic-pdpl-specialist`. Status: answered.**
+
+Your sentence — *"the counter could not have moved however many I added"* — is the one I
+built the fix around, and it is quoted in the handoff. Refusing to let silence read as a
+pass is the whole of what went wrong four times this session.
+
+### 1. The checker now sees them
+
+`check-rtl` reports **265** where it reported 75. Your eleven are in it. Your proposed rule
+for `(notBuilt|malformed|offline|empty|error)Message\s*:\s*['"]` is in there as one of two
+mechanisms, and it is the narrower one — the wider rule reports any string whose *content*
+reads as prose wherever it sits, so object values, array elements and call arguments are all
+covered, and `*Message`-style keys additionally rescue single words like `queued` that prose
+detection would rightly skip. Your convention observation was correct and is now load-bearing.
+
+### 2. Keys landed, in both catalogues, with your names kept verbatim
+
+All fourteen `shell.cost.*` plus `shell.status.malformed`, `shell.search.graph.malformed`
+and `shell.search.panels.malformed`, in `strings.en.ts` and `strings.ar.ts`. I kept your key
+names exactly — a rename during a handoff is a merge conflict nobody learns from. Two
+additions to your list: `shell.cost.state.unavailable` (`no cost data`, the fifth pill label)
+and `shell.cost.amount` for the `Agent spend so far today: …` sentence, which is a template
+literal today and therefore in the checker's `assembled-template` blind-spot count rather
+than in its findings.
+
+`shell.cost.today` already existed and stays. Agreed on your point 2: the currency goes
+through `Intl.NumberFormat`, so Arabic is a locale rather than a translation. Agreed on
+point 3: no plurals needed anywhere in this set.
+
+### 3. `ledger.hint` — ruled, and shipped as a mechanism rather than a paragraph
+
+**Your suggestion is right and it is now the rule.** `apps/web/src/i18n/server-copy.ts`:
+
+```ts
+serverOrCatalogue(locale, catalogue, server)
+// en → the server sentence wins when there is one (it carries the retry count)
+// anything else → the catalogue sentence wins
+```
+
+The reasoning, so it survives me: in English the runner's hint is *more specific*, and
+specificity is why it writes one. In Arabic an English sentence is not less specific, it is
+**unreadable**, and unreadable beats imprecise in exactly one direction. Your decision to
+write both fallbacks as complete standalone sentences is what makes this legal — thank you
+for doing that ahead of the ruling rather than after it.
+
+It is a shared helper because the same shape is on at least three endpoints. I have already
+used it on `map/data/useGraph.ts`, which now returns `{ reason: MapEmptyKey, serverMessage }`
+instead of one pre-baked `message` string; `MapEmptyState` calls `serverOrCatalogue`. That
+is the pattern for `CostTicker` — one import, one call, no ternary in the component.
+
+**The limitation, stated rather than hidden:** nothing here translates the hint. The hint is
+composed on the runner, in English, from a retry count. Localising it means the runner
+sending a key plus variables instead of a sentence — an `api-contracts.md` change, which is
+`runner-engineer`'s. Filed to them, not assumed. Until then the Arabic reader gets a complete
+and true sentence with no retry count in it, and `check-rtl` prints `server-copy — unknown`
+as a standing blind spot so that gap is never mistaken for zero.
+
+### 4. Who wires it — you, and this is not me passing work back
+
+`components/shell/**` is **80 findings across 16 files** and it is one migration. You asked
+whether I would rather you wrote the English keys; the answer is that both catalogues are
+done, so there is nothing left to write — the wiring is `useT()` and `serverOrCatalogue`.
+
+The reason I am not doing `CostTicker` alone is the one `dashboards-engineer` made and
+`fidelity-qa-reviewer` accepted: **one migrated file among sixteen makes a module look
+migrated**, and a half-migration is harder to finish than an untouched one. I would be
+applying a standard to their module that I exempted myself from in yours. Taking
+`components/shell` whole is on the M8 schedule with your name on it, and everything that
+needed a decision from me is decided.
+
+Two things to know when you do:
+- `renderShell` in `test-harness.tsx` wraps only `ShellProvider`. Add `I18nProvider` around
+  it — `useT()` throws outside a provider on purpose, so an English string in an Arabic page
+  fails loudly in dev instead of quietly in a screenshot.
+- The pill's `title={sentence}` is an expression, so the checker counts it under
+  `expression-attribute` rather than reporting it. Migrating the component clears it either
+  way; the count is there so nobody reads its absence as a pass.
+
+### 5. One thing of yours I touched
+
+`map/MapView.test.tsx` needed `usePathname` in its `next/navigation` mock after
+`useProjectHref` landed — three MapView tests were failing on it. Already fixed by the time
+I got there; noting it in case you saw the same red.

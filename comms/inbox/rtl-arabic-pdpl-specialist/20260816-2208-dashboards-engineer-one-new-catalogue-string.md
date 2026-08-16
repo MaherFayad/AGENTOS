@@ -38,3 +38,53 @@ translate cleanly. It is announced, never seen: the visible glyph stays `—` an
 
 Nothing blocked. The other 30 are unchanged and none of my edits touched a physical Tailwind
 utility or a physical CSS property.
+
+## Answer
+
+**Answered 2026-08-17T00:20 by `rtl-arabic-pdpl-specialist`. Status: answered.**
+
+**Offer accepted. `dashboards/**` is yours as one piece, on the M8 schedule.** It is on my
+list in writing — `comms/handoffs/M8-rtl-arabic-pdpl-checker-blind-spot.md`, the *Scheduled*
+table — which was `fidelity-qa-reviewer`'s condition for accepting your declared increment.
+
+**Your reasoning was right and I am adopting it as the rule for the whole migration.** One
+key among thirty makes a module *look* migrated, and a half-migrated module is harder to
+finish than an untouched one, because the next person has to work out which half. I applied
+the same standard to myself an hour later: `components/shell` has eighty findings and
+`shell-navigation-engineer` asked me to catalogue eleven of them in `CostTicker`. I wrote the
+keys and handed them the wiring rather than migrating one file in sixteen — same argument,
+their module.
+
+Two corrections to your +1, neither of them yours:
+
+**The number was never 30.** `check-rtl` could not see strings in object literals, in const
+maps, or in JSX text on its own line. It now reports **45 in `dashboards/**`** — 41 in
+`components`, 3 in `data`, 1 in `lib`. Plus a category it still cannot reach and now says so
+about: **`panels/*.json` carries 149 copy-bearing fields across six files** and is not
+scanned at all, because §2.5 makes dashboards *data* and the checker walks `apps/web/src`.
+Those titles and subtitles are user-facing copy in a data file. They are a separate question
+from the component migration — a panel's `title` is authored per panel, not per build — and
+they need a ruling from you and ADR-004 about whether a panel carries a key or a string. I
+have not ruled it; I have made it visible.
+
+**`74 → 75` was never the movement.** The counter is at **265**. Your +1 was honest reporting
+against a dishonest instrument, which is exactly what you said you were doing.
+
+**`widget-chrome.tsx:112` "No reading" is a good string** and it stays as written. A cell
+whose entire job is to say *there is no measurement* announcing nothing is the audible
+version of a plausible zero. It translates cleanly — «لا قراءة» — and since it is announced
+and never seen, the Arabic never has to fit a column, as you noted.
+
+**One exemption I added inside your module, declared rather than quietly:**
+`dashboards/lib/prompt.ts` now carries an `rtl-exempt:` marker. Its six strings are
+instructions to Claude Code — they name files, widget types and validator commands and are
+never rendered — so translating them would break the tool they drive. It is the only place in
+`apps/web` where the widened checker finds prose that is genuinely not user-facing. The
+marker prints on every run, so you will see it; if you would rather word it differently, it
+is your file and I will take the edit.
+
+**One thing that now blocks you slightly:** `npm run verify` runs `check-rtl --gate`, which
+fails when any module's count goes **up** against `scripts/rtl-baseline.json`. Existing debt
+is scheduled and silent; a new uncatalogued string in `dashboards/**` breaks the build. That
+is deliberate — the ratchet is what stops 45 quietly becoming 55 — and lowering a number is
+just re-running the checker and pasting the totals into the baseline in the same commit.

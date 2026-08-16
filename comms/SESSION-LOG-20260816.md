@@ -54,19 +54,32 @@ That is the authoritative copy; this is a pointer.
 
 ---
 
-## In flight when the session ended
+## The session-limit kill — what survived, and what did not
 
-Five agents were still working. **Their outputs land on disk regardless** — handoffs in
-`comms/handoffs/`, `comms/status/<agent>.md`, and routed inbox messages. Read those rather
-than trusting this list, which was written before they finished.
+**Correction to the previous revision of this section**, which claimed in-flight agents' output
+lands on disk regardless. That is only true of agents that reach their filing step. Three were
+killed mid-task by a session limit, and **an agent killed mid-task leaves code without paperwork**
+— the code is the early part of the work, the handoff and the verification are the late part.
 
-| Agent | Task |
-|---|---|
-| `runner-engineer` | M15 lead — ADR-015, `ops.project`, project-scoped write path and routes, plus the allowlist-as-received test that is a **condition of M15's PASS** |
-| `rtl-arabic-pdpl-specialist` | Fix `check-rtl`'s blind spot; decide the catalogue debt; the **mandatory** M15 cross-project isolation sign-off; the one-brain-or-N `COMPANY.md` ruling |
-| `design-system-guardian` | `provenance.mjs` timezone bug; `RailLabel`'s sub-AA default; ratify or reverse `KpiTile`'s caveat token |
-| `commandcenter-orchestrator` | Rule on the ADR numbering collision (below) |
-| `fidelity-qa-reviewer` | Re-review queue — CostTicker and `RailLabel` fixes were filed |
+The tree was then committed by the user as `cdc51f3` (the `next-env.d.ts` untracking, correctly on
+its own) and `4e0bbe6` (everything else, one blob). **So `4e0bbe6` contains work from three agents
+that never verified or documented it**, including one killed at the exact moment it said "now the
+full verification run". The gates were re-run against that commit afterwards and are green —
+`npm test` 108/108, `npm run test:web` both halves, `check-tokens` 291 files / 0 violations,
+`check-comms` clean bar one filename warning — but green gates are not the same as an author's
+verification, and the seven-way commit split was not used.
+
+| Agent | Landed and committed | Missing |
+|---|---|---|
+| `runner-engineer` | `0005_project_axis.sql`, `lib/project.ts`, `contracts/src/project.ts`, `lib/cascade.ts` (contains `cascade_unresolved`) | **ADR-015 was never written.** No handoff, stale status, no re-review. `cascade.ts` was the file in progress at termination |
+| `design-system-guardian` | `provenance.mjs` UTC fix (`getTimezoneOffset`), `RailLabel` default flipped to `muted` | Its own verification run, handoff, status, re-review. `KpiTile`'s caveat token still unratified |
+| `rtl-arabic-pdpl-specialist` | **Nothing** — killed while loading context | The entire task: `check-rtl`'s blind spot, the catalogue debt, the **mandatory** M15 isolation sign-off, the one-brain-or-N ruling |
+
+Two agents finished cleanly before the limit and their work is complete: `commandcenter-orchestrator`
+(the ADR numbering ruling, below) and `shell-navigation-engineer` (the CostTicker five-state fix).
+
+All three interrupted tasks were re-dispatched in the following session with an explicit inventory
+of what was already on disk, so they finish rather than restart.
 
 ---
 
@@ -126,13 +139,25 @@ inaccessible is the wrong trade") but routed it.
 
 ---
 
-## The uncommitted tree
+## The tree — committed after the fact
 
-**245 dirty paths. Nothing committed this session.** `apps/web/next-env.d.ts` is **staged as a
-deletion** while everything else is unstaged — a bare `git commit` would commit only that.
+**Resolved.** The 245 dirty paths were committed by the user as `cdc51f3` + `4e0bbe6`. The
+`next-env.d.ts` untracking correctly got its own commit; the rest landed as one blob rather than
+the seven-way split below.
 
-Both `infra-compose-engineer` and `commandcenter-orchestrator` independently recommended
-splitting rather than one blob. The suggested split, roughly by falsifiable claim:
+The split is kept here because one item in it was a standing hazard, not a tidiness preference:
+**the one-line `chown` in `infra/runner.Dockerfile` is a billing control.** It now sits inside a
+commit named "add provenance tracking and completeness measurement", so `git blame` will not tell
+anyone why it exists. If someone optimises that layer later and deletes it, the Part V spend cap
+resumes silently resetting on every restart — which is exactly how it hid the first time.
+
+**Checked: the mitigation held.** `infra-compose-engineer` had written the full failure chain into
+the Dockerfile above that line, including the billing consequence (*"A cap a crash loop can drive
+through is a speed bump"*) and the diagnosing agent. That comment is what now carries the meaning
+`git blame` cannot — which is the argument for putting reasoning in the file rather than trusting
+a commit message to survive a squash.
+
+The split as proposed, roughly by falsifiable claim, for reference on the next batch:
 
 1. **The fabricated-number fix** — `scripts/lib/brain-completeness.mjs`, `build-graph.mjs`,
    `apps/runner/src/lib/brain.ts`, `BrainEmptyState.tsx`, `GalaxyCanvas.tsx`,

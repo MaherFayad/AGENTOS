@@ -1,29 +1,36 @@
 # status — runner-engineer
 
-**Updated:** 2026-08-16T22:15
-**Milestone:** M0 (Phase 0 step 0.3 prerequisites) → M3
+**Updated:** 2026-08-17T00:40
+**Milestone:** M15 (lead) · M3 still blocked on the human
 **State:** review
 
 ## Now
-Tree is still and re-requested with `fidelity-qa-reviewer`. Runner 95/95, root 103/103,
-typecheck + lint clean. Not touching runner code again before they rule.
+M15's project axis is finished and re-requested with `fidelity-qa-reviewer`. Runner 119/119,
+typecheck clean (it was not — the slice as committed at `4e0bbe6` did not compile), root
+142 tests / 0 fail, web both halves green, tokens 0 violations
+(`2026-08-17 00:30 +03:00 · 4e0bbe6 · 64 uncommitted under apps/web`).
 
 ## Blocked on
-**`RUNNER_ANTHROPIC_API_KEY` — the human, and now the only thing.** Tracing, the
-`/workspaces` volume and the interview's artifact path are all cleared.
+**`RUNNER_ANTHROPIC_API_KEY` — the human, and still the only thing.** M15 is *complete* and
+*unvalidated*; `contracts/project-scoping.md` §6 lists the four things that stay unprovable
+until a real run exists. Not idle on it — M15 needed no key.
 
 ## Last handoff
-`comms/handoffs/M0-runner-engineer-step-0.3-prereqs.md` (runbook + spend.json check)
+`comms/handoffs/M15-runner-engineer-project-axis.md` · ADR:
+`comms/decisions/ADR-015-project-scoping.md` (proposed)
 
 ## Fixed this session
-Ledger latch + pg crash · `runs:null` ≠ `runs:0` · placeholder key ≠ configured ·
-brain 45% → 0/20 (adopted the one shared counter) · `tailscale: online` with no Tailscale ·
-null-sink fabricated trace URL · trace link now the browser-facing origin ·
-`budget.persisted` · **`workspace` escaped its scratch dir — proved it, fixed it** ·
-`writeBackBrain` mode + shape guards.
+The M15 slice was killed mid-flight and left three things that read as done and were not:
+`config.ts` missing all three fields `project.ts`/`cascade.ts` import · **`assertNarrowsDownward`
+exported with zero callers** — the enforcement point was unreachable · the `:project` segment
+decorative, so any slug served the mounted project · five contract-declared routes the server
+never mounted. Plus the two tests that now carry the argument: `cascade-ceiling.test.ts` (the
+allowlist as *received*) and `project-id.test.ts` (SQL and TS read from the migration).
 
 ## Next
-1. `available:false` / `since:"M9"` in the connector registry — with `drawer-engineer`, so
-   the field lands in the shape they render (asked by `agent-library-curator`).
-2. Execute the runbook the moment the key lands; step 5b (`spend.json`) is the untested link.
-3. M7 schedule/audit.
+1. Answer `fidelity-qa-reviewer`'s findings on M15.
+2. `available:false` / `since:"M9"` in the connector registry — with `drawer-engineer`
+   (owed to `agent-library-curator` since 2026-08-16).
+3. `connector_uncredentialed` needs its test — a credential seeded for project A only,
+   dispatched in project B. Needs Postgres up, not a key.
+4. M7 schedule/audit; execute the step-0.3 runbook the moment the key lands.

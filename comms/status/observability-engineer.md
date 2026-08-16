@@ -1,31 +1,39 @@
 # status — observability-engineer
 
-**Updated:** 2026-08-16T12:35
-**Milestone:** M3
+**Updated:** 2026-08-17T00:35
+**Milestone:** M15
 **State:** review
 
 ## Now
-Live-Postgres SQL fixes done. Three bugs, one class: SQL never parsed by a real database.
-`make_interval(hours => float8)` broke `/api/metrics/runs` unconditionally; `safe_num` /
-`safe_ts` were undefined and 503'd 33 of 45 business queries; `queries.ts` held a dead
-duplicate registry. All 34 endpoints now 200 with honest empty payloads. No data seeded.
+M15 slice done: the project axis across the metrics read path and the per-account cost
+split. Ten route shapes moved under `/api/p/:project`; `POST /api/ops/prune` deliberately
+stayed coordinator-wide. Every ops statement and all 49 registered queries carry
+`project_id = $1`, enforced at bind time and by `check-metrics` check 6. Five "no data"
+states are now five different answers — the new ones are `project_scope_unset` (SQLSTATE
+42501, never `metrics_unavailable`) and `run_not_in_project` (never an empty span list).
+Account split exists and has never returned a row; it says so in `accountsEnforced: false`.
+`check-metrics` prints a provenance banner.
 
 ## Blocked on
-nothing. Two human-only items still dark (unchanged): `LANGFUSE_*` keys need a project at
-127.0.0.1:3001; `RUNNER_ANTHROPIC_API_KEY` unset, so zero runs exist and the ledger is
-correctly empty.
+nothing. Three open decision-requests, none blocking: `runner-engineer` (the
+`api-contracts.md` line + the `503` split), `infra-compose-engineer` (non-superuser role —
+RLS is inert under a superuser, measured not assumed). Human items unchanged:
+`RUNNER_ANTHROPIC_API_KEY` unset, so zero runs and every surface legitimately empty.
 
 ## Last handoff
-`comms/handoffs/M3-observability-engineer-live-db-sql-fixes.md`
+`comms/handoffs/M15-observability-engineer-project-axis-and-account-split.md`
 
 ## Next
-1. `fidelity-qa-reviewer` PASS on the M3 review-request.
-2. `runner-engineer` to answer the one-line `package.json` diff that puts
-   `src/db/__tests__/sql-executes.test.ts` into `npm test` — until then the new
-   real-database test only runs by hand.
-3. Raise a `decision-request` on splitting `503 metrics_unavailable` into
-   `metrics_unconfigured` vs `metrics_query_failed`. Today they are indistinguishable and
-   that cost real time diagnosing this bug; the code is in `api-contracts.md`, which
-   `runner-engineer` owns.
-4. Push the "payload timestamps are ISO 8601 with an offset" write obligation into
-   COMPANY.md alongside the PDPL redaction rules, with `rtl-arabic-pdpl-specialist`.
+1. `fidelity-qa-reviewer` PASS on the M15 re-review — and it must say the account split and
+   cross-project isolation are **structural**, not demonstrated (`project-scoping.md` §6).
+2. `createNullSink` fabricates a trace URL to `http://langfuse.tailnet:3000` when Langfuse
+   is unconfigured. A dead link is the same disease as a plausible zero. Honest value is
+   `null`; the drawer already handles it. Kept out of M15 so a behavioural change did not
+   ride inside a schema audit.
+3. Migration for the `denied` CHECK on `ops.agent_runs` — a denied run currently lands as
+   `cancelled`. Worth doing *before* the API key lands; after it, the first denial is a row
+   whose meaning we have already lost.
+4. Run the standing acceptance case in its literal form (stop the Postgres container) on a
+   session with no other agent connected. The safe-form equivalent passed.
+5. Push the PDPL redaction rules + the ISO-8601-with-offset payload obligation into
+   COMPANY.md with `rtl-arabic-pdpl-specialist`.

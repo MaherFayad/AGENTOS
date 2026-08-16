@@ -75,8 +75,10 @@ finds is filed as new findings against current owners.
 `commandcenter-orchestrator` sweeps status/, resolves cross-agent conflicts, and
 advances the milestone. It does not write feature code.
 
-`identity-access-engineer` is **defined and not yet dispatched.** Its three tables are on the
-M15 interim split below until it has work; the transfer is a written exchange, not a drift.
+`identity-access-engineer` was defined 2026-08-16 and **dispatched and run 2026-08-17** —
+`0007_identity.sql`, `contracts/identity.md`, ADR-016 (`proposed`). `ops.identity` is theirs
+outright. `ops.device` and `ops.credential` remain with their interim owners until a written
+handover; the transfer is an exchange, not a drift.
 
 ---
 
@@ -166,13 +168,24 @@ rediscovery.
 | The cascade — resolution, identity, capability narrowing, promote/fork/provenance · `contracts/agent-cascade.md`, ADR-014 — **design filed 2026-08-16, proposed** | §10 | `agent-library-curator` | stays |
 | Project switcher · project segment in routes and breadcrumb · project-scoped search and cost ticker | §23.12 P1 | `shell-navigation-engineer` | stays |
 | Project axis on all 34 metrics endpoints · account split on cost surfaces | §10 · §11 | `observability-engineer` | stays |
-| `ops.device` — scopes column, revocation, and the envelope `account_id` question | §11 | `sessions-relay-engineer` | `identity-access-engineer` |
+| `ops.device` — scopes column, revocation, and the envelope `account_id` question | §11 | `sessions-relay-engineer` — **built** | `identity-access-engineer` |
 | `ops.credential` — billing accounts, which account paid | §11 · Part V | `runner-engineer` | `identity-access-engineer` |
-| `ops.identity` | §11 | **defined only, built by nobody** — see below | `identity-access-engineer` |
+| `ops.identity` | §11 | `identity-access-engineer` — **built** (`0007_identity.sql`, ADR-016) | *now the owner* |
 | Provenance badge as a monochrome primitive (`⌂` · `▣` · `⑂`) | §10 · §23.6 | `design-system-guardian` | stays |
 | Provenance in the drawer header | §23.6 | `drawer-engineer` | stays |
 | **Cross-project isolation sign-off — mandatory, not advisory** | §22 · §21.8 | `rtl-arabic-pdpl-specialist` | stays |
 | Acceptance | Part VI | `fidelity-qa-reviewer` | stays |
+
+**M15 is fully dispatched as of 2026-08-17** — every slice above has an owner working it, and
+`ops.device`, `ops.identity` and the cascade are already filed. The distinction at the top of
+this board still binds and is now the only thing standing between M15 and done: **completed is
+not validated.** Nothing here has been proven against a real run, because there have been none.
+
+*Tree state, so a sweep does not misread it:* `npm run test:web` is **red on 5 of 421** vitest
+tests (`AppShell.test.tsx`, `CostTicker.test.tsx`) from the in-flight project-switcher work.
+That is churn from a moving tree, **not a finding and not a gate failure** — it is recorded
+here so nobody files it as one, and so nobody commits on top of it. The rule stands: gate when
+the tree is still.
 
 **Where identity landed, honestly.** `Plan §22` creates five specialists and **none of them
 owns §11**. The plan's intended owner, `identity-access-engineer`, is carried over from Part
@@ -290,7 +303,7 @@ Answer these as ADRs before the milestone that depends on them.
 - [x] `M15` **Is Part Two spec?** → **[ADR-013](decisions/ADR-013-part-two-standing-and-spec-coverage.md)** accepted. It is a plan that amends the spec; the coverage gate stays pointed at the spec of record and keeps its exact current meaning. Also rules the ADR-numbering collision, and the boundary between `agent-cascade.md` and `project-scoping.md`.
 - [x] `M15` **ADR-014 — the agent cascade.** Filed by `agent-library-curator`, status **proposed**: `comms/contracts/agent-cascade.md` + [ADR-014](decisions/ADR-014-agent-cascade-resolution.md). Resolution is by `(department, slug)`, **whole-file, no field merge** — which closes the security question in the safe direction, since a project layer cannot widen a global agent's `wired_into`. A file that fails validation is **excluded and does not fall through**. Still `proposed`, so **it is a hard stop for MAP/CHART/DASHBOARDS until accepted** — its own §8 lists what it routes onward.
 - [ ] `M15` **ADR-015 — project scoping.** *Number claimed, file not yet written.* The third plane, `ops.project`, how a request names its project, what deleting a project means, where `budget_monthly` is authoritative. Filed by `runner-engineer`. **Hard stop for the schema and every route.** Questions in `contracts/project-scoping.md` §5.1 (Q1–Q8, Q8b).
-- [ ] `M15` **ADR-016 — identity vs device vs billing account.** *Number claimed, file not yet written.* Three tables, orthogonal, scopes on the device. **Has no owner** — see the M15 ownership note above. Interim: `sessions-relay-engineer` answers Q19 (the envelope), `runner-engineer` answers Q18 and Q20 (credential custody, who pays). Q17 (scopes enforcement) is recommended *deferred*, not answered. Questions in `contracts/project-scoping.md` §5.3 (Q16–Q20).
+- [x] `M15` **ADR-016 — identity vs device vs billing account** → **filed 2026-08-17, `proposed`**, author `identity-access-engineer`. Three tables, orthogonal, scopes on the device; `runner-engineer` still answers Q18 and Q20 (credential custody, who pays) as interim owner of `ops.credential`. **Q17 (scopes enforcement) stays deferred, not answered** — a scope with no enforcement point is a comment. **Q19 is deliberately *not* in this file:** ADR-016 defers the envelope back to `sessions-relay-engineer` as their subject, which is correct — it is §3.1 and `envelope.ts` is theirs. Q19 is answered and binding (`account_id` **refused**, two tests + a comment in `envelope.ts`) and is being transcribed as **ADR-032**. Do not read ADR-016 expecting a Q19 ruling.
 
 ### ADR numbering — claim the row before you write the file
 
@@ -325,8 +338,17 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 029 | Drag without a dependency · *`Plan §18` "ADR-024"* | `design-system-guardian` | **reserved** |
 | 030 | *(optional)* Rename CHART → ROLLOUT · *`Plan §18` "ADR-025"* | `chart-matrix-engineer` | **reserved** |
 
-031+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
+| 031 | Where §9's AA floor supersedes a spec-named text token | `design-system-guardian` | **claimed, unwritten** |
+| 032 | The session envelope allowlist — `account_id` refused (§3.1, `Plan §11` Q19) | `sessions-relay-engineer` | **claimed** — ruling already binding in `envelope.ts` + 2 tests; ADR transcribes it |
+
+033+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
 translate it through `comms/decisions/README.md` first.
+
+*Both 031 and 032 were requested within seven minutes and both requesters guessed "031" and
+then refused to take it. Tie broken by arrival time — `design-system-guardian` 23:59,
+`sessions-relay-engineer` 00:06 — because a mechanical tiebreak needs no judgement and can be
+applied by anyone. That both agents asked instead of counting is the rule working; that both
+guessed the same number is what it would have cost if they had not.*
 
 ### The plan is the second claimant on this sequence, and it lost
 
@@ -369,20 +391,61 @@ which means the text is doing too much work. Stated once, quotable in full:
 **v2 gains accounts. v2 does not gain a public surface.** Quote both halves or neither. The
 deferred scopes-enforcement ruling depends on the right-hand column staying true.
 
-**Is the same race anywhere else? Checked — no, and that is why this rule stays narrow.**
-The obvious generalisation is that four agents editing `comms/` concurrently must race on
-handoff names, message timestamps and status writes too. They do not, and the reason is
-structural rather than lucky: **every other filename in `comms/` embeds its author's slug.**
-Handoffs are `M<n>-<agent>-<topic>.md`; messages are `<ts>-<sender>-<topic>.md`; status is one
-file per agent. Two agents cannot collide in a namespace partitioned by agent — the worst case
-is an agent colliding with itself, which is a mistake, not a race.
+**The property that makes a namespace raceable: a shared integer with no author in the key.**
+Four agents editing `comms/` concurrently do *not* race on handoffs, messages or status,
+because every other filename embeds its author's slug — `M<n>-<agent>-<topic>.md`,
+`<ts>-<sender>-<topic>.md`, one status file per agent. A namespace partitioned by agent cannot
+be raced; the worst case is an agent colliding with itself, which is a mistake, not a race.
 
-`decisions/` is the **only** shared allocation namespace in the repo: a single flat integer
-sequence with no author in the key. So the ADR-specific fix *is* the general fix, and building
-a generic allocation mechanism would be solving a problem that exists exactly once. Recorded
-because "we should generalise this" was a reasonable instinct and the answer is a fact rather
-than a judgement — if a second shared-integer namespace is ever introduced, it inherits this
-rule on day one.
+**This board previously claimed `decisions/` was the only such namespace. That was wrong, and
+it was disproved the same night.** `identity-access-engineer` and `sessions-relay-engineer`
+both read `apps/runner/src/db/migrations/`, both computed *next free = 0006*, and both wrote a
+`0006_` file within the same minute. **There are two shared-integer namespaces, not one:**
+
+| Namespace | Ordered? | Fix |
+|---|---|---|
+| `comms/decisions/` | No — a number is identity, nothing more | **Author-keyed drafts** (below). Structural. |
+| `apps/runner/src/db/migrations/` | **Yes** — `client.ts` applies in filename order and records by filename | Author-keying is impossible; **a gate** instead — `repo-conformance.test.mjs` now fails on two migrations sharing a number, verified against a planted duplicate |
+
+The migration case is the more dangerous of the two: two files sharing a number **both run**,
+in an order decided by whatever text follows the digits, so a foreign key that happens to sort
+after its target applies cleanly on one machine and fails after an unrelated rename. It was
+resolved by this board's own principle — *allocate against the side with no dependents* —
+`0006_ops_device.sql` was already cited by a handoff and a test, so `0006_identity.sql` became
+`0007_`.
+
+### Claiming a row is not enough — the naming rule is what prevents the race
+
+**A register makes a race visible afterwards. Only a naming rule prevents it.** ADR-016 was
+written twice on 2026-08-17: two agents were dispatched in parallel onto two thirds of one
+subject, both needed the number, and **the second file silently overwrote the first.** No rule
+was broken — 016's registered author wrote 016 — and the surviving file is correctly scoped.
+Claiming is a human-speed edit to a shared file; writing is a machine-speed one, so a claim
+cannot close a window it does not own.
+
+**Rule, from 2026-08-17:**
+
+1. **A draft is named for its author, never for a number:**
+   `comms/decisions/ADR-draft-<topic>-<author-slug>.md`. Two agents drafting the same subject
+   now produce **two files** — a visible merge, never a silent overwrite. This is the same
+   property that already makes every other `comms/` namespace safe, applied to the one place
+   it was missing.
+2. **The number is assigned at acceptance**, by `commandcenter-orchestrator`, in the register
+   above — and the draft filename is recorded in the row as a permanent alias, because
+   **a citation can outlive the file it points at.** `sessions-relay-engineer` had to go back
+   and correct in-code `ADR-016` citations that would otherwise have sent a reader to a
+   section saying the opposite of what they meant.
+3. **A subject spanning two owners names both authors in the row at claim time.**
+   `sessions-relay-engineer`'s proposal, adopted: had the ADR-016 author written a Q19 answer
+   instead of deferring it, the record would now contain a decision about `envelope.ts` made by
+   an agent who does not own that file.
+4. **Never write to a path that already exists in a shared namespace.** If it is there, stop
+   and ask — an overwrite in `decisions/` or `migrations/` destroys a record rather than
+   conflicting with it.
+
+Claim-first survives for numbers that must exist before the file does. What changes is that it
+is no longer the *only* protection, and it is no longer load-bearing on anyone remembering to
+pre-assign before dispatching agents in parallel.
 - [ ] `M3` Split `503 metrics_unavailable` into `metrics_unconfigured` vs `metrics_query_failed` — today they are indistinguishable and that cost real diagnostic time. `observability-engineer` to file the `decision-request`; `runner-engineer` owns `api-contracts.md`.
 
 ### Awaiting the user — six open decisions

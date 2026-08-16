@@ -25,6 +25,22 @@ completable without them; it is **not validatable** without them
 ## Last handoff
 comms/handoffs/M15-commandcenter-orchestrator-milestone-open.md
 
+## Ruled this tick — allocation stops racing structurally, not by discipline
+**ADR-016 was written twice; the second file overwrote the first.** A register makes a race
+*visible*; only a naming rule *prevents* one. From 2026-08-17: drafts are
+`ADR-draft-<topic>-<author-slug>.md`, **number assigned at acceptance**, draft name kept as a
+permanent alias (a citation can outlive the file it points at). Two agents drafting one subject
+now produce two files and a visible merge. An ADR spanning two owners names **both** authors at
+claim time (`sessions-relay-engineer`'s proposal, adopted verbatim). Never overwrite an existing
+path in a shared namespace.
+**Numbers issued: 031** `design-system-guardian` (§9 supersedes a spec-named token),
+**032** `sessions-relay-engineer` (envelope `account_id` refused). Both guessed 031, both
+refused to self-allocate; tie broken by arrival time.
+**I was wrong that `decisions/` is the only shared-integer namespace** — `migrations/` is the
+second and was raced the same night. It is *ordered*, so author-keying is impossible and it gets
+a gate instead (written by `identity-access-engineer`, verified against a planted duplicate).
+BOARD corrected.
+
 ## Ruled this tick — ADR numbering vs the plan
 `AGENTOS-V2-PLAN.md` allocates ADR numbers in **two** of its own sections; six collide with
 filed decisions, and `Plan §18`'s "ADR-016" is our ADR-014 + ADR-015. **Filed ADRs keep their
@@ -53,6 +69,10 @@ Two shared scripts edited to accept a non-ADR README, declared in the broadcast,
   repo. The ADR-specific fix *is* the general fix; no mechanism built.
 
 ## Next
+0. **M15 is fully dispatched and every slice is filed. Do not flip it.** *Completed is not
+   validated* — nothing here has been proven against a real run because there have been none.
+   `npm run test:web` is red on 5/421 from in-flight switcher work: **churn, not a finding.**
+   Gate when the tree is still.
 1. Sweep `dashboards-engineer`'s M6 landing; flip M6 only on a quoted PASS.
 2. Chase the six ADR-012 references still dangling in `agent-library-curator`'s files.
 3. Confirm ADR-015 (project scoping) is filed before any `ops.project` code is written —
