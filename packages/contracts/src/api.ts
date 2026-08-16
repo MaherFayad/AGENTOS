@@ -24,12 +24,20 @@ export type ApiErrorCode =
   // request shape
   | 'bad_request'
   | 'not_found'
+  // the project axis (ADR-015, Plan §9)
+  | 'project_scope_missing'
+  | 'project_not_found'
+  | 'project_not_active'
+  | 'project_not_mounted'
   // agent library (Part IV)
   | 'agent_not_found'
   | 'invalid_frontmatter'
-  // the security boundary (§3.2)
+  // the security boundary (§3.2) and its cascade half (ADR-014 §3)
   | 'tool_not_allowed'
   | 'unknown_connector'
+  | 'cascade_unresolved'
+  | 'capability_widened'
+  | 'connector_uncredentialed'
   // runner lifecycle
   | 'run_not_found'
   | 'run_not_pending_approval'
@@ -67,10 +75,17 @@ export interface ApiErrorBody {
 export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   bad_request: 400,
   not_found: 404,
+  project_scope_missing: 400,
+  project_not_found: 404,
+  project_not_active: 409,
+  project_not_mounted: 503,
   agent_not_found: 404,
   invalid_frontmatter: 422,
   tool_not_allowed: 403,
   unknown_connector: 422,
+  cascade_unresolved: 422,
+  capability_widened: 403,
+  connector_uncredentialed: 422,
   run_not_found: 404,
   run_not_pending_approval: 409,
   approval_already_decided: 409,
@@ -264,6 +279,13 @@ export interface ScheduleResponse {
 
 export interface PendingApproval {
   runId: string;
+  /**
+   * Project slug. Present on **every** row, including on the project-scoped route where it
+   * is redundant — so that `/api/all/approvals` and `/api/p/:project/approvals` return the
+   * same shape and a client cannot render a cross-project queue that fails to say which
+   * client each item belongs to.
+   */
+  project: string;
   agent: string;
   /** Frontmatter `name`, so the queue reads like the map. */
   agentName: string;
@@ -428,12 +450,73 @@ export interface BudgetStatus {
   blocked: boolean;
   /** `YYYY-MM` the spend is counted against. */
   period: string;
+  /**
+   * Has `spend.json` actually been written?
+   *
+   * `true` — `spentUsd` survives a restart and the cap is hard.
+   * `false` — the write failed; `spentUsd` is this process's memory only, so the cap
+   *           resets on restart and **is not a hard cap** (Part V).
+   * `null` — no run has finished yet, so durability is untested. This is the honest state
+   *          of a fresh runner and is deliberately not probed by writing a zero, because a
+   *          spend figure the runner invented is a fabricated number inside a billing
+   *          control.
+   *
+   * It exists because `spentUsd: 0` meant "nothing was spent" and "we cannot remember what
+   * was spent" with the same digit — for months, while `/workspaces` was unwritable.
+   */
+  persisted: boolean | null;
+}
+
+/**
+ * Reachability of the durable run ledger (`ops.agent_runs`), reported on `GET /api/status`
+ * and on **every** `/api/metrics/*` and `/api/cost/today` response.
+ *
+ * It exists because these two were once the same answer:
+ *
+ *   - the ledger is unreachable, so we do not know how many runs there were;
+ *   - the ledger is fine and there were no runs.
+ *
+ * Both rendered as "no cost data" and an empty LAST RUNS. A broken state wearing the
+ * honest empty state's clothes is worse than a visible outage (BOARD rule 9 / Part VII.3),
+ * so the state is explicit and **a count we do not have is `null`, never `0`**.
+ *
+ * `absent` is not a failure: `--profile dev` runs with no Postgres on purpose.
+ */
+export type LedgerState = 'connected' | 'unreachable' | 'absent';
+
+export interface LedgerHealth {
+  state: LedgerState;
+  /** ISO 8601 — when this state began. A five-second outage reads differently to a five-hour one. */
+  since: string;
+  /** Consecutive failed connection attempts; `0` while connected. */
+  attempts: number;
+  /** Last connection error, message only — never a DSN, never a password. */
+  lastError: string | null;
+  /** ISO 8601 for the next reconnect attempt, or `null` when none is scheduled. */
+  nextRetryAt: string | null;
+  /** Written for a human on a phone. Always present, including when healthy. */
+  hint: string;
 }
 
 /** `GET /api/status` — the bottom-right status pill and the approvals badge (§2.0). */
 export interface StatusResponse {
-  /** Reachability of this runner over the tailnet, from the runner's own point of view. */
+  /**
+   * Tailnet reachability **as observed by this process** — `online` only when one of its
+   * own interfaces carries a `100.64.0.0/10` or `fd7a:115c:a1e0::/48` address.
+   *
+   * `unknown` means *this process cannot tell*, which is the normal answer from inside a
+   * compose container when Tailscale runs on the host. It is **not** a claim that the
+   * tailnet is down. `tailscaleHint` says which case it is, in a sentence.
+   *
+   * It used to be `TAILSCALE_IP || TS_HOSTNAME ? 'online' : 'unknown'`, which reported
+   * `online` on a machine with no Tailscale installed at all — a setting read back as a
+   * connection.
+   */
   tailscale: 'online' | 'unknown';
+  /** The observed tailnet address, or `null`. Reported because it is checkable. */
+  tailscaleAddress: string | null;
+  /** Why `tailscale` says what it says. Written for a human on a phone. */
+  tailscaleHint: string;
   /** Runs queued behind the concurrency limit. */
   queueDepth: number;
   activeRuns: number;
@@ -441,10 +524,46 @@ export interface StatusResponse {
   /** False ⇒ no API key: runs are refused with `runner_not_configured`. */
   runnerConfigured: boolean;
   budget: BudgetStatus;
-  brain: BrainCompleteness;
+  /** `null` when the runner would have had to guess which project to answer for — see `projects`. */
+  brain: BrainCompleteness | null;
+  /**
+   * Durable-ledger reachability. `state: "unreachable"` means LAST RUNS, the cost ticker
+   * and every KPI are reporting *unknown*, not *zero* — read this before believing a zero.
+   */
+  ledger: LedgerHealth;
   /** False ⇒ `/api/graph` will answer `graph_not_built`. */
   graphBuilt: boolean;
   startedAt: string;
+  /**
+   * The project axis, reported on the one route that is deliberately unscoped (ADR-015).
+   *
+   * `brain` and `graphBuilt` above are project-shaped facts on a coordinator-scoped route.
+   * They answer for `projects.answeredFor`, which is stated rather than assumed. When more
+   * than one project is mounted and none is named, they are **`null` and `answeredFor` is
+   * `null`** — the runner refuses to pick one, because picking one is exactly the ambient
+   * default this design exists to remove. Today one project is mounted, so nothing changes
+   * for any existing consumer; the day a second appears, the refusal is loud instead of
+   * silent.
+   */
+  projects: {
+    /** How many projects the ledger knows about. `null` when the ledger is unreachable — never `0`. */
+    count: number | null;
+    /** The project `brain` / `graphBuilt` above describe, or `null` if the runner would have had to guess. */
+    answeredFor: string | null;
+    /** The project whose library this coordinator process actually mounts. */
+    mounted: string;
+    /**
+     * Is database-level project isolation actually in force on this connection?
+     *
+     * `'enforced'` — row-level security applies; an unscoped query raises.
+     * `'bypassed'` — the runner connects as a superuser or a `BYPASSRLS` role, so every
+     *                policy in migration 0005 is **inert**. This is the state on the stack
+     *                as it ships today and it is reported rather than assumed, because an
+     *                isolation guarantee nobody can check the status of is a claim.
+     * `'unknown'`  — no ledger to ask.
+     */
+    scopeEnforcement: 'enforced' | 'bypassed' | 'unknown';
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -454,29 +573,76 @@ export interface StatusResponse {
 /**
  * Every runner route. Kept as data so tests can assert the server mounts exactly this set
  * and no more; an undocumented route is an unowned route.
+ *
+ * **Every route that reads or writes a project's data carries `/api/p/:project`** (ADR-015
+ * Q1). Routes that describe the coordinator itself do not, and are marked
+ * `scope: 'coordinator'`. A route that deliberately spans projects lives under `/api/all/`
+ * and is marked `scope: 'cross-project'`; there are currently exactly two, which is the
+ * number a reviewer can hold in their head, and that is the point of giving them a
+ * namespace instead of letting them look like ordinary routes.
+ *
+ * The unscoped forms (`/api/run`, `/api/agents`, …) still exist on the server, and answer
+ * **400 `project_scope_missing`** naming the scoped path. Not a redirect and not a default:
+ * a stale client must get a named refusal, never another project's rows, and never a 404
+ * that reads as though the route had been forgotten.
  */
 export const RUNNER_ROUTES = {
-  run: { method: 'POST', path: '/api/run' },
+  run: { method: 'POST', path: '/api/p/:project/run', scope: 'project' },
   /** Reconnect path for a phone that slept: honours `Last-Event-ID`. */
-  runStream: { method: 'GET', path: '/api/run/:runId/stream' },
-  runArtifact: { method: 'GET', path: '/api/run/:runId/artifact' },
-  schedule: { method: 'POST', path: '/api/schedule' },
-  approvals: { method: 'GET', path: '/api/approvals' },
-  approvalDecision: { method: 'POST', path: '/api/approvals/:runId' },
-  graph: { method: 'GET', path: '/api/graph' },
+  runStream: { method: 'GET', path: '/api/p/:project/run/:runId/stream', scope: 'project' },
+  runArtifact: { method: 'GET', path: '/api/p/:project/run/:runId/artifact', scope: 'project' },
+  schedule: { method: 'POST', path: '/api/p/:project/schedule', scope: 'project' },
+  approvals: { method: 'GET', path: '/api/p/:project/approvals', scope: 'project' },
+  approvalDecision: { method: 'POST', path: '/api/p/:project/approvals/:runId', scope: 'project' },
+  graph: { method: 'GET', path: '/api/p/:project/graph', scope: 'project' },
   /**
-   * The collection. Registered before the wildcard below so `/api/agents` is a list and
-   * not "an agent whose id is the empty string" — the 400 it used to return read like the
+   * The collection. Registered before the wildcard below so `…/agents` is a list and not
+   * "an agent whose id is the empty string" — the 400 it used to return read like the
    * caller's mistake when the route was simply missing.
    */
-  agentsIndex: { method: 'GET', path: '/api/agents' },
-  agent: { method: 'GET', path: '/api/agents/*' },
-  runs: { method: 'GET', path: '/api/runs' },
-  panels: { method: 'GET', path: '/api/panels' },
-  panel: { method: 'GET', path: '/api/panels/:id' },
-  status: { method: 'GET', path: '/api/status' },
-  graphSocket: { method: 'WS', path: '/ws/graph' },
+  agentsIndex: { method: 'GET', path: '/api/p/:project/agents', scope: 'project' },
+  agent: { method: 'GET', path: '/api/p/:project/agents/*', scope: 'project' },
+  runs: { method: 'GET', path: '/api/p/:project/runs', scope: 'project' },
+  panels: { method: 'GET', path: '/api/p/:project/panels', scope: 'project' },
+  panel: { method: 'GET', path: '/api/p/:project/panels/:id', scope: 'project' },
+  graphSocket: { method: 'WS', path: '/ws/p/:project/graph', scope: 'project' },
+
+  /** The coordinator's own health. Says which project its project-shaped fields answered for. */
+  status: { method: 'GET', path: '/api/status', scope: 'coordinator' },
+  /** What the switcher lists. A mount registry is coordinator metadata, not project data. */
+  projects: { method: 'GET', path: '/api/projects', scope: 'coordinator' },
+
+  /**
+   * The approvals badge in the shell footer (§2.5.7) is genuinely cross-project: a human
+   * wants to know that *something* is waiting, wherever it is. Every row carries `project`,
+   * and the badge is a sum of per-project figures — the same rule ADR-014 §2.1 puts on the
+   * LIVE counter, for the same reason.
+   */
+  allApprovals: { method: 'GET', path: '/api/all/approvals', scope: 'cross-project' },
 } as const;
+
+/**
+ * The pre-project paths, still mounted, answering `project_scope_missing`.
+ *
+ * They exist so the migration is **visible**: a client that has not been updated gets a
+ * sentence telling it what to change, on a real 400, instead of silently reading whatever
+ * a default would have picked. Delete a row from here only when no client can still send
+ * it — and never replace one with a redirect to a default project.
+ */
+export const LEGACY_UNSCOPED_PATHS: readonly { method: 'GET' | 'POST'; path: string; scopedKey: keyof typeof RUNNER_ROUTES }[] = [
+  { method: 'POST', path: '/api/run', scopedKey: 'run' },
+  { method: 'GET', path: '/api/run/:runId/stream', scopedKey: 'runStream' },
+  { method: 'GET', path: '/api/run/:runId/artifact', scopedKey: 'runArtifact' },
+  { method: 'POST', path: '/api/schedule', scopedKey: 'schedule' },
+  { method: 'GET', path: '/api/approvals', scopedKey: 'approvals' },
+  { method: 'POST', path: '/api/approvals/:runId', scopedKey: 'approvalDecision' },
+  { method: 'GET', path: '/api/graph', scopedKey: 'graph' },
+  { method: 'GET', path: '/api/agents', scopedKey: 'agentsIndex' },
+  { method: 'GET', path: '/api/agents/*', scopedKey: 'agent' },
+  { method: 'GET', path: '/api/runs', scopedKey: 'runs' },
+  { method: 'GET', path: '/api/panels', scopedKey: 'panels' },
+  { method: 'GET', path: '/api/panels/:id', scopedKey: 'panel' },
+];
 
 /**
  * `GET /api/cost/today` (§2.0 cost ticker) is **`observability-engineer`'s** route and is

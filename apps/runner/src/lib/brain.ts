@@ -14,90 +14,17 @@
  */
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { BrainCompleteness } from '@agnetos/contracts';
 import { commitCompanyFile, lastCommitIso } from './git';
 import type { RunnerConfig } from './config';
 
-export interface InterviewTopic {
-  /** Stable key. Reported in `missing[]`, so the drawer can name what is still unanswered. */
-  key: string;
-  /** The question the interview agent asks (§3.3: "~20 questions"). */
-  question: string;
-  /** Lowercased heading fragments that count as this topic being addressed. */
-  aliases: string[];
-}
-
 /**
- * The interview (§3.3). `agent-library-curator` authors
- * `agents/intelligence/company-interview/SKILL.md`; this list is the checklist that
- * agent's output is scored against, so the two must stay in step — if the interview asks
- * a question that is not here, answering it moves no bar, and completeness under-reports.
+ * Minimum characters before the interview's artifact is trusted to replace the brain.
+ * A near-empty artifact would silently erase COMPANY.md and commit the erasure as its new
+ * history, so `writeBackBrain` refuses below this.
  */
-export const INTERVIEW_TOPICS: readonly InterviewTopic[] = [
-  { key: 'identity', question: 'What does the company do, in one paragraph?', aliases: ['what we do', 'identity', 'about', 'overview', 'company'] },
-  { key: 'offers', question: 'What are the offers, and what does each include?', aliases: ['offers', 'services', 'products', 'packages'] },
-  { key: 'icp', question: 'Who is the ideal customer, and who is explicitly not?', aliases: ['icp', 'ideal customer', 'audience', 'who we serve', 'segments'] },
-  { key: 'pricing', question: 'What do things cost, and how is pricing structured?', aliases: ['pricing', 'price', 'rates', 'fees', 'commercials'] },
-  { key: 'positioning', question: 'Why you and not the obvious alternative?', aliases: ['positioning', 'differentiation', 'why us', 'unique'] },
-  { key: 'competitors', question: 'Who are the competitors and how do you talk about them?', aliases: ['competitors', 'competition', 'alternatives'] },
-  { key: 'proof', question: 'What proof exists — results, case studies, names you may use?', aliases: ['proof', 'case studies', 'results', 'testimonials', 'clients'] },
-  { key: 'objections', question: 'What objections come up, and what is the honest answer?', aliases: ['objections', 'faq', 'pushback', 'concerns'] },
-  { key: 'tone', question: 'How does the company sound in English?', aliases: ['tone', 'voice', 'style', 'brand voice'] },
-  { key: 'arabic-register', question: 'How does it sound in Arabic — MSA or dialect, and which register?', aliases: ['arabic', 'msa', 'عربي', 'arabic register', 'localisation', 'localization'] },
-  { key: 'vocabulary', question: 'Words the company always uses, and words it never uses.', aliases: ['vocabulary', 'lexicon', 'banned words', 'terminology', 'glossary'] },
-  { key: 'red-lines', question: 'Red lines: what must an agent never say, claim or promise?', aliases: ['red lines', 'never', 'prohibited', 'do not', 'guardrails'] },
-  { key: 'pdpl', question: 'PDPL and data handling: what client data may agents touch?', aliases: ['pdpl', 'data handling', 'privacy', 'compliance', 'gdpr'] },
-  { key: 'approvals', question: 'What must a human approve before it leaves the building?', aliases: ['approval', 'approvals', 'sign-off', 'review'] },
-  { key: 'markets', question: 'Which markets, languages and geographies?', aliases: ['markets', 'geography', 'regions', 'languages', 'countries'] },
-  { key: 'channels', question: 'Which channels do you sell and deliver through?', aliases: ['channels', 'distribution', 'platforms'] },
-  { key: 'sales-process', question: 'What happens between first contact and signature?', aliases: ['sales process', 'pipeline', 'funnel', 'deal flow'] },
-  { key: 'delivery', question: 'What happens between signature and delivery?', aliases: ['delivery', 'onboarding', 'fulfilment', 'fulfillment', 'operations'] },
-  { key: 'team', question: 'Who is on the team and who owns what?', aliases: ['team', 'roles', 'people', 'org'] },
-  { key: 'stack', question: 'Which tools and systems hold the company’s data?', aliases: ['stack', 'tools', 'systems', 'integrations', 'crm'] },
-];
-
-/** Placeholder shapes that must not count as an answer. */
-const PLACEHOLDER = /^(tbd|tba|todo|n\/a|na|\?+|-+|_+|\.\.\.|<[^>]*>|\[[^\]]*\])$/i;
-
-/** Minimum non-placeholder characters before a section counts as answered. */
 const MIN_ANSWER_CHARS = 40;
-
-interface Section {
-  title: string;
-  content: string;
-}
-
-/** Split markdown into `## heading` sections. Text before the first heading is `intro`. */
-function splitSections(markdown: string): Section[] {
-  const sections: Section[] = [];
-  let current: Section = { title: 'intro', content: '' };
-  for (const line of markdown.split(/\r?\n/)) {
-    const heading = /^#{1,6}\s+(.*)$/.exec(line);
-    if (heading) {
-      sections.push(current);
-      current = { title: (heading[1] ?? '').trim(), content: '' };
-      continue;
-    }
-    current.content += `${line}\n`;
-  }
-  sections.push(current);
-  return sections;
-}
-
-function isAnswered(section: Section): boolean {
-  const meaningful = section.content
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^[-*>\s]+/, '').trim())
-    // A line that is only a placeholder is not an answer, however long the section is.
-    .filter((line) => line !== '' && !PLACEHOLDER.test(line))
-    .join(' ');
-  return meaningful.length >= MIN_ANSWER_CHARS;
-}
-
-function matchesTopic(topic: InterviewTopic, title: string): boolean {
-  const normalised = title.toLowerCase();
-  return topic.aliases.some((alias) => normalised.includes(alias));
-}
 
 async function countSources(dir: string): Promise<number> {
   try {
@@ -108,12 +35,50 @@ async function countSources(dir: string): Promise<number> {
   }
 }
 
+interface BrainMeasurement {
+  value: number;
+  answered: number;
+  total: number;
+  unanswered: number[];
+}
+
 /**
- * Compute completeness. A missing COMPANY.md is `0` with every topic listed as missing —
+ * `scripts/lib/brain-completeness.mjs` — **`map-galaxy-engineer`'s module, imported and
+ * never reimplemented**, the same arrangement as `layout.mjs` under ADR-003.
+ *
+ * Loaded dynamically because `scripts/` may not be mounted in every container.
+ */
+async function loadCounter(config: RunnerConfig): Promise<
+  ((markdown: string | null) => BrainMeasurement) | null
+> {
+  try {
+    const url = pathToFileURL(join(config.repoRoot, 'scripts', 'lib', 'brain-completeness.mjs')).href;
+    const mod = (await import(url)) as { measureBrain: (md: string | null) => BrainMeasurement };
+    return (markdown) => mod.measureBrain(markdown);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compute completeness. A missing COMPANY.md is `0` with every question listed as missing —
  * an honest empty state, which the spec prefers to a plausible fake one (Part VII.3).
+ *
+ * **The counter is the `<!-- UNANSWERED: Qn -->` markers, and nothing else.** It used to be
+ * "does a section matching this topic's aliases contain ≥40 non-placeholder characters",
+ * which scored a file with twenty untouched markers at 45% because it was reading the
+ * template's *instructions* as the section's *answer* (`fidelity-qa-reviewer`, 2026-08-16).
+ * Two heuristics on one file is one heuristic too many, and the markers are the only signal
+ * in COMPANY.md a template cannot fabricate — the interview writes them, and the file's own
+ * header forbids deleting one to look finished.
+ *
+ * The measurement itself lives in `scripts/lib/brain-completeness.mjs` so that this and
+ * `scripts/build-graph.mjs` cannot disagree. They did, for a milestone, and the map showed
+ * the disagreement as brightness (`comms/inbox/runner-engineer/…-one-brain-counter.md`).
+ * If that module is unreachable, this reports **zero** — never a guess, and never a number
+ * that could be higher than the truth.
  */
 export async function computeBrainCompleteness(config: RunnerConfig): Promise<BrainCompleteness> {
-  const total = INTERVIEW_TOPICS.length;
   let markdown: string | null = null;
   try {
     markdown = await readFile(config.companyFile, 'utf8');
@@ -121,27 +86,17 @@ export async function computeBrainCompleteness(config: RunnerConfig): Promise<Br
     markdown = null;
   }
 
-  const sources = await countSources(config.companySourcesDir);
+  const [sources, measure] = await Promise.all([
+    countSources(config.companySourcesDir),
+    loadCounter(config),
+  ]);
+
+  const measurement = measure
+    ? measure(markdown)
+    : { value: 0, answered: 0, total: INTERVIEW_QUESTION_COUNT, unanswered: allQuestions() };
 
   if (markdown === null) {
-    return {
-      value: 0,
-      answered: 0,
-      total,
-      sources,
-      updatedAt: null,
-      missing: INTERVIEW_TOPICS.map((t) => t.key),
-    };
-  }
-
-  const sections = splitSections(markdown).filter((section) => isAnswered(section));
-  const missing: string[] = [];
-  let answered = 0;
-
-  for (const topic of INTERVIEW_TOPICS) {
-    const hit = sections.some((section) => matchesTopic(topic, section.title));
-    if (hit) answered += 1;
-    else missing.push(topic.key);
+    return { ...toCompleteness(measurement), sources, updatedAt: null };
   }
 
   let updatedAt = await lastCommitIso(config, 'company/COMPANY.md');
@@ -153,15 +108,30 @@ export async function computeBrainCompleteness(config: RunnerConfig): Promise<Br
     }
   }
 
+  return { ...toCompleteness(measurement), sources, updatedAt };
+}
+
+/** The interview asks twenty questions; `Qn` is the marker namespace COMPANY.md uses. */
+const INTERVIEW_QUESTION_COUNT = 20;
+const allQuestions = (): number[] =>
+  Array.from({ length: INTERVIEW_QUESTION_COUNT }, (_, i) => i + 1);
+
+/**
+ * `missing[]` is question labels (`"Q7"`), not topic keys.
+ *
+ * The old topic keys were a *different* twenty from the twenty the interview actually asks
+ * (`INTERVIEW_TOPICS` has `positioning`, `competitors`, `proof`…; the SKILL asks about
+ * identity, offers, ICP, pricing, voice, red lines, operations), so some of them could
+ * never have been moved by answering the interview as written. A question number is also
+ * findable: the drawer can say "Q7, Q8, Q9 outstanding" and a person can go read those
+ * exact lines in COMPANY.md.
+ */
+function toCompleteness(m: BrainMeasurement): Omit<BrainCompleteness, 'sources' | 'updatedAt'> {
   return {
-    // Rounded to 3dp: enough resolution for a particle count, not enough to imply a
-    // precision this measurement does not have.
-    value: Math.round((answered / total) * 1000) / 1000,
-    answered,
-    total,
-    sources,
-    updatedAt,
-    missing,
+    value: m.value,
+    answered: m.answered,
+    total: m.total,
+    missing: m.unanswered.map((n) => `Q${n}`),
   };
 }
 
@@ -203,19 +173,58 @@ export interface BrainWriteBack {
  *
  * Returns `null` for every other agent, which is the common case and deliberately silent.
  */
+/** Interview modes that are allowed to replace the brain. `review-gaps` reports; it never writes. */
+const BRAIN_WRITING_MODES = new Set(['first-run', 'update-section']);
+
+/**
+ * Does this artifact look like COMPANY.md, or merely like a document the interview produced?
+ *
+ * Until 2026-08-16 those were the same test — "any `.md` over 40 characters" — and it was
+ * unreachable only because the agent had no tool that could create a file. Closing that bug
+ * (ADR-009, `wired_into: [workspace]`) opened this one: a `review-gaps` run, whose entire
+ * job is to *report* which sections are thin, would have overwritten the brain with a
+ * description of its own holes and committed that as the brain's new history.
+ *
+ * `agent-library-curator` closed it from the prompt side by telling the agent to write no
+ * file in that mode. That is a sentence holding a boundary, which ADR-007 says explicitly
+ * should not happen — and a filename trick would not have helped either, because
+ * `extractArtifact` falls back to any single file with a known extension. So the check is
+ * here, on the runner's side of the wire, where a prompt cannot argue with it.
+ *
+ * Two independent conditions, because either alone is too weak: the *mode the human chose*
+ * must permit a write, and the artifact must *carry the brain's own structure*. The
+ * structural test keys on the `<!-- UNANSWERED` marker namespace and the `## ` headings —
+ * the same signal completeness is measured from, so a file that cannot be scored cannot be
+ * installed either.
+ */
+function looksLikeTheBrain(markdown: string): boolean {
+  const headings = (markdown.match(/^##\s+/gm) ?? []).length;
+  const hasMarkerNamespace = /<!--\s*UNANSWERED/i.test(markdown);
+  // A finished brain has no markers left, so markers cannot be *required*. Structure can.
+  return headings >= 5 || (hasMarkerNamespace && headings >= 1);
+}
+
 export async function writeBackBrain(
   config: RunnerConfig,
   agentSlug: string,
   artifact: { absolutePath: string; kind: string } | null,
+  inputs: Record<string, unknown> = {},
 ): Promise<BrainWriteBack | null> {
   if (agentSlug !== INTERVIEW_AGENT_SLUG) return null;
   if (!artifact || artifact.kind !== 'md') return null;
+
+  // The mode the human picked in the drawer. Absent is treated as writing, because
+  // `first-run` is the default path and the input is optional in frontmatter — but an
+  // explicitly non-writing mode is refused outright.
+  const mode = typeof inputs.mode === 'string' ? inputs.mode : 'first-run';
+  if (!BRAIN_WRITING_MODES.has(mode)) return null;
 
   const markdown = await readFile(artifact.absolutePath, 'utf8');
   // An empty or near-empty artifact would silently erase the brain and, worse, would then
   // be committed as its new history. Refuse instead: the run still succeeded, and its
   // artifact is still downloadable for a human to look at.
   if (markdown.trim().length < MIN_ANSWER_CHARS) return null;
+  if (!looksLikeTheBrain(markdown)) return null;
 
   await mkdir(dirname(config.companyFile), { recursive: true });
   await writeFile(config.companyFile, markdown, 'utf8');

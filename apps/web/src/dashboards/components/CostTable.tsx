@@ -10,7 +10,7 @@ export function CostTable({ widget }: { widget: CostTableWidget }): React.JSX.El
       <QueryGate query={widget.query} emptyState={widget.emptyState} height={160}>
         {(data) => {
           const rows = toCostRows(data);
-          if (rows.length === 0) return <p className="text-meta text-ink-3">No rows.</p>;
+          if (rows.length === 0) return <p className="text-meta text-ink-2">No rows.</p>;
           const total = sumOf(rows);
           return (
             <table className="w-full text-meta">
@@ -19,7 +19,7 @@ export function CostTable({ widget }: { widget: CostTableWidget }): React.JSX.El
                   <tr key={`${row.label}-${i}`} className="border-b border-line last:border-0">
                     <td className="py-2 pr-3 text-ivory-2">
                       {row.label}
-                      {row.sub ? <span className="mt-0.5 block text-ink-3">{row.sub}</span> : null}
+                      {row.sub ? <span className="mt-0.5 block text-ink-2">{row.sub}</span> : null}
                     </td>
                     <td className="py-2 text-right text-ivory">
                       <Formatted value={row.value} format={widget.format ?? 'currency'} />

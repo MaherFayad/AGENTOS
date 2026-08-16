@@ -239,18 +239,31 @@
   color: var(--ink-2);
 }
 
+/* `--ink-2`, not `--ink-3`, for both of these — see the note on `.empty`. This one carries
+ * the schedule confirmation and the INPUTS schema-gap disclosure ("<field> can't be filled
+ * in here"), which is a sentence the reader has to act on. */
 .sectionNote {
   margin-block-start: 8px;
   @apply text-chip;
   font-weight: 400;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
+/* The honest empty state is content, so it is not painted in the disabled colour.
+ *
+ * `--ink-3` is #6B6B73 on #111114 = **3.57:1**, below WCAG AA for 11-12px text, and the
+ * token contract's own gloss for it is "faint text / disabled". Every sentence this class
+ * carries — "No runs yet…", "Couldn't reach the runner, so this list is empty rather than
+ * wrong.", "Looking for recent runs…" — is the thing BOARD rule 9 puts on screen *instead
+ * of* a plausible fake number. Rendering it as disabled text argues the opposite.
+ *
+ * `--ink-2` measures 5.08:1 dark / 4.60:1 light on `--bg`, and 5.20:1 / 4.60:1 through the
+ * drawer's own `--glass`. It is already the token `.statusHint` uses for the same job. */
 .empty {
   @apply text-meta;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 /* -----------------------------------------------------------------------------
@@ -411,6 +424,12 @@
   align-items: baseline;
 }
 
+/* The inactive rung LABEL stays `--ink-3`, and that is a ruling, not an oversight of the
+ * empty-state fix above. §2.3.9 names the token in words — "active row ivory, others
+ * `--ink-3`" — and tokens contract §9.3 has a matching legitimate home: a label redundant
+ * with its own position. HUMAN-LED / HUMAN-ASSISTED / FULLY AUTONOMOUS is a fixed triad in
+ * a fixed order, so here the dimming genuinely *is* the meaning.
+ * Ratified by `design-system-guardian`, 20260816-2112. Do not change without a new one. */
 .ladderLabel {
   font-size: var(--drw-fs-rung);
   font-weight: 500;
@@ -420,25 +439,45 @@
   color: var(--ink-3);
 }
 
+/* The rung EXPLANATION is `--ink-2`, and unlike the label that is not what §2.3.9 says —
+ * because §2.3.9 does not say anything. It prescribes a token for the row label and then
+ * only "12px explanation each", naming no token for the sentence. So there is no spec
+ * conflict here, just an open choice, and tokens contract §9.2 closes it: a sentence the
+ * reader must read to understand the rung is `--ink-2` or brighter.
+ *
+ * The two rungs the agent is NOT on are the ones the reader opened the ladder to learn
+ * about — this is a maturity model, and the comparison is the point. Rendering the two
+ * they don't have at 3.57:1 made the comparison the least legible thing in the component.
+ * Correction from `design-system-guardian`, 20260816-2112, over my own earlier reasoning. */
 .ladderText {
   @apply text-meta;
   line-height: 1.55;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .ladderRow[data-active='true'] .ladderLabel {
   color: var(--ivory);
 }
 
+/* §2.3.9 says "active row ivory" — the whole row, not only its label. With `.ladderText`
+ * now `--ink-2` for every rung, this override is what keeps the rung the agent is actually
+ * on reading ahead of the two it isn't: `--ivory-2` 8.94:1 vs `--ink-2` 5.08:1. The
+ * hierarchy the dimming used to express survives; the AA failure underneath it does not.
+ * `--ivory` stays reserved for the label, so label and explanation still differ inside the
+ * active row. */
 .ladderRow[data-active='true'] .ladderText {
   color: var(--ivory-2);
 }
 
+/* `text-transform`, not a shouted literal — §1.4 / catalogue rule 1. Arabic has no letter
+ * case, so `NOW` typed into the catalogue would arrive there as nothing; `uppercase` is a
+ * no-op in Arabic and the same key works in both locales. Pixels are unchanged. */
 .nowBadge {
   display: inline-block;
   margin-inline-start: 6px;
   padding: 1px 5px;
   font-size: var(--drw-fs-badge);
+  text-transform: uppercase;
   letter-spacing: var(--track-1);
   border: var(--border-w) solid var(--line-2);
   border-radius: var(--r-pill);
@@ -501,10 +540,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* "unpriced" — a word where a number would be. One step dimmer than the real numbers so
- * the eye reads the priced column first and does not mistake it for a cheap run. */
+/* "unpriced" — a word where a number would be. It must read one step dimmer than the real
+ * numbers so the eye takes the priced column first and never mistakes it for a cheap run.
+ *
+ * `--ink-2`, not `--ink-3`, and the design argument survives intact: the dollar amounts are
+ * `--ivory` at 15.98:1, so `--ink-2` at 5.08:1 is still visibly the quieter cell. Tokens
+ * contract §9.2 names this exact case — a provenance caveat — as its sharpest example:
+ * delete the word and a blank cell cannot tell the reader whether the run cost nothing or
+ * was never measured, which is the "floor, not a total" distinction BOARD rule 9 exists to
+ * protect. It is also the same sentence as `KpiTile`'s `unpricedNote`, and the two must not
+ * disagree about how loudly the product admits a gap.
+ * Correction from `design-system-guardian`, 20260816-2112. */
 .runMetaAbsent {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-variant-numeric: normal;
 }
 
@@ -729,11 +777,15 @@
   color: var(--ink-2);
 }
 
+/* Also `--ink-2`, same reason as `.empty`: this class carries "Nothing has come back from
+ * the runner yet." and "N earlier lines are no longer held in the browser." — an empty
+ * state and a completeness disclosure. Both are content. On `--screen` (#101013) `--ink-2`
+ * measures 5.20:1. */
 .consoleTrimmed {
   padding-block-end: 6px;
   @apply text-chip;
   font-weight: 400;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .consoleFoot {

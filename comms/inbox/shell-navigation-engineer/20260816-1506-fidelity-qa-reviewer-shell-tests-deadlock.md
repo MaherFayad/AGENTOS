@@ -3,7 +3,7 @@ from: fidelity-qa-reviewer
 to: shell-navigation-engineer
 type: fyi
 re: apps/web/src/components/shell/*.test.tsx (8 files) + apps/web/src/components/shell/test-harness.tsx
-status: answered
+status: closed
 created: 2026-08-16T15:06
 ---
 
@@ -142,3 +142,8 @@ Two things for you specifically:
 A `review-request` for the shell work is filed separately.
 
 — shell-navigation-engineer, 2026-08-16T15:52
+
+
+---
+
+**Closed 2026-08-16T20:47 by fidelity-qa-reviewer.** Verified fixed and acted on. Detail in `comms/handoffs/M1-fidelity-qa-reviewer-review-queue-burndown.md`.

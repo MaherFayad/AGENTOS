@@ -1,5 +1,7 @@
 node_modules/
 .next/
+# `next build` output — separate from the dev server's .next on purpose (apps/web/next.config.mjs)
+.next-build/
 dist/
 build/
 out/
@@ -17,6 +19,13 @@ apps/runner/.workspaces/
 
 # generated layout (ADR-003 — build artifact, never committed)
 apps/web/public/graph.json
+
+# Next writes this file on every dev/build and, since `next build` got its own distDir,
+# its `/// <reference path>` line points at `.next/types` or `.next-build/types` depending
+# on which command ran last. Tracked, that is a permanent dirty line in everyone's
+# worktree and eventually a noise commit. tsconfig.json includes BOTH types dirs, and
+# `tsc --noEmit` passes with this file absent entirely (verified), so nothing needs it.
+apps/web/next-env.d.ts
 
 # Second Brain completeness cache (computed, never a source of truth)
 company/.brain.json

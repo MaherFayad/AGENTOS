@@ -55,7 +55,10 @@ test('a run produces one trace, with a span per tool call under a single root', 
   });
 
   // The trace URL must be usable before the run ends — the SSE `start` event carries
-  // it, so the drawer can offer the link while output is still streaming.
+  // it, so the drawer can offer the link while output is still streaming. This fixture
+  // supplies a real `urlFor`; with the null sink (Langfuse unconfigured) it is `null`,
+  // never a plausible link to a trace that was not sent — see `createNullSink`.
+  assert.ok(trace.traceUrl, 'a configured sink yields a link');
   assert.match(trace.traceUrl, /\/traces\/[0-9a-f]{32}$/);
   assert.equal(trace.traceUrl.includes(trace.traceId), true);
 

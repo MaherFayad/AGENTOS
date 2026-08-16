@@ -30,10 +30,17 @@ import { parseLastEventId, SSE_HEARTBEAT, type RunStream } from '../lib/sse.ts';
 import { startRun, type RunnerServices } from '../lib/runService.ts';
 import { setSchedule } from '../lib/schedule.ts';
 import type { GraphWatcher } from '../lib/watcher.ts';
+import type { LedgerConnection } from '../lib/ledgerConnection.ts';
+import { readTailnet } from '../lib/tailscale.ts';
 
 export interface ApiContext {
   services: RunnerServices;
   watcher: GraphWatcher | null;
+  /**
+   * The self-healing ledger connection. Read per request, never captured — that is the
+   * whole fix for the latched "observability is not up" (see `ledgerConnection.ts`).
+   */
+  ledger: LedgerConnection;
   startedAt: string;
   websocket: boolean;
   sockets: Set<{ send: (data: string) => void; readyState: number; on: (event: string, cb: () => void) => void }>;
@@ -256,14 +263,23 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
       graphIsBuilt(config),
       ledger.status(),
     ]);
+    // Observed, not read back from `.env`. `readTailnet` looks for a tailnet address on
+    // this process's own interfaces; anything it cannot see is `unknown`, never `online`.
+    const tailnet = readTailnet();
+
     return {
-      tailscale: process.env.TAILSCALE_IP || process.env.TS_HOSTNAME ? 'online' : 'unknown',
+      tailscale: tailnet.state,
+      tailscaleAddress: tailnet.address,
+      tailscaleHint: tailnet.hint,
       queueDepth: counts.queued,
       activeRuns: counts.active,
       pendingApprovals: counts.pendingApprovals,
       runnerConfigured: config.configured,
       budget,
       brain,
+      // The one place a caller can tell "no runs yet" from "we cannot see the runs".
+      // Everything on the shell that renders a zero should check this first.
+      ledger: ctx.ledger.health(),
       graphBuilt,
       startedAt: ctx.startedAt,
     };
@@ -288,10 +304,16 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
     });
   }
 
-  // Observability (§3.5). Always mounted: missing Postgres answers `{usd:null}`
-  // on the ticker and `metrics_unavailable` elsewhere — never a 404 that looks
-  // like the route was forgotten. GET /api/runs is not in this set.
-  registerMetricsRoutes(app, services.obs?.db ?? null);
+  // Observability (§3.5). Always mounted: an unreachable Postgres answers `{usd:null,
+  // runs:null}` on the ticker and `metrics_unavailable` elsewhere — never a 404 that looks
+  // like the route was forgotten, and never a `0` that looks like an honest empty state.
+  // Getters, not values: the connection can come back, and these routes must notice.
+  // GET /api/runs is not in this set.
+  registerMetricsRoutes(app, {
+    db: () => ctx.ledger.current()?.db ?? null,
+    health: () => ctx.ledger.health(),
+    reportQueryError: (err) => ctx.ledger.reportQueryError(err),
+  });
 }
 
 /** Every path this process registers from the contract, for tests. */

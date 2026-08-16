@@ -40,7 +40,7 @@ function Chart({
   const wrap = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number>(-1);
 
-  if (series.length === 0) return <p className="text-meta text-ink-3">No points in this series.</p>;
+  if (series.length === 0) return <p className="text-meta text-ink-2">No points in this series.</p>;
 
   const onMove = (event: React.MouseEvent<HTMLDivElement>) => {
     const box = wrap.current?.getBoundingClientRect();
@@ -74,7 +74,10 @@ function Chart({
           {label}
         </p>
       ) : (
-        <p className="mt-2 text-meta text-ink-3">Hover a spike for the reading.</p>
+        // The only place the chart's interactivity is stated (tokens contract §9.2, last
+        // bullet: a hint that appears nowhere else). It is also swapped out by the reading
+        // the moment you hover, so it is never on screen while the pointer is over the card.
+        <p className="mt-2 text-meta text-ink-2">Hover a spike for the reading.</p>
       )}
     </div>
   );

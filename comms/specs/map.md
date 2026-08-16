@@ -21,7 +21,7 @@ covered** as an ownership claim, so nothing else is named there. Neighbours:
 | §2.0 | `shell-navigation-engineer` | consume `shell:flyTo` / `shell:zoom` / `shell:yourTree`; publish `shell:zoomChanged` / `shell:liveCount` | the overlay chrome, search, LIVE counter, YOUR TREE toggle |
 | §2.3 | `drawer-engineer` | emit `openDrawer({ slug, view: 'map' })` on job/leaf activation | the left drawer panel |
 | §3.2 | `runner-engineer` | render clock badge / amber pulse from payload fields | schedule writes, approval gates, `/ws/graph` `approvalPending` overlay |
-| §3.3 | `runner-engineer` | scale particle count/brightness from `core.brainCompleteness` | computing that number from `company/` |
+| §3.3 | `runner-engineer` | scale particle count/brightness from `core.brainCompleteness`; **measure it** in `scripts/lib/brain-completeness.mjs` from COMPANY.md's `<!-- UNANSWERED: Qn -->` markers, and render the 0/20 empty state | the interview agent, the write-back, `/api/status`, `company/.brain.json` |
 | §3.4 | `agent-library-curator` | amber halo when `status: failing` | the audit engine that sets failing |
 | §1.5 / §1.6 | `design-system-guardian` | paint starfield/grid/vignette from tokens; `DURATION.zoom` / `DURATION.relax` | `tokens.css`, `primitives/motion.ts` |
 
@@ -80,6 +80,8 @@ covered** as an ownership claim, so nothing else is named there. Neighbours:
 | REQ-MAP-33 | §2.2 | `/map/:department` is a real route sharing the layout canvas | `apps/web/src/app/(views)/map/[department]/page.tsx` · `apps/web/src/app/(views)/map/layout.tsx` | `apps/web/src/map/MapView.test.tsx` |
 | REQ-MAP-34 | §2.1 | Payload is parsed defensively — garbage is `null`, not a half-built map | `apps/web/src/map/data/parse.ts` | `apps/web/src/map/data/parse.test.ts` |
 | REQ-MAP-35 | §2.1 | `brainCompleteness` is an engine input (0…1, default 0), not a constant inside the solver | `scripts/lib/layout.mjs` · `comms/decisions/ADR-003-layout-precompute.md` | `scripts/lib/layout.test.mjs` |
+| REQ-MAP-36 | §3.3 | Completeness counts **answered questions** — COMPANY.md's `<!-- UNANSWERED: Qn -->` markers — never headings, prose length or `sources/`; the payload carries `brainAnswered`/`brainTotal` so the fraction is auditable, and a `.brain.json` snapshot may never claim more than the markers admit | `scripts/lib/brain-completeness.mjs` · `scripts/build-graph.mjs` | `scripts/__tests__/brain-completeness.test.mjs` |
+| REQ-MAP-37 | §3.3 | A 0/20 brain renders as a stated empty state — no particles, a dashed disc where the swirl belongs, and the count in words with an `aria-label` — never a dim swirl and never a bare canvas | `apps/web/src/map/svg/BrainEmptyState.tsx` · `apps/web/src/map/canvas/GalaxyCanvas.tsx` | `apps/web/src/map/svg/BrainEmptyState.test.tsx` |
 
 ## Interfaces we expose
 

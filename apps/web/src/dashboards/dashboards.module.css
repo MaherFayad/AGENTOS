@@ -226,12 +226,16 @@
   background: var(--ivory);
 }
 
+/* "DRAG TO SPIN · CLICK THE FRONT CARD TO ENTER" (§2.4). The ‹ › pills and the dots make
+   "drag to spin" partly redundant; nothing else on the screen says the front card is
+   clickable, and that is the carousel's primary action. A hint that appears nowhere else is
+   required reading (tokens contract §9.2). --ink-2, not --ink-3. */
 .hint {
   position: relative;
   z-index: 2;
   text-align: center;
   padding: 4px 20px calc(56px + var(--dash-safe-b));
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 /* ---------------------------------------------------------------- detail */
@@ -314,8 +318,13 @@
   background: none;
   border: 0;
   cursor: pointer;
-  color: var(--ink-3);
   padding: 12px 4px;
+  /* No `color` here on purpose. This button's only two children are `.railDot` (its own
+     background) and a `<RailLabel>`, which sets its own colour from its `tone` prop — so the
+     `color: var(--ink-3)` that used to sit here was inherited by nothing and painted nothing.
+     A dead declaration naming the disabled token is worse than none: it is the first thing
+     the next reader greps for and it answers the question wrongly. The rail's colour is
+     decided at the two call sites in DashboardDetail.tsx, where `tone="muted"` is passed. */
 }
 
 .rail:focus-visible {
@@ -360,13 +369,19 @@
   place-items: center;
   border: 1px dashed var(--line-2);
   border-radius: var(--r-card);
-  color: var(--ink-3);
+  /* The failure sentence IS the box. Nothing else says which widget type was unsupported. */
+  color: var(--ink-2);
   padding: 16px;
 }
 
+/* Every honest empty state in §2.5 — "No figure yet.", "Nothing in this window.", "Couldn't
+   read this widget." — the copy BOARD rule 9 puts on screen *instead of* a plausible zero.
+   Rendering it in the disabled token was the design quietly retracting the rule the copy
+   exists to satisfy. --ink-2 and not --ivory-2: an absent value in a row of six peer tiles
+   must not out-shout the tiles that have real ones (tokens contract §9.4). */
 .emptyLine {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .skeleton {

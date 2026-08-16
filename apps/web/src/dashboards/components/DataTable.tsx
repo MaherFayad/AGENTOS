@@ -30,7 +30,7 @@ function Table({ widget, payload }: { widget: DataTableWidget; payload: unknown 
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const rows = sort ? sortTableRows(initial, sort.key, sort.dir) : initial;
 
-  if (rows.length === 0) return <p className="text-meta text-ink-3">No rows.</p>;
+  if (rows.length === 0) return <p className="text-meta text-ink-2">No rows.</p>;
 
   const sortable = widget.sortable !== false;
 
@@ -116,7 +116,9 @@ function Cell({
   type: 'text' | 'chip' | 'number';
   format?: DataTableWidget['columns'][number]['format'];
 }): React.JSX.Element {
-  if (value === null) return <span className="text-ink-3">—</span>;
+  // One absent-reading treatment for the whole module — colour, glyph and accessible name
+  // are all decided in `Formatted`. This branch used to be a second, quieter copy of it.
+  if (value === null) return <Formatted value={null} format={format} />;
   if (type === 'chip' || isChipValue(value)) {
     const chip = isChipValue(value) ? value : { chip: String(value), tone: 'neutral' as const };
     return (
@@ -126,7 +128,7 @@ function Cell({
     );
   }
   if (type === 'number' || typeof value === 'number') {
-    return <Formatted value={value} format={format} className="text-ivory" />;
+    return <Formatted value={value} format={format} />;
   }
   if (format === 'relative-time') {
     return <span className="text-ivory-2">{formatValue(value, 'relative-time') ?? String(value)}</span>;

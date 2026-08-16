@@ -18,7 +18,7 @@ function Bars({
   valueAlign: 'right' | 'left';
 }): React.JSX.Element {
   const rows = toBarRows(payload);
-  if (rows.length === 0) return <p className="text-meta text-ink-3">No rows.</p>;
+  if (rows.length === 0) return <p className="text-meta text-ink-2">No rows.</p>;
   const widths = barWidths(rows.map((r) => r.value));
   return (
     <ul className="flex flex-col gap-2">
@@ -28,7 +28,7 @@ function Bars({
             <div className="flex items-baseline justify-between gap-3">
               <span className="truncate text-meta text-ivory-2">{row.label}</span>
               {valueAlign === 'right' ? (
-                <Formatted value={row.value} format={format} className="text-meta text-ivory" />
+                <Formatted value={row.value} format={format} className="text-meta" />
               ) : null}
             </div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-pill bg-line">
@@ -37,7 +37,10 @@ function Bars({
                 style={{ width: `${widths[i]}%` }}
               />
             </div>
-            {row.sub ? <p className="mt-0.5 text-meta text-ink-3">{row.sub}</p> : null}
+            {/* `row.sub` is usually the only place a bar's qualifier appears — "of 121 runs",
+                "excludes unpriced". Required reading under §9.2, so --ink-2, one rung below
+                the --ivory-2 label it hangs off. The row does not hover, so §9.5 does not bite. */}
+            {row.sub ? <p className="mt-0.5 text-meta text-ink-2">{row.sub}</p> : null}
           </div>
         </li>
       ))}

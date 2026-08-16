@@ -54,8 +54,31 @@ describe('composed anatomy (projection + sections)', () => {
     const map = renderToStaticMarkup(<Ladder rows={model.ladder} />);
     const chart = renderToStaticMarkup(<Ladder rows={model.ladder} nowBadge />);
     expect(map).toContain('data-active="true"');
-    expect(map).not.toContain('NOW');
-    expect(chart).toContain('NOW');
+    // The badge is `.nowBadge` in the chart flavour and `.srOnly` in the map flavour — same
+    // word, different visibility. Uppercase is `text-transform`, so assert the class.
+    expect(map).not.toContain('nowBadge');
+    expect(chart).toContain('nowBadge');
+  });
+
+  /**
+   * §2.3.9 marks the active rung by colour. Colour may not be the only carrier (WCAG 1.4.1),
+   * and unlike the chart flavour the map flavour has no `NOW` text to fall back on — so the
+   * map flavour must say it in words, and both flavours must say it in the a11y tree.
+   */
+  it('does not mark the active ladder rung by colour alone, in either flavour', () => {
+    const map = renderToStaticMarkup(<Ladder rows={model.ladder} />);
+    const chart = renderToStaticMarkup(<Ladder rows={model.ladder} nowBadge />);
+
+    expect(map).toContain('aria-current="true"');
+    expect(chart).toContain('aria-current="true"');
+    // exactly one rung is current
+    expect(map.match(/aria-current="true"/g)).toHaveLength(1);
+
+    // The map flavour has no visible badge, so the word must still be in the a11y tree.
+    expect(map).toContain('srOnly');
+    expect(map).toContain('Now');
+    // Both flavours announce the same word; the chart's is simply visible.
+    expect(chart).toContain('Now');
   });
 
   it('renders the chart autonomy toggle as a readout, not a control', () => {

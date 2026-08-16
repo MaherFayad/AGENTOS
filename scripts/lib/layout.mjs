@@ -556,8 +556,10 @@ export function layoutVersion(normalised, departments) {
  *        name, cluster, icon, status, breaks_into, builds_on, schedule, approvalPending}`
  * @param {Record<string,{x:number,y:number}>} [previousPositions] from
  *        `agents/_registry/positions.json` — the reason the map is stable across clones
- * @param {object} [options] `{departments, clusters, brainCompleteness, seed, ticks,
- *        pinTicks, now, warn}`
+ * @param {object} [options] `{departments, clusters, brainCompleteness, brainAnswered,
+ *        brainTotal, seed, ticks, pinTicks, now, warn}`. The three `brain*` values are
+ *        inputs measured by `lib/brain-completeness.mjs`; this engine never reads
+ *        `company/` itself (ADR-003).
  * @returns {import('../../packages/contracts/src/graph.js').GraphPayload}
  */
 export function computeLayout(agents, previousPositions = {}, options = {}) {
@@ -616,11 +618,22 @@ export function computeLayout(agents, previousPositions = {}, options = {}) {
     ? Math.min(1, Math.max(0, options.brainCompleteness))
     : 0;
 
+  // §3.3 — the count behind the fraction. Carried so the number is auditable against
+  // COMPANY.md by anyone holding the payload, and so the UI can say "0 of 20 answered"
+  // without keeping its own copy of the interview's length. `null` means "not measured",
+  // which is a different claim from zero and is rendered differently.
+  const brainTotal =
+    Number.isInteger(options.brainTotal) && options.brainTotal > 0 ? options.brainTotal : null;
+  const brainAnswered =
+    Number.isInteger(options.brainAnswered) && brainTotal !== null
+      ? Math.min(brainTotal, Math.max(0, options.brainAnswered))
+      : null;
+
   return {
     version: layoutVersion(normalised, departments),
     computedAt: options.now ?? new Date().toISOString(),
     bounds,
-    core: { x: 0, y: 0, brainCompleteness: completeness },
+    core: { x: 0, y: 0, brainCompleteness: completeness, brainAnswered, brainTotal },
     departments: departmentMeta,
     nodes: outNodes,
     edges: edges.map((e) => ({

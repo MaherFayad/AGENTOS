@@ -71,6 +71,26 @@ export interface RunnerConfig {
   slackWebhookUrl: string | null;
 }
 
+/**
+ * `.env.example` ships every secret as a `…-REPLACE-ME` placeholder, and a placeholder is
+ * a non-empty string — so `Boolean(process.env.ANTHROPIC_API_KEY)` answered **true** on a
+ * stack where no key had ever been supplied. `GET /api/status` then reported
+ * `runnerConfigured: true`, and `POST /api/run` sailed past the `runner_not_configured`
+ * gate to die inside the SDK with a raw upstream auth error instead of the contracted 503
+ * and its hint. Same disease as the latched ledger: a broken state that reads as a healthy
+ * one.
+ *
+ * The test is deliberately narrow — the two placeholder words this repo actually ships —
+ * and says nothing about a real key's shape. Guessing at key formats is how a valid key
+ * gets refused six months from now.
+ */
+export function isPlaceholderSecret(value: string | undefined): boolean {
+  if (value === undefined) return true;
+  const trimmed = value.trim();
+  if (trimmed === '') return true;
+  return /replace[-_ ]?me|change[-_ ]?me/i.test(trimmed);
+}
+
 function numberFromEnv(name: string, fallback: number | null): number | null {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === '') return fallback;
@@ -105,7 +125,8 @@ export function loadConfig(): RunnerConfig {
         : join(repoRoot, '.runner', 'artifacts'),
     // Presence only. The value stays in process.env and is read at spawn time by the
     // Agent SDK; nothing in this service copies it into a variable that could be logged.
-    configured: Boolean(process.env.ANTHROPIC_API_KEY),
+    // A `REPLACE-ME` placeholder is not presence — see `isPlaceholderSecret`.
+    configured: !isPlaceholderSecret(process.env.ANTHROPIC_API_KEY),
     monthlyCapUsd: numberFromEnv('RUNNER_MONTHLY_CAP_USD', null),
     maxConcurrentRuns: numberFromEnv('RUNNER_MAX_CONCURRENT_RUNS', 3) ?? 3,
     model: process.env.RUNNER_MODEL ?? 'claude-opus-5',

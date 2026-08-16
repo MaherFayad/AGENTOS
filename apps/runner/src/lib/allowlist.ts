@@ -14,6 +14,7 @@
  * Run. The moment those two answers differ, the drawer is lying and the allowlist is
  * decoration.
  */
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { ApiError } from './errors';
 
 export interface Connector {
@@ -50,7 +51,10 @@ export const CONNECTOR_REGISTRY: Readonly<Record<string, Connector>> = {
   workspace: {
     label: 'Scratch workspace',
     tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
-    note: 'Read/write inside the per-run scratch dir only (§3.2).',
+    // Enforced by `isPathInsideScratch` below, not by the cwd. The cwd only decides where
+    // a *relative* path resolves; these tools accept absolute paths, so before that gate
+    // existed this note was a claim the code did not make.
+    note: 'Read/write inside the per-run scratch dir only (§3.2), enforced per path argument.',
   },
   shell: {
     label: 'Shell',
@@ -165,6 +169,57 @@ export function assertToolAllowed(allowlist: ResolvedAllowlist, toolName: string
       retryable: false,
     },
   );
+}
+
+/**
+ * THE SECOND ENFORCEMENT POINT — the *argument*, not just the name.
+ *
+ * `isToolAllowed` gates which tool may run. It says nothing about what that tool may
+ * touch. For `workspace` (`Read`, `Write`, `Edit`, `Glob`, `Grep`) that gap was the whole
+ * boundary: this file claimed the connector was "scoped to the per-run scratch cwd", and
+ * `agent-library-curator` widened twelve agents to `workspace` on the strength of that
+ * sentence. **cwd is where relative paths resolve; it is not a wall.** The Agent SDK's file
+ * tools take absolute paths, so `Read("/repo/.env")` was one token away from working.
+ *
+ * This is the same shape as `assertInsideAgents` / `assertInsideCompany` in `config.ts`,
+ * applied to the run's scratch directory — resolved paths compared, so `..` traversal and
+ * absolute paths both fail closed rather than being normalised into something plausible.
+ *
+ * Unknown argument shapes are allowed through deliberately: this gate exists to confine
+ * *paths*, and a tool whose input carries none (an MCP call, a search string) is not a
+ * filesystem access. Anything that looks like a path is checked, whatever tool asked.
+ */
+const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'filePath', 'dir', 'directory', 'cwd'];
+
+export function pathArgumentsOf(input: unknown): string[] {
+  if (typeof input !== 'object' || input === null) return [];
+  const record = input as Record<string, unknown>;
+  const found: string[] = [];
+  for (const key of PATH_KEYS) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim() !== '') found.push(value);
+  }
+  return found;
+}
+
+/**
+ * `true` when every path argument resolves inside `scratchDir`.
+ *
+ * `scratchDir` empty (a dry run, or a session with no workspace) denies any path argument
+ * outright: there is no directory to be inside of, so nothing can be.
+ */
+export function isPathInsideScratch(scratchDir: string, input: unknown): boolean {
+  const paths = pathArgumentsOf(input);
+  if (paths.length === 0) return true;
+  if (!scratchDir) return false;
+
+  const root = resolve(scratchDir);
+  return paths.every((candidate) => {
+    const abs = isAbsolute(candidate) ? resolve(candidate) : resolve(root, candidate);
+    if (abs === root) return true;
+    const rel = relative(root, abs);
+    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && !rel.split(sep).includes('..');
+  });
 }
 
 /** Refusal for a `wired_into` name nobody wired. Names the fix and who owns it. */

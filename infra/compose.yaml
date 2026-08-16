@@ -113,6 +113,22 @@ services:
     image: agnetos/runner:local
     init: true
     restart: unless-stopped
+    # The runner probes Postgres ONCE at boot and latches "observability is not up" for the
+    # process lifetime if it is not there. Without this gate it wins the race against
+    # initdb on a fresh volume, and the whole stack comes up healthy with an empty cost
+    # ticker and a 503 on /api/metrics/* — a failure that looks exactly like the honest
+    # "no runs yet" empty state (CLAUDE.md rule 9) and so goes unnoticed for hours.
+    #
+    # `required: false` is load-bearing, not a hedge. `postgres` is NOT in `--profile dev`,
+    # and a plain depends_on hard-fails there with "depends on undefined service postgres:
+    # invalid compose project" — which would re-block every front-end agent on the full
+    # stack, the exact thing the dev profile exists to prevent (M0 #3). With `required:
+    # false` the gate applies under `obs`/`full` and degrades to a warning under `dev`.
+    # Verified both ways with `docker compose --profile <p> config`.
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
     environment:
       NODE_ENV: production
       RUNNER_PORT: '8787'
@@ -126,6 +142,18 @@ services:
       LANGFUSE_HOST: http://langfuse:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      # `sinkFromEnv` defaults this to the string 'default' when unset, and `urlFor` builds
+      # /project/<this>/traces/<id> from it. Unset, every trace link pointed at a project
+      # that does not exist while the trace itself landed in `command-center` — the exact
+      # "the trace went somewhere, just not where the link points" state the one-value-two-
+      # consumers wiring below was designed to prevent. Same variable as the seeded project.
+      LANGFUSE_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-}
+      # Browser-facing origin for trace LINKS, as distinct from LANGFUSE_HOST above, which
+      # is the compose-internal origin the runner POSTs to. `langfuse:3000` only resolves
+      # inside the compose network, so a link built from it is dead in the drawer.
+      # Consumed once `runner-engineer` splits send-host from link-host (filed 20260816-2135);
+      # harmless until then.
+      LANGFUSE_PUBLIC_URL: ${LANGFUSE_PUBLIC_URL:-}
       # Business rows agents write (§3.5). Same server, separate database from Langfuse's.
       APP_DATABASE_URL: postgresql://${POSTGRES_USER:-agnetos}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${APP_DB:-agnetos}
       HAPPY_INTERNAL_URL: http://happy:3005
@@ -227,6 +255,31 @@ services:
       TELEMETRY_ENABLED: 'false'
       LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'false'
       NEXT_PUBLIC_SIGN_UP_DISABLED: ${LANGFUSE_SIGNUP_DISABLED:-false}
+      # ---------------------------------------------------------------------
+      # Headless bootstrap (requested by `runner-engineer`, 20260816-2121).
+      # ---------------------------------------------------------------------
+      # Without this the org/project/API-key triple only exists because somebody once
+      # clicked through the UI — undocumented, unreproducible, and gone the moment the
+      # volume is recreated. Declaring it here is the Part V portability rule applied to
+      # observability: the VPS gets the same project from the same `.env`.
+      #
+      # NOTE THE THIRD AND FOURTH LINES. They read the SAME two variables the runner
+      # authenticates with, not a second pair. One value, two consumers — so the stack
+      # cannot reach the state where a trace was written somewhere the link does not point.
+      #
+      # SEEDING IS FIRST-RUN ONLY. Langfuse applies these when the org/project/user do not
+      # already exist; on a database that already has them, changing these values here does
+      # nothing and the change is silent. If the keys ever need to be rotated, that is a
+      # deliberate act in the Langfuse UI or a volume reset — not an edit to this file.
+      LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-}
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-}
+      LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-}
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
     ports:
       - '${DEV_BIND_ADDR:-127.0.0.1}:${LANGFUSE_HOST_PORT:-3001}:3000'
     healthcheck:
@@ -238,43 +291,99 @@ services:
     networks: [cc]
 
   # =========================================================================
-  # happy — E2E session relay (§3.1)
+  # happy — E2E session relay (§3.1) — DELIBERATELY ABSENT. Read before restoring.
   # =========================================================================
-  happy:
-    <<: [*env, *logging]
-    profiles: [full]
-    # Image is env-overridable because Happy-vs-Omnara is an open M4 decision owned by
-    # `sessions-relay-engineer`. Swapping it must not require editing this file.
-    image: ${HAPPY_IMAGE:-ghcr.io/slopus/happy-server:latest}
-    init: true
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PORT: '3005'
-      HOSTNAME: 0.0.0.0
-      DATABASE_URL: postgresql://${POSTGRES_USER:-agnetos}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${HAPPY_DB:-happy}
-      # ADR-005: "Compose gains one service with a Postgres database and a master secret."
-      # This secret signs the relay's own tokens. It is NOT a decryption key.
-      HANDY_MASTER_SECRET: ${HAPPY_MASTER_SECRET:-}
-      # §3.1 / ADR-005 constraint 1: the relay stores ciphertext and CANNOT decrypt it. The
-      # user's key is a non-extractable CryptoKey in the browser. If a future env var here
-      # would let the server read a transcript, the answer is no — that is the threat
-      # model, not a setting.
-    volumes:
-      - happy_data:/data
-    ports:
-      - '${DEV_BIND_ADDR:-127.0.0.1}:${HAPPY_HOST_PORT:-3005}:3005'
-    healthcheck:
-      # ADR-005 accepted. sessions-relay-engineer named GET /health (unauthenticated;
-      # 503 if Postgres is down). Do not use metrics port 9090.
-      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3005/health || exit 1']
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
-    networks: [cc]
+  # THERE IS NO UPSTREAM IMAGE. This service used to read
+  #     image: ${HAPPY_IMAGE:-ghcr.io/slopus/happy-server:latest}
+  # which named a container that has never existed. `sessions-relay-engineer` verified it on
+  # 2026-08-16 by anonymous pull-token request, with ghcr.io/langfuse/langfuse as a positive
+  # control to prove the method (message 20260816-2105):
+  #
+  #     ghcr.io/slopus/happy-server   -> token DENIED      docker.io/slopus/happy-server -> 404
+  #     ghcr.io/slopus/happy          -> token DENIED      docker.io/slopus/happy        -> 404
+  #     ghcr.io/langfuse/langfuse     -> manifest HTTP 200 (control)
+  #
+  # Also verified via the GitHub API: `slopus/happy-server`, the repo Part V names, was
+  # ARCHIVED 2026-02-14 and carries no LICENSE file. The code moved into the `slopus/happy`
+  # monorepo (MIT, pushed 2026-08-10). No server image is published for either.
+  #
+  # WHY COMMENTED OUT RATHER THAN LEFT WITH A FAILING IMAGE REFERENCE. Part V's rule is "if
+  # it isn't in compose, it doesn't exist" — and this genuinely does not exist, so the file
+  # should say so. A definition naming an unpullable image is a lie in a config file: it
+  # reads as "we have a relay, it's just not started".
+  #
+  # WHY NOT `${HAPPY_IMAGE:?set me}`, which would fail loudly instead. Because
+  # `infra/check-bind.mjs` — the §3.6 check that stands between "no auth by design" and "no
+  # auth" — lints every port spec via `docker compose --profile '*' config --format json`.
+  # An unresolvable interpolation makes that command fail, and the security checker would
+  # quietly stop covering ports. Never trade the bind check for an error message.
+  #
+  # CONSEQUENCES, all of them intended:
+  #   - `--profile full` now starts exactly what `--profile obs` does. There is nothing more.
+  #   - Caddy's `handle_path /relay/*` still resolves to nothing and returns 502. That is
+  #     correct and must NOT be hidden — an honest 502 beats a plausible fake session list
+  #     (Part VII.3). `sessions-relay-engineer` asked for it to stay.
+  #   - `web`'s HAPPY_RELAY_URL and `runner`'s HAPPY_INTERNAL_URL still point at `happy:3005`,
+  #     which does not resolve. Same honest failure, one hop earlier.
+  #   - The `happy_data` volume and the `happy` database stay declared. Both are empty and
+  #     free; recreating the Postgres volume just to add a database later is not.
+  #
+  # TO RESTORE IT you need an image first. Per ADR-005 the supported path is the npm package
+  # `happy-server-self-host` (MIT, 1.1.11) — a small `build:` on a Node base, not an `image:`
+  # pull. Two things to settle at first boot, both currently unconfirmed:
+  #
+  #   1. FOOTPRINT. packages/happy-server-self-host/README.md claims embedded PGlite —
+  #      "no Postgres, no Redis, no S3" — which would make `depends_on: postgres`, the
+  #      DATABASE_URL below and the HAPPY_DB database all droppable. docs/deployment.md
+  #      contradicts it and lists DATABASE_URL/REDIS_URL/S3_* as required. Reading: the
+  #      deployment doc describes upstream's hosted production and the self-host wrapper
+  #      substitutes PGlite. Nobody has booted it here. Let the first boot decide; the
+  #      Postgres wiring below is kept because it is the safe side of an unknown.
+  #   2. Whether the package containerises at all. Its README describes a global npm install.
+  #
+  # `HANDY_MASTER_SECRET` is spelled correctly (upstream's spelling, not a typo for HAPPY_).
+  # Verified against docs/user-identity.md and docs/encryption.md: it signs JWTs and derives
+  # a KeyTree that encrypts third-party service tokens at rest. It is NOT a transcript key.
+  #
+  # THESE MUST STAY UNSET (each is an egress or content-to-server switch; setting any is a
+  # data-egress decision needing `rtl-arabic-pdpl-specialist` sign-off, Part VII.4 — and none
+  # is required to boot): DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING, ELEVENLABS_API_KEY,
+  # REVENUECAT_API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_APP_ID,
+  # GITHUB_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET.
+  #
+  # happy:
+  #   <<: [*env, *logging]
+  #   profiles: [full]
+  #   build:
+  #     context: ..
+  #     dockerfile: infra/happy.Dockerfile     # does not exist yet — write it first
+  #   init: true
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     PORT: '3005'
+  #     HOSTNAME: 0.0.0.0
+  #     DATABASE_URL: postgresql://${POSTGRES_USER:-agnetos}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${HAPPY_DB:-happy}
+  #     HANDY_MASTER_SECRET: ${HAPPY_MASTER_SECRET:-}
+  #     # §3.1 / ADR-005 constraint 1: the relay stores ciphertext and CANNOT decrypt it. The
+  #     # user's key is a non-extractable CryptoKey in the browser. If a future env var here
+  #     # would let the server read a transcript, the answer is no — that is the threat
+  #     # model, not a setting.
+  #   volumes:
+  #     - happy_data:/data
+  #   ports:
+  #     - '${DEV_BIND_ADDR:-127.0.0.1}:${HAPPY_HOST_PORT:-3005}:3005'
+  #   healthcheck:
+  #     # ADR-005. sessions-relay-engineer named GET /health (unauthenticated; 503 if the
+  #     # store is down). Do not use metrics port 9090.
+  #     test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3005/health || exit 1']
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 60s
+  #   networks: [cc]
 
   # =========================================================================
   # ofelia — cron (Part V, §3.2)
@@ -282,7 +391,9 @@ services:
   ofelia:
     <<: *logging
     profiles: [obs, full]
-    image: ${OFELIA_IMAGE:-mcuadros/ofelia:v0.3.16}
+    # Tags on this repo have NO `v` prefix — `v0.3.16` never existed and made the whole
+    # `obs` profile unpullable (compose aborts the other pulls when one reference fails).
+    image: ${OFELIA_IMAGE:-mcuadros/ofelia:0.3.22}
     restart: unless-stopped
     depends_on:
       runner:

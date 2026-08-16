@@ -41,7 +41,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SCAN_DIR = join(ROOT, 'apps', 'web', 'src');
 const I18N_DIR = join(SCAN_DIR, 'i18n');
 
-const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', '__snapshots__']);
+const SKIP_DIRS = new Set(['node_modules', '.next', '.next-build', 'dist', 'build', '__snapshots__']);
 const CODE_EXT = /\.(tsx|ts|jsx|js|mjs)$/;
 const CSS_EXT = /\.css$/;
 

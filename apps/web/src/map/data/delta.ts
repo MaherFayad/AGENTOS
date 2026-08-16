@@ -38,9 +38,24 @@ export function applyGraphDelta(payload: GraphPayload, delta: GraphDelta): Graph
   };
 }
 
-/** Overlay §3.3 completeness from a `hello` frame without touching positions. */
+/**
+ * Overlay §3.3 completeness from a `hello` frame without touching positions.
+ *
+ * The frame carries the fraction only, so the count is re-derived from it rather than kept
+ * from the stored payload — a stale `9 of 20` sitting next to a fresh `0.15` is exactly the
+ * two-numbers-one-truth failure this field was added to close. Without a denominator there
+ * is nothing honest to derive, and the count goes to `null`.
+ */
 export function applyBrainCompleteness(payload: GraphPayload, value: number): GraphPayload {
   const c = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
   if (c === payload.core.brainCompleteness) return payload;
-  return { ...payload, core: { ...payload.core, brainCompleteness: c } };
+  const total = payload.core.brainTotal ?? null;
+  return {
+    ...payload,
+    core: {
+      ...payload.core,
+      brainCompleteness: c,
+      brainAnswered: total !== null && total > 0 ? Math.round(c * total) : null,
+    },
+  };
 }

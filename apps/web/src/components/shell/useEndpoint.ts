@@ -8,6 +8,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * Standing rule 9: numbers must be real. So there are exactly three states and none of
  * them is "0 while we figure it out". `unavailable` carries a sentence written for a
  * person looking at a phone on a bad connection — it is rendered verbatim.
+ *
+ * **Four reasons produce `unavailable`, and this hook keeps them apart.** It used to
+ * collapse two of them: a `null` from `parse` was reported with `notBuiltMessage`, so
+ * "this endpoint does not exist yet" and "it answered with something I do not understand"
+ * said the same sentence. That is how the cost ticker came to explain a database outage as
+ * *"this fills in the first time an agent run is traced"* — a fluent, confident, false
+ * story (`fidelity-qa-reviewer` FAIL, 2026-08-16T22:30). A wrong number invites doubt; a
+ * wrong explanation closes the question, which is worse.
+ *
+ * | cause | message |
+ * |---|---|
+ * | 404 / 501 — the route is not built | `notBuiltMessage` |
+ * | 2xx, but `parse` refused the body | `malformedMessage` |
+ * | any other non-2xx | `offlineMessage` |
+ * | the fetch threw — DNS, off tailnet | `offlineMessage` |
+ *
+ * `malformedMessage` is **required**, not optional-with-a-fallback: a default would have
+ * fallen back to `notBuiltMessage` and quietly reinstated exactly the conflation this
+ * split exists to remove. The type system now makes every consumer answer the question.
+ *
+ * A fifth case — *the endpoint answered correctly and the honest answer is "unknown"* —
+ * is deliberately **not** here. It is not a failure of the read, so it belongs in `T`:
+ * see `CostTicker`'s `CostReading`, where a ledger outage is a value with its own
+ * sentence rather than an absence.
  */
 export type Resource<T> =
   | { state: 'loading' }
@@ -20,10 +44,19 @@ export interface EndpointOptions<T> {
   /**
    * Narrow the JSON to `T`, or return `null` to mean "the shape isn't what we agreed"
    * — which is reported as unavailable, never rendered as a number.
+   *
+   * `null` means **only** that. If the endpoint answered a legitimate "I do not know",
+   * model it in `T`; returning `null` for it puts a real answer into a failure bucket.
    */
   parse: (json: unknown) => T | null;
   /** Shown when the endpoint 404s — i.e. it exists in the contract but isn't built yet. */
   notBuiltMessage: string;
+  /**
+   * Shown when the endpoint answered but `parse` refused the body. This is a bug in one
+   * of the two of us — a contract drift — and the sentence should say so rather than
+   * describe the world. Never `notBuiltMessage`: a route that answers exists.
+   */
+  malformedMessage: string;
   /** Shown when the fetch itself fails — off tailnet, runner down, DNS. */
   offlineMessage: string;
 }
@@ -35,7 +68,7 @@ export interface EndpointOptions<T> {
  * dependency for this would be 40kB to save 40 lines.
  */
 export function useEndpoint<T>(url: string, options: EndpointOptions<T>): Resource<T> {
-  const { intervalMs, parse, notBuiltMessage, offlineMessage } = options;
+  const { intervalMs } = options;
   const [resource, setResource] = useState<Resource<T>>({ state: 'loading' });
 
   // Keep the latest callbacks without making them poll triggers.
@@ -57,7 +90,8 @@ export function useEndpoint<T>(url: string, options: EndpointOptions<T>): Resour
         const parsed = optionsRef.current.parse(await response.json());
         setResource(
           parsed === null
-            ? { state: 'unavailable', message: optionsRef.current.notBuiltMessage }
+            ? // The route answered. It is not "not built"; it is not what we agreed.
+              { state: 'unavailable', message: optionsRef.current.malformedMessage }
             : { state: 'ready', data: parsed },
         );
       } catch (error) {

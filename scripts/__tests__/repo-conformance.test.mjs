@@ -35,7 +35,7 @@ async function walk(dir, out = []) {
   }
   for (const e of entries) {
     const rel = join(dir, e.name);
-    if (/^(node_modules|\.next|\.git|dist|build|coverage|\.volumes)$/.test(e.name)) continue;
+    if (/^(node_modules|\.next|\.next-build|\.git|dist|build|coverage|\.volumes)$/.test(e.name)) continue;
     if (e.isDirectory()) await walk(rel, out);
     else out.push(rel.replace(/\\/g, '/'));
   }
@@ -65,7 +65,14 @@ test('every ADR carries a status and names the agent accountable for it', async 
   // done"), not the ADR one — the ADR template closes with Consequences and
   // Contract edits. It was asserting a section the template never produced, so
   // the five template-conformant ADRs failed for following the template.
-  const files = (await walk('comms/decisions')).filter((f) => f.endsWith('.md'));
+  //
+  // `README.md` is excluded for the same reason: it is the directory's own
+  // documentation — the numbering rule and the AGENTOS-V2-PLAN concordance
+  // (ADR-013, amendment 2026-08-17) — not a decision, and it has no Status
+  // because it decides nothing. The invariant is about ADRs; assert it on ADRs.
+  const files = (await walk('comms/decisions'))
+    .filter((f) => f.endsWith('.md'))
+    .filter((f) => !/(^|[\\/])readme\.md$/i.test(f));
   assert.ok(files.length >= 3, 'the three blocking M0 decisions must be filed');
   for (const f of files) {
     const text = await readFile(join(ROOT, f), 'utf8');

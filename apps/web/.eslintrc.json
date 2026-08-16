@@ -12,6 +12,7 @@
   "ignorePatterns": [
     "node_modules/",
     ".next/",
+    ".next-build/",
     "public/graph.json",
     "**/*.test.ts",
     "**/*.test.tsx",

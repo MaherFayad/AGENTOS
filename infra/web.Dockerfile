@@ -51,8 +51,12 @@ ENV NODE_ENV=production \
 RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs \
  && mkdir -p /data && chown nextjs:nodejs /data
 
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+# `.next-build`, not `.next`: apps/web/next.config.mjs gives `next build` its own distDir so
+# a build can never clobber a running `next dev`. Change it there and here together — the
+# name is baked into the standalone output's own layout, so a mismatch fails at COPY time
+# (loudly) rather than at runtime.
+COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next-build/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next-build/static ./apps/web/.next-build/static
 COPY --from=build --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
 USER nextjs

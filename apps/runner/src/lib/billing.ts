@@ -34,6 +34,18 @@ export class SpendLedger {
   private readonly file: string;
   private months: Record<string, number> = {};
   private loaded = false;
+  /**
+   * Has a write to `spend.json` actually succeeded?
+   *
+   * `null` until one has been attempted — which is honest and is the state on a fresh
+   * runner: **durability is untested until the first run finishes.** It is deliberately
+   * not probed by writing a zero at boot, because a spend file this process invented is a
+   * fabricated number inside a billing control.
+   */
+  private persisted: boolean | null = null;
+  private warnedAboutPersist = false;
+  /** Set by the runner so a failed persist reaches the log once, not zero times. */
+  onPersistFailure?: (message: string) => void;
 
   constructor(config: RunnerConfig) {
     this.config = config;
@@ -59,9 +71,27 @@ export class SpendLedger {
     try {
       await mkdir(dirname(this.file), { recursive: true });
       await writeFile(this.file, JSON.stringify({ months: this.months }, null, 2), 'utf8');
-    } catch {
+      this.persisted = true;
+    } catch (error) {
       // Losing the file must not fail a run that already succeeded. The in-memory figure
       // still guards the rest of this process's life, and `status()` keeps reporting it.
+      //
+      // But it must not be *silent*, which it was: when `/workspaces` was root-owned and
+      // the runner ran as uid 1001, every write failed, `spend.json` never existed, and
+      // `spentUsd` came back `0` after every restart. A cap that resets on restart is not
+      // a cap — it is a speed bump a crash loop drives straight through (Part V) — and
+      // nothing anywhere said so. `0` meant "nothing spent" and "we cannot remember what
+      // was spent" with the same digit.
+      this.persisted = false;
+      if (!this.warnedAboutPersist) {
+        this.warnedAboutPersist = true;
+        this.onPersistFailure?.(
+          `The runner cannot write its spend ledger to ${this.file} ` +
+            `(${error instanceof Error ? error.message : String(error)}). ` +
+            'Spending is still counted for this process, but the monthly cap will reset ' +
+            'when the runner restarts — so it is not a hard cap until this is fixed.',
+        );
+      }
     }
   }
 
@@ -84,6 +114,10 @@ export class SpendLedger {
       remainingUsd: capUsd === null ? null : Math.max(0, Math.round((capUsd - spentUsd) * 10000) / 10000),
       blocked: capUsd !== null && spentUsd >= capUsd,
       period,
+      // `false` ⇒ `spentUsd` is this process's memory only and the cap is soft.
+      // `null` ⇒ no run has finished yet, so durability has not been tested. Both are
+      // materially different from `true`, and none of them is visible from `spentUsd`.
+      persisted: this.persisted,
     };
   }
 
@@ -96,7 +130,11 @@ export class SpendLedger {
   async assertCanStart(): Promise<void> {
     if (!this.config.configured) {
       throw new ApiError('runner_not_configured', 'The runner has no API key, so it cannot start a run.', {
-        hint: 'Set ANTHROPIC_API_KEY in infra/.env to the runner\'s own API-key workspace — not your personal Claude subscription, which powers interactive sessions instead — then restart the runner.',
+        hint:
+          'Set RUNNER_ANTHROPIC_API_KEY in the repo-root .env to a key from the runner\'s own capped ' +
+          'Anthropic workspace — not your personal Claude subscription, which powers interactive ' +
+          'sessions instead — then run: docker compose -f infra/compose.yaml --env-file .env ' +
+          '--profile obs up -d runner. A REPLACE-ME placeholder counts as no key.',
         retryable: false,
       });
     }

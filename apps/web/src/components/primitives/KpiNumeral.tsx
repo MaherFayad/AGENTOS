@@ -16,6 +16,13 @@ import { DURATION, useReducedMotion } from './motion';
  * Reduced motion renders the final value on the first frame. The end state is
  * always the truth; only the travel is optional (§1.6).
  *
+ * THE INVARIANT, and it is a BOARD-rule-9 invariant, not a cosmetic one: the
+ * printed value never leaves [min(from, to), max(from, to)]. A KPI tile is the
+ * most credible surface in the product; a tile that paints -1617290 for one
+ * frame has fabricated a number (Part VII.3). `KpiNumeral.test.tsx` pins this
+ * against a deliberately skewed clock — do not weaken that test to a
+ * happy-path "it reaches 22".
+ *
  * Accessibility: the animating digits are aria-hidden and the element carries
  * the final formatted value as its label, so a screen reader announces "22",
  * once, rather than counting out loud.
@@ -51,8 +58,18 @@ const TONE: Record<KpiTone, string> = {
   down: 'text-ink-coral',
 };
 
-/** Decelerating curve — the count should land, not stop. */
+/** Decelerating curve — the count should land, not stop. Domain is [0,1] only. */
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+
+/**
+ * The animation parameter is clamped at BOTH ends, and that is load-bearing.
+ * `easeOut` is a cubic: feed it t = -40 and it returns -73500, and the tile
+ * paints a large negative number that looks like a real reading. Clamping the
+ * top only (`Math.min(1, …)`) leaves the bottom open, which is exactly the
+ * defect fidelity-qa-reviewer measured on 2026-08-16 — four isolated runs
+ * painted -1617290, -112, -79 and 15 where the value was 22.
+ */
+const clamp01 = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 
 export function KpiNumeral({
   value,
@@ -77,12 +94,19 @@ export function KpiNumeral({
       setShown(value);
       return;
     }
-    const start = performance.now();
     const a = from.current;
     const b = value;
     let raf = 0;
+    // Seeded by the FIRST frame, from the rAF clock — never performance.now().
+    // The two are different clocks with different time origins (jsdom skews
+    // them by ~845ms; a browser hands rAF the frame-start time, which precedes
+    // a performance.now() taken inside that same frame). Reading `start` and
+    // `now` from one clock means `now - start` cannot be negative at all;
+    // clamp01 below is the belt to that pair of braces.
+    let start: number | null = null;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / DURATION.countUp);
+      if (start === null) start = now;
+      const t = clamp01((now - start) / DURATION.countUp);
       setShown(a + (b - a) * easeOut(t));
       if (t < 1) raf = requestAnimationFrame(tick);
       else from.current = b;

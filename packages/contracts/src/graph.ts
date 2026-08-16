@@ -98,13 +98,23 @@ export interface GraphDepartment {
 
 /**
  * The Second Brain core (§3.3). `brainCompleteness` ∈ [0,1] scales the galaxy's particle
- * count and brightness — "a delightful, honest progress indicator". At 0 it renders as a
- * bare core dot with no swirl. It is never faked to look populated.
+ * count and brightness — "a delightful, honest progress indicator". At 0 it renders as an
+ * empty disc: no swirl, a dashed outline where the swirl belongs, and the map says so in
+ * words. It is never faked to look populated.
+ *
+ * `brainAnswered` / `brainTotal` carry the count the fraction came from, measured from the
+ * `<!-- UNANSWERED: Qn -->` markers in `company/COMPANY.md` by
+ * `scripts/lib/brain-completeness.mjs`. They exist so the number is **auditable** — a bare
+ * `0.45` once hid a nine-heading count of a zero-answer file, and a payload that also says
+ * `9 of 20` can be checked against the file by anyone. `null` means "not measured", which
+ * is a different claim from zero and is rendered differently.
  */
 export interface GraphCore {
   x: number;
   y: number;
   brainCompleteness: number;
+  brainAnswered?: number | null;
+  brainTotal?: number | null;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

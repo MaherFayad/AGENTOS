@@ -9,6 +9,7 @@ phase: 3-generate
 status: draft
 breaks_into: [angle-extractor, channel-adapter, hook-writer]
 builds_on: [brand-voice-guard]
+wired_into: [workspace]
 replaces: "Pasting the first paragraph of the blog post into LinkedIn with a link and calling it distribution."
 ladder:
   human-led: "Whoever wrote the piece posts it wherever they remember to."

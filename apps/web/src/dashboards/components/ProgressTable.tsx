@@ -12,7 +12,7 @@ export function ProgressTable({ widget }: { widget: ProgressTableWidget }): Reac
       <QueryGate query={widget.query} emptyState={widget.emptyState} height={160}>
         {(data) => {
           const rows = toProgressRows(data);
-          if (rows.length === 0) return <p className="text-meta text-ink-3">No rows.</p>;
+          if (rows.length === 0) return <p className="text-meta text-ink-2">No rows.</p>;
           return (
             <ul className="flex flex-col gap-3">
               {rows.map((row) => (
@@ -32,7 +32,7 @@ export function ProgressTable({ widget }: { widget: ProgressTableWidget }): Reac
                       style={{ width: `${progressWidth(row.progress)}%` }}
                     />
                   </div>
-                  {row.sub ? <p className="mt-1 text-meta text-ink-3">{row.sub}</p> : null}
+                  {row.sub ? <p className="mt-1 text-meta text-ink-2">{row.sub}</p> : null}
                 </li>
               ))}
             </ul>

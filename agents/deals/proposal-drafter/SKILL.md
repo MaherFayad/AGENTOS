@@ -9,7 +9,7 @@ phase: 3-generate
 status: draft
 breaks_into: [scope-assembler, pricing-applier, terms-checker]
 builds_on: [account-enrichment]
-wired_into: [hubspot]
+wired_into: [hubspot, workspace]
 replaces: "Copying last quarter's proposal, find-and-replacing the client name, and hoping nobody notices the paragraph about a product we discontinued."
 ladder:
   human-led: "A person writes the proposal, borrowing structure from whichever old one they can find."

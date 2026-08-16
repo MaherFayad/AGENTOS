@@ -155,6 +155,11 @@ export function useGraphIndex(): Resource<GraphIndex> {
     parse: parseGraph,
     notBuiltMessage:
       "The map hasn't been built yet, so there's nothing to search. Run the graph precompute and the agents will show up here.",
+    // Distinct from the line above on purpose: a route that answers is not a route that
+    // is missing, and telling someone to run the precompute when it has already run sends
+    // them to fix the wrong thing (see useEndpoint's note).
+    malformedMessage:
+      "The map answered with a payload this build doesn't understand, so search has nothing to look through. The graph and this app are out of step — that is a bug here, not a missing map.",
     offlineMessage:
       "Can't reach the runner, so search has nothing to look through. This box may be off the tailnet.",
   });
@@ -166,6 +171,8 @@ export function usePanelIndex(): Resource<SearchItem[]> {
     intervalMs: GRAPH_INTERVAL_MS,
     parse: parsePanels,
     notBuiltMessage: 'No dashboards are defined yet. Add a panels/*.json file and it will be searchable.',
+    malformedMessage:
+      "The dashboard list came back in a shape this build doesn't understand, so none of it is searchable. That is a bug here, not an empty panels/ folder.",
     offlineMessage: "Can't reach the runner, so the dashboard list is unavailable.",
   });
 }

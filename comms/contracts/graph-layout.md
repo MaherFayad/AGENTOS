@@ -14,7 +14,10 @@ interaction warmth (drag springs), seeded from these positions.
   "version": "sha256:…",          // hash of the agents/ tree; client caches on it
   "computedAt": "2026-08-15T18:40:00Z",
   "bounds": { "x": [-1200, 1200], "y": [-900, 900] },
-  "core": { "x": 0, "y": 0, "brainCompleteness": 0.62 },   // §3.3 particle count/brightness
+  "core": { "x": 0, "y": 0,
+            "brainCompleteness": 0.15,   // §3.3 particle count/brightness
+            "brainAnswered": 3,          // the count behind the fraction — null if unmeasured
+            "brainTotal": 20 },
   "departments": [
     { "id": "sales", "label": "SALES", "angle": 0.897,      // radians, 7 even branches
       "sublabels": ["lead sourcing", "enrichment", "outreach"],
@@ -39,6 +42,39 @@ interaction warmth (drag springs), seeded from these positions.
   ]
 }
 ```
+
+## `core` — Second Brain completeness (§3.3)
+
+The galaxy's particle count and brightness scale with this number, so it is the most
+visible claim the product makes about itself. Three rules, and they are not preferences:
+
+1. **It is measured from the `<!-- UNANSWERED: Qn -->` markers in `company/COMPANY.md`**,
+   by `scripts/lib/brain-completeness.mjs` — the only implementation. Twenty markers, one
+   per interview question; `answered = 20 − markers left`. Nothing else counts: not `## `
+   headings (authored once, never move — this is what reported a 0/20 brain as 45%), not
+   prose length (the template's own instructions are prose), not `company/sources/*`
+   (easier to move than an answer, so it would inflate). The interview SKILL calls the gap
+   list "the honest completeness signal"; COMPANY.md's header forbids deleting a marker to
+   make the file look finished. The markers are therefore the contract.
+2. **`brainAnswered` / `brainTotal` travel with the fraction.** A bare `0.45` is
+   unauditable; `0.45` next to `9 of 20` can be checked against the file by anyone holding
+   the payload. `null` on either means *not measured* — a different claim from zero, and
+   rendered differently. A count without its denominator, or above it, is dropped by the
+   client parser rather than repeated in words.
+3. **Two producers, and the lower one wins.** `apps/runner` publishes
+   `company/.brain.json` `{completeness, answered, total}` and `build-graph.mjs` honours
+   it — but only when it does not claim *more* than the markers admit. On disagreement the
+   build takes the marker measurement and warns. The asymmetry is the point: a
+   disagreement between the two producers can cost brightness, never invent it (CLAUDE.md
+   rule 9).
+
+**Zero looks like this, deliberately.** No particles at all (`particleBudget(0) === 0`),
+plus two things that make the emptiness legible rather than broken: the canvas draws a
+dashed ring at the galaxy radius rotating on the same 120s clock the swirl would use — a
+failed render produces nothing, never a dotted circle — and the SVG layer states the count
+in words under the core (`svg/BrainEmptyState`), which is also what a screen reader gets.
+Both disappear at the first answered question, from which point the swirl carries the
+signal on its own.
 
 ## Layout algorithm (§2.1)
 

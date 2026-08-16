@@ -19,12 +19,37 @@ const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations
 
 export type PoolHandle = DbClient & { end(): Promise<void> };
 
-export async function connect(connectionString = process.env.DATABASE_URL): Promise<PoolHandle> {
+export interface ConnectOptions {
+  /**
+   * Called when an **idle** pooled client dies — a Postgres restart, a failover, an
+   * admin `pg_terminate_backend`.
+   *
+   * This listener is not optional decoration. `pg`'s Pool is an EventEmitter, and an
+   * EventEmitter with no `error` listener rethrows: `docker restart postgres` took the
+   * whole runner process down with `Unhandled 'error' event: terminating connection due
+   * to administrator command`, observed on the running stack. `restart: unless-stopped`
+   * then hid it, because the container came back — but a crash-restart loses the
+   * in-memory run store, every attached SSE stream and every pending approval with it.
+   * A phone watching a run just sees the stream die.
+   *
+   * `runner-engineer` passes `createLedgerConnection`'s drop handler here, which releases
+   * the pool and re-dials with backoff. Filed to `observability-engineer` as an fyi.
+   */
+  onError?: (error: unknown) => void;
+}
+
+export async function connect(
+  connectionString = process.env.DATABASE_URL,
+  options: ConnectOptions = {},
+): Promise<PoolHandle> {
   if (!connectionString) {
     throw new Error('DATABASE_URL is not set. The runner cannot record runs without it.');
   }
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString, max: 8, idleTimeoutMillis: 30_000 });
+  pool.on('error', (error) => {
+    options.onError?.(error);
+  });
   return {
     query: <R = Record<string, unknown>>(sql: string, params?: readonly unknown[]) =>
       pool.query(sql, params ? [...params] : undefined) as unknown as Promise<{ rows: R[] }>,

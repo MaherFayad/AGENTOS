@@ -18,6 +18,14 @@ import { useEndpoint } from './useEndpoint';
 
 interface StatusReading {
   tailscale: string;
+  /**
+   * The runner's own sentence for whichever tailnet state it is in. `UNKNOWN` on its own
+   * reads as "broken", and today it is not: the runner observes `100.64.0.0/10` on *its
+   * own* interfaces, and a container cannot see a tailnet that lives on the host. The
+   * hint says which case it is; a bare label cannot.
+   */
+  tailscaleHint: string;
+  /** `null` ⇒ not reported. The count is simply not drawn — never drawn as `0`. */
   queueDepth: number | null;
 }
 
@@ -29,7 +37,8 @@ function parseStatus(json: unknown): StatusReading | null {
   const tailscale = typeof record.tailscale === 'string' ? record.tailscale : null;
   if (tailscale === null) return null;
   const queueDepth = typeof record.queueDepth === 'number' && Number.isFinite(record.queueDepth) ? record.queueDepth : null;
-  return { tailscale, queueDepth };
+  const tailscaleHint = typeof record.tailscaleHint === 'string' ? record.tailscaleHint.trim() : '';
+  return { tailscale, tailscaleHint, queueDepth };
 }
 
 export function ConnectionStatus(): React.JSX.Element {
@@ -38,6 +47,8 @@ export function ConnectionStatus(): React.JSX.Element {
     parse: parseStatus,
     notBuiltMessage:
       "The status endpoint isn't up yet, so this box can't tell you whether the runner is reachable.",
+    malformedMessage:
+      "The runner answered, but not with a status this build understands, so this box can't tell you whether the tailnet is up. That is a version mismatch here, not a connection problem.",
     offlineMessage:
       "No answer from the runner. You're probably off the tailnet — reconnect Tailscale and this comes back on its own.",
   });
@@ -54,11 +65,18 @@ export function ConnectionStatus(): React.JSX.Element {
 
   const queue = status.state === 'ready' && status.data.queueDepth !== null ? status.data.queueDepth : null;
 
+  // The runner's `tailscaleHint` is preferred over our one-liner whenever it is present:
+  // it distinguishes "no Tailscale on this host" from "configured but invisible from
+  // inside the container" from "down", and those three used to render the same word.
+  const reachability =
+    status.state === 'ready'
+      ? status.data.tailscaleHint || `Tailscale is ${status.data.tailscale}.`
+      : '';
   const sentence =
     status.state === 'unavailable'
       ? status.message
       : status.state === 'ready'
-        ? `Tailscale is ${status.data.tailscale}.${queue ? ` The runner has ${status.data.queueDepth} job${status.data.queueDepth === 1 ? '' : 's'} queued.` : ''}`
+        ? `${reachability}${queue ? ` The runner has ${status.data.queueDepth} job${status.data.queueDepth === 1 ? '' : 's'} queued.` : ''}`
         : 'Checking the tailnet connection.';
 
   return (

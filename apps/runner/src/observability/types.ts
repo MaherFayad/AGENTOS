@@ -66,7 +66,8 @@ export type RunOutcome = {
 export type RunRecord = {
   runId: string;
   traceId: string;
-  traceUrl: string;
+  /** `null` when traces are not being shipped. Never a link to a trace that was not sent. */
+  traceUrl: string | null;
   agent: string;
   agentName: string | null;
   department: string;
@@ -109,8 +110,11 @@ export type ToolCallRecord = {
 export type RunTrace = {
   runId: string;
   traceId: string;
-  /** Deep link for the drawer's LAST RUNS row (§2.3). Valid immediately. */
-  traceUrl: string;
+  /**
+   * Deep link for the drawer's LAST RUNS row (§2.3). Valid immediately.
+   * `null` when traces are not being shipped — see `createNullSink`.
+   */
+  traceUrl: string | null;
   /** Open a span for one tool call. */
   tool(name: string, input?: unknown): ToolSpan;
   /** Record token usage for one model call. Call once per model turn. */
@@ -132,6 +136,11 @@ export type DbClient = {
 /** Where a redacted trace payload is shipped. Swappable so tests can capture it. */
 export type TraceSink = {
   send(payload: unknown): Promise<void>;
-  /** Deterministic URL for a trace id — computed locally, never fetched. */
-  urlFor(traceId: string): string;
+  /**
+   * Deterministic URL for a trace id — computed locally, never fetched.
+   *
+   * `null` when there is no trace to link to (the null sink, i.e. Langfuse unconfigured).
+   * A plausible URL to a project that does not exist is worse than no link at all.
+   */
+  urlFor(traceId: string): string | null;
 };

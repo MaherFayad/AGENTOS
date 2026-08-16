@@ -22,6 +22,7 @@ import {
   buildStarfield,
   particleBrightness,
   shimmer,
+  GALAXY_RADIUS,
   PARTICLE_INK_VARS,
   type Particle,
   type Star,
@@ -172,10 +173,40 @@ export function GalaxyCanvas({ core, transform, className }: GalaxyCanvasProps):
       ctx.globalAlpha = 1;
     };
 
+    /**
+     * §3.3 at zero — the empty disc.
+     *
+     * `particleBudget(0)` is 0, so a 0/20 brain has no swirl to draw. A core dot alone on a
+     * starfield is indistinguishable from a canvas that failed, and "is this broken?" is a
+     * worse first impression than "nothing here yet". So the disc the swirl would occupy is
+     * outlined instead: a dashed ring at the galaxy radius, rotating on the same 120s clock
+     * as the swirl would. Dashes are unmistakably drawn — a failed render produces nothing,
+     * never a dotted circle — and the rotation proves the loop is running. The map states
+     * the count in words alongside it (`chrome/BrainEmptyState`); this is the visual half.
+     */
+    const drawEmptyDisc = (cx: number, cy: number, k: number, elapsed: number): void => {
+      const radius = GALAXY_RADIUS * k;
+      if (radius < 10) return; // zoomed out past legibility — a dotted speck reads as dirt
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(galaxyAngle(elapsed, reduced));
+      ctx.setLineDash([2, 10]); // screen-space, so the dashes stay hairlines at any zoom
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = palette.ivory;
+      ctx.globalAlpha = 0.12;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    };
+
     /** §2.1 — 600 particles, additive blending, idle rotation, opacity shimmer. */
     const drawGalaxy = (cx: number, cy: number, k: number, elapsed: number): void => {
       const seconds = elapsed / 1000;
       const base = galaxyAngle(elapsed, reduced);
+
+      if (particles.length === 0) drawEmptyDisc(cx, cy, k, elapsed);
 
       ctx.globalCompositeOperation = 'lighter'; // §2.1 additive blending
       for (const p of particles) {

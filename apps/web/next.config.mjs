@@ -29,6 +29,40 @@ const RUNNER_PROXY_ORIGIN =
     : (process.env.RUNNER_ORIGIN ?? process.env.RUNNER_INTERNAL_URL ?? 'http://127.0.0.1:8787');
 
 /**
+ * Next's phase string for `next dev`. Hardcoded rather than imported from `next/constants`
+ * because that module is CJS and this config is ESM — the named export resolves today and
+ * would be a confusing boot failure the day it doesn't, for a value that is part of Next's
+ * public API and has not changed since Next 9.
+ */
+const PHASE_DEVELOPMENT_SERVER = 'phase-development-server';
+
+/**
+ * The build's output directory — deliberately NOT the dev server's.
+ *
+ * `next build` and `next dev` used to share `apps/web/.next`. A build run while a dev
+ * server was up replaced that server's `routes-manifest.json` and chunk files mid-flight,
+ * and the dev server then answered *every* route with a 500 until someone restarted it.
+ * It cost three agents an afternoon each because the symptom (unstyled HTML, "No tailnet"
+ * fallback, blank dashboard) looks exactly like a code bug, not a filesystem race. See
+ * `comms/inbox/_all/20260816-1355-dashboards-engineer-next-build-kills-next-dev.md` and
+ * `…-1556-shell-navigation-engineer-dev-server-is-next-dev.md`.
+ *
+ * Keyed off the *phase*, not `NODE_ENV`: `next build` with `NODE_ENV=development` is a
+ * thing people do, and under a NODE_ENV rule that build would write `.next` again and
+ * reintroduce exactly the bug this removes. The phase is what the CLI actually ran.
+ *
+ *   next dev            → `.next`        (only `next dev` ever writes here)
+ *   next build / start  → `.next-build`
+ *
+ * `next start` sees `phase-production-server` and therefore reads `.next-build`, which is
+ * what `next build` just wrote — the pair stays consistent without a flag.
+ *
+ * `NEXT_DIST_DIR` overrides the build dir, so a second concurrent build (CI matrix, a
+ * `--distDir`-style one-off verification build) can have its own directory too.
+ */
+const BUILD_DIST_DIR = process.env.NEXT_DIST_DIR ?? '.next-build';
+
+/**
  * Next.js 15 config — Part V.
  *
  * `output: 'standalone'` is what makes infra/web.Dockerfile small and, more importantly,
@@ -124,4 +158,16 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Config as a function so Next hands us the phase it is running in — the only reliable
+ * answer to "am I the dev server or a build?" at config time.
+ *
+ * @param {string} phase one of Next's `PHASE_*` constants
+ * @returns {import('next').NextConfig}
+ */
+export default function config(phase) {
+  return {
+    ...nextConfig,
+    distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next' : BUILD_DIST_DIR,
+  };
+}

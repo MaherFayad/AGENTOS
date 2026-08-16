@@ -8,7 +8,7 @@ tier: autonomous
 phase: 4-orchestrate
 status: draft
 breaks_into: [frontmatter-gap-finder, stale-agent-finder, error-rate-ranker, connector-checker, orphan-skill-finder]
-wired_into: [langfuse, git]
+wired_into: [langfuse, git, workspace]
 replaces: "Discovering during a demo that four agents on the map have never run, one has been failing silently since March, and nobody can say which."
 ladder:
   human-led: "Someone opens the repo every few weeks and skims for things that look wrong."

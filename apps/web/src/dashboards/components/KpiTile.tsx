@@ -20,7 +20,6 @@ export function KpiTile({ kpi }: { kpi: Kpi }): React.JSX.Element {
   // total. It rides on the caption line rather than a new one, so a tile that acquires a
   // caveat does not change height and the KPI row does not reflow (§2.5 rule 2).
   const caveat = value.status === 'ok' && !value.loading ? value.message : undefined;
-  const caption = [kpi.caption, caveat].filter(Boolean).join(' · ') || undefined;
 
   return (
     <Card radius="sm" padded className="min-w-0">
@@ -36,7 +35,31 @@ export function KpiTile({ kpi }: { kpi: Kpi }): React.JSX.Element {
           {kpi.delta && !value.loading && delta.status === 'ok' ? (
             <Delta kpi={kpi} change={toScalar(delta.data)} />
           ) : null}
-          {caption ? <p className="text-label text-ink-3">{caption}</p> : null}
+          {kpi.caption || caveat ? (
+            /* Two weights, one line, no extra box — the §2.5 rule-2 no-reflow invariant
+               above depends on this staying a single <p>.
+
+               The caption is the panel's own descriptive label ("vs previous 7d") and sits
+               at the tile's meta weight, --ink-2, matching the label above it.
+
+               The caveat is not that. It is the sentence that says the --ivory numeral is a
+               FLOOR, NOT A TOTAL, and tokens contract §9.4a puts a caveat exactly one rung
+               below the value it qualifies. The value here is --ivory (KpiNumeral tone
+               `default`), so one rung is --ivory-2 — the same shape design-system-guardian
+               landed in the drawer as .runMeta --ivory / .runMetaAbsent --ivory-2. At
+               --ink-2 the caveat would be two rungs down, which §9.4a calls out by name.
+
+               §9.4's "an empty state at secondary weight out-shouts the tiles with real
+               values" argument is about ABSENCE in a grid of peers — that case is
+               `.emptyLine` below, and it stays --ink-2. A caveat rides a figure that is
+               present, so it cannot out-shout it: the numeral is still a rung brighter and
+               three times the size. The tile is not interactive, so §9.5 does not apply. */
+            <p className="text-label text-ink-2">
+              {kpi.caption}
+              {kpi.caption && caveat ? ' · ' : null}
+              {caveat ? <span className="text-ivory-2">{caveat}</span> : null}
+            </p>
+          ) : null}
         </div>
         {kpi.sparkline && !spark.loading && spark.status === 'ok' ? (
           <Spark values={toSeries(spark.data).map((p) => p.v)} tone={kpi.sparkline.tone ?? 'teal'} />

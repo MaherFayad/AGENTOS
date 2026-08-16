@@ -23,6 +23,12 @@ Runner behavior (§3.2):
 1. Load `SKILL.md` + `company/COMPANY.md` → system prompt. **Every** invocation injects
    COMPANY.md (§3.3) — that is what makes outputs sound like this company.
 2. Tool allowlist = `wired_into` frontmatter **only**. Not a superset. Reject unknown.
+   **Two gates, both required:** the tool's *name* must be in `wired_into`, **and** any
+   path in its *arguments* must resolve inside the run's scratch workspace. The second is
+   not optional decoration — `workspace` grants `Read/Write/Edit/Glob/Grep`, those tools
+   accept absolute paths, and cwd only decides where a *relative* path resolves. While the
+   confinement was a code comment rather than a check, a run could and did overwrite the
+   repo-root `.env`. A tool call carrying no path is not a filesystem access and passes.
 3. cwd = fresh per-run scratch workspace, destroyed after artifact extraction.
 4. Spawn headless `@anthropic-ai/claude-agent-sdk` session.
 5. Stream SSE to the drawer console; write trace + cost to Langfuse.
@@ -89,7 +95,7 @@ cleanly and records the note; the run ends `done{status:"denied", denialNote}`.
 | `GET /api/runs?agent=&limit=5` | `{runs:[{runId, agent, status, startedAt, durationMs, costUsd, traceUrl}]}` — **this process only**, see below |
 | `GET /api/cost/today` | `{usd}` — **`observability-engineer`'s route**, not the runner's |
 | `GET /api/panels` / `GET /api/panels/:id` | panel definitions (`contracts/panel-schema.md`) |
-| `GET /api/status` | `{tailscale, queueDepth, activeRuns, pendingApprovals, runnerConfigured, budget, brain, graphBuilt, startedAt}` |
+| `GET /api/status` | `{tailscale, queueDepth, activeRuns, pendingApprovals, runnerConfigured, budget, brain, ledger, graphBuilt, startedAt}` |
 
 `:slug` is `department/agent-slug` and contains a slash — the route is a wildcard match
 on everything after `/api/agents/`. **Callers must not `encodeURIComponent` the whole
@@ -138,12 +144,76 @@ The one field the runner overlays onto the stored graph payload is
 `core.brainCompleteness` (§3.3), which it computes from `company/`. Positions are served
 exactly as stored.
 
+### Ledger reachability — `unknown` is not `zero`
+
+Every `/api/metrics/*` and `/api/cost/today` response, success or failure, carries a
+sibling `ledger` object. `GET /api/status` carries the same object.
+
+```jsonc
+{ "state": "connected" | "unreachable" | "absent",
+  "since": "2026-08-16T18:16:23.791Z",   // when this state began
+  "attempts": 4,                          // consecutive failed reconnects; 0 when connected
+  "lastError": "getaddrinfo ENOTFOUND postgres",   // message only — never a DSN or password
+  "nextRetryAt": "2026-08-16T18:17:17.739Z",
+  "hint": "…" }                           // written for a human on a phone; always present
+```
+
+**The rule: a count the runner cannot read is `null`, never `0`.** When the ledger is not
+`connected`, `GET /api/cost/today` still answers **200** — the ticker is chrome and must not
+error out — but with `{usd:null, runs:null, unpricedRuns:null}`. Every other metrics route
+answers **503 `metrics_unavailable`**.
+
+This exists because these two used to be the same bytes:
+
+| | payload |
+|---|---|
+| the ledger is unreachable, so we do not know | `{usd:null, runs:0}` · `{runs:[]}` |
+| the ledger is fine and nothing has run yet | `{usd:null, runs:0}` · `{runs:[]}` |
+
+The runner lost a boot race with `initdb`, probed Postgres once, latched, and reported the
+second when the truth was the first — for a whole session, while `docker compose ps` said
+*healthy*. A broken state wearing the honest empty state's clothes is worse than a visible
+outage, because nobody goes looking (BOARD rule 9 / Part VII.3). Consumers that render a
+zero **must** read `ledger.state` first; `state: "connected"` is the only licence to draw
+one.
+
+`absent` is not a failure and must not be rendered as one: `--profile dev` runs with no
+Postgres by design, which is why compose's `depends_on` carries `required: false`. The
+runner reconnects on its own — a `docker restart postgres` no longer needs a runner
+restart, and `state` goes `connected → unreachable → connected` without one.
+
+### The brain write-back is not "any markdown this agent produced"
+
+`intelligence/company-interview` is the one agent whose artifact the runner copies into
+`company/COMPANY.md` and commits. That write requires **all** of:
+
+| check | why |
+|---|---|
+| slug is `intelligence/company-interview` | a constant in the runner, not a frontmatter flag — an imported SKILL.md cannot grant itself brain-write |
+| artifact is `md`, ≥40 chars | an empty artifact would erase the brain and commit the erasure |
+| `inputs.mode` is `first-run` or `update-section` | **`review-gaps` reports on the brain; it never replaces it** |
+| the artifact carries the brain's structure | `## ` headings / the `<!-- UNANSWERED` namespace, so "a document this agent produced" and "a replacement for the company's memory" are different tests |
+
+The mode and shape checks live in the runner, not in the agent's prompt. ADR-007: a
+boundary held by a sentence in a prompt is not a boundary.
+
 ## Second Brain (§3.3)
 
 `brain` in `/api/status` is `{value, answered, total, sources, updatedAt, missing[]}` —
-the fraction of the interview's topics that `company/COMPANY.md` actually answers, with
-the unanswered topic keys listed. It is **computed, never a constant**: the galaxy's
-particle count and brightness scale with it, so faking it upward would make the map lie.
+the fraction of the interview's twenty questions that `company/COMPANY.md` actually
+answers. `missing[]` is **question labels** (`["Q7","Q8"]`), not topic keys, so a person
+can find the exact lines in the file.
+
+It is **computed, never a constant**: the galaxy's particle count and brightness scale with
+it, so faking it upward would make the map lie. The measurement is the count of
+`<!-- UNANSWERED: Qn -->` markers left in the file — the only signal in COMPANY.md a
+template cannot fabricate — and it lives in **one** module,
+`scripts/lib/brain-completeness.mjs` (`map-galaxy-engineer`'s), which both the runner and
+`scripts/build-graph.mjs` import. There were two independent implementations; they scored a
+file with all twenty markers still in place at 45%, and the map rendered that as brightness
+for a milestone. If the module is unreachable the runner reports **zero** — never a guess,
+and never a number that could be higher than the truth. `sources` is reported alongside and
+is deliberately not blended in: dropping PDFs into `company/sources/` is not answering.
 
 ## WebSocket `/ws/graph`
 
@@ -213,13 +283,22 @@ the first byte, which is why the event carries both.
   to start a run when the cap is hit and says so in the `error` hint.
 
 Config: `ANTHROPIC_API_KEY` (runner workspace only — never the human's subscription
-credential) and `RUNNER_MONTHLY_CAP_USD`. The key is read from env, never logged, never
-put in a trace, never written into `comms/`. At the cap, `POST /api/run` answers **402
-`monthly_cap_reached`** before spawning anything, with a hint written for the phone:
+credential) and `RUNNER_MONTHLY_CAP_USD`. Compose feeds the first from
+`RUNNER_ANTHROPIC_API_KEY` in the **repo-root `.env`** (`--env-file .env`; there is no
+`infra/.env`). The key is read from env, never logged, never put in a trace, never written
+into `comms/`. At the cap, `POST /api/run` answers **402 `monthly_cap_reached`** before
+spawning anything, with a hint written for the phone:
 
 > This month's runner budget ($40.00) is spent, so no new runs can start. Raise
-> `RUNNER_MONTHLY_CAP_USD` in `infra/.env` and restart the runner, or wait for 1 Sep.
-> Your interactive Claude sessions are on a different account and are unaffected.
+> `RUNNER_MONTHLY_CAP_USD` in the repo-root `.env` and restart the runner, or wait for
+> 1 Sep. Your interactive Claude sessions are on a different account and are unaffected.
+
+**A placeholder is not a key.** `.env.example` ships every secret as a `…-REPLACE-ME`
+string, and a placeholder is a non-empty string — so `runnerConfigured` answered `true` on
+a stack where no key had ever been supplied, and `POST /api/run` sailed past the
+`runner_not_configured` gate to die inside the SDK on an upstream auth error. A value
+matching `replace[-_ ]?me` or `change[-_ ]?me` counts as absent. Nothing else about a key's
+shape is checked — guessing at key formats is how a valid key gets refused later.
 
 `GET /api/status.budget` exposes `{capUsd, spentUsd, remainingUsd, blocked, period}` so
 the shell can show the ceiling approaching instead of surprising someone at it.

@@ -9,7 +9,7 @@ phase: 2-capture
 status: draft
 breaks_into: [source-gatherer, claim-verifier, org-mapper, thesis-writer]
 builds_on: [company-interview]
-wired_into: [exa, firecrawl]
+wired_into: [exa, firecrawl, workspace]
 replaces: "A junior analyst day ($300–500 equivalent) per company researched properly, which is why almost no company gets researched properly."
 ladder:
   human-led: "Twenty minutes of searching before the meeting, mostly the homepage and one news article."

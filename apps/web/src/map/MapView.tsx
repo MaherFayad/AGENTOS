@@ -41,6 +41,7 @@ import { passesYourTree } from './lib/geometry';
 import { entryNode, nodeInDirection, siblingAnchor } from './lib/keyboard';
 import { createRelaxer, type Relaxer } from './lib/relax';
 import { agentSegment, cycleId, jobSlug } from './lib/slugs';
+import { BrainEmptyState } from './svg/BrainEmptyState';
 import { BranchLabels } from './svg/BranchLabels';
 import { ClusterLabels } from './svg/ClusterLabels';
 import { Edges } from './svg/Edges';
@@ -462,6 +463,9 @@ export function MapView({
               />
             )}
             <Edges nodes={placedNodes} edges={payload.edges} core={core} focusDepartment={department} />
+            {/* §3.3 — only in the galaxy view, and only while the brain is 0/20. The
+                department camera has its own watermark and this would fight it. */}
+            {!department && <BrainEmptyState core={core} scale={transform.k} />}
             <Nodes
               nodes={visibleNodes}
               displaced={displaced}

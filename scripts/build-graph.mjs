@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { computeLayout, toStoredPositions } from './lib/layout.mjs';
 import { loadDepartments, loadClusters } from './lib/departments.mjs';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
+import { describeBrain, measureBrainFile } from './lib/brain-completeness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const AGENTS_DIR = join(ROOT, 'agents');
@@ -92,27 +93,47 @@ async function collectAgents(departmentIds) {
 
 /**
  * §3.3 — the galaxy's particle count and brightness scale with Second Brain completeness.
- * Completeness is the fraction of the interview's ~20 questions that COMPANY.md actually
- * answers, measured as `## ` headings present. Honest at zero: no COMPANY.md ⇒ 0, and the
- * galaxy renders as a bare core dot rather than a full swirl (CLAUDE.md rule 9).
  *
- * `runner-engineer` owns the interview (§3.3) and may replace this with a real score by
- * writing `company/.brain.json` → `{ "completeness": 0…1 }`; that file wins if present.
+ * The measurement itself lives in `lib/brain-completeness.mjs` (counted from the
+ * `<!-- UNANSWERED: Qn -->` markers, which is the only signal in COMPANY.md a template
+ * cannot fake). This function only decides *which* producer to believe.
+ *
+ * `runner-engineer` owns the interview (§3.3) and publishes `company/.brain.json` →
+ * `{ completeness, answered, total }` from `apps/runner/src/lib/brain.ts`. That snapshot
+ * wins **only when it does not claim more than the markers admit.** Where the two
+ * disagree we take the lower and warn: two independent producers of one number is a
+ * standing hazard (it shipped a 45%-complete galaxy over a 0/20 brain once), and the
+ * asymmetry means a disagreement can cost brightness but can never invent it —
+ * CLAUDE.md rule 9, and brain.ts's own "never nudged upward".
  */
-const BRAIN_QUESTION_COUNT = 20;
-async function brainCompleteness() {
+async function brainMeasurement() {
+  const measured = await measureBrainFile(join(ROOT, 'company', 'COMPANY.md'), { warn });
+
   const override = await readJson(join(ROOT, 'company', '.brain.json'), null);
-  if (override && Number.isFinite(override.completeness)) {
-    return Math.min(1, Math.max(0, override.completeness));
-  }
-  const companyPath = join(ROOT, 'company', 'COMPANY.md');
-  if (!(await exists(companyPath))) return 0;
-  const text = await readFile(companyPath, 'utf8');
-  const answered = text
-    .split(/\r?\n/)
-    .filter((l) => /^##\s+\S/.test(l))
-    .filter((_, i, arr) => arr.length > 0).length;
-  return Math.min(1, answered / BRAIN_QUESTION_COUNT);
+  if (!override || !Number.isFinite(override.completeness)) return measured;
+
+  const value = Math.min(1, Math.max(0, override.completeness));
+  const total =
+    Number.isInteger(override.total) && override.total > 0 ? override.total : measured.total;
+  const snapshot = {
+    value,
+    answered: Number.isInteger(override.answered)
+      ? Math.min(total, Math.max(0, override.answered))
+      : Math.round(value * total),
+    total,
+    unanswered: measured.unanswered,
+    source: 'company/.brain.json',
+  };
+
+  if (snapshot.value <= measured.value) return snapshot;
+
+  warn(
+    `company/.brain.json claims ${Math.round(snapshot.value * 100)}% (${describeBrain(snapshot)}) but ` +
+      `company/COMPANY.md still carries ${measured.unanswered.length} UNANSWERED markers ` +
+      `(${describeBrain(measured)}). Using the markers — a completeness may never exceed what the ` +
+      'file admits (§3.3, CLAUDE.md rule 9).',
+  );
+  return measured;
 }
 
 function stable(value) {
@@ -128,10 +149,14 @@ async function main() {
   const stored = await readJson(POSITIONS, null);
   const previous = stored?.positions ?? {};
 
+  const brain = await brainMeasurement();
+
   const payload = computeLayout(agents, previous, {
     departments,
     clusters,
-    brainCompleteness: await brainCompleteness(),
+    brainCompleteness: brain.value,
+    brainAnswered: brain.answered,
+    brainTotal: brain.total,
     // `computedAt` is the only non-deterministic field, so --check ignores it and the
     // committed positions file carries the previous value when nothing moved.
     now: new Date().toISOString(),
@@ -176,7 +201,12 @@ async function main() {
   log(`  agents        ${agents.length}`);
   log(`  nodes         ${payload.nodes.length}  (${live} live)`);
   log(`  edges         ${payload.edges.length}  (${payload.edges.filter((e) => e.pulse).length} pulsing)`);
-  log(`  brain         ${Math.round(payload.core.brainCompleteness * 100)}% complete (§3.3)`);
+  // The percentage alone is unauditable — it is exactly what hid a fabricated 45%. Printing
+  // the count and the source next to it makes the number checkable against the file.
+  log(
+    `  brain         ${Math.round(payload.core.brainCompleteness * 100)}% complete — ` +
+      `${describeBrain(brain)} · ${brain.source} (§3.3)`,
+  );
   log(`  bounds        x ${payload.bounds.x.join(' … ')}   y ${payload.bounds.y.join(' … ')}`);
   for (const w of warnings) log(`  warn  ${w}`);
   log(`\n  → ${POSITIONS.replace(ROOT, '.')}   (committed)`);

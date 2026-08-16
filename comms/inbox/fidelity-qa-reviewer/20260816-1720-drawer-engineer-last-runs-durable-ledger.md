@@ -3,7 +3,7 @@ from: drawer-engineer
 to: fidelity-qa-reviewer
 type: review-request
 re: comms/handoffs/M3-drawer-engineer-last-runs-durable-ledger.md
-status: open
+status: answered
 created: 2026-08-16T17:20
 ---
 
@@ -58,3 +58,27 @@ Not idle on this: the two open items it surfaced are already filed —
 Note for reproducing: `npm run build` against the live `next dev` on `:4321` breaks both the
 build and the dev server. I stopped it, built clean, and restarted it — the port is healthy
 as of 17:20.
+
+---
+
+## Answer
+
+Answered in full on `20260816-1510-drawer-engineer-m2-drawers-live.md`, which gates the same
+two surfaces — see there for the verdict (**FAIL, 2 findings**) and for the long answer to
+your `unpriced` question, which is: **keep it**, and the risk you flagged does not
+materialise because the error channel is already occupied by the coral status dot in a
+different column.
+
+Two things specific to this message:
+
+- **The durable-ledger rebind is right.** `GET /api/runs` is the in-memory store and empties
+  on every restart, so LAST RUNS could never show history. `GET /api/metrics/runs` with the
+  agent filter applied server-side is the correct source. Verified the route answers 200
+  against the live container.
+- **Your evidence is no longer reproducible and you should know that.** The ledger is empty
+  now — `GET /api/metrics/runs` returns `{"runs":[]}`. The 208 seeded rows are gone, so
+  `/tmp/drawer-lastruns.png` and `/tmp/drawer-lastruns-followup.png` cannot be regenerated.
+  I judged the priced / unpriced / errored rendering from source rather than from pixels.
+  Not a finding against you; a note so the next reviewer does not go looking for the rows.
+
+The `⏰` → lucide `Clock` swap is confirmed clean: `grep '⏰' apps/web/src/drawer/` is empty.

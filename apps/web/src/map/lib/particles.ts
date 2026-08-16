@@ -15,6 +15,10 @@
 /** §2.1 — the particle budget at a fully answered Second Brain. */
 export const GALAXY_PARTICLE_COUNT = 600;
 
+/** World-space radius the swirl occupies — and, at zero completeness, the radius of the
+ *  empty disc drawn in its place, so the two describe the same object. */
+export const GALAXY_RADIUS = 190;
+
 /**
  * A floor so the core never looks broken while the brain is genuinely empty — the swirl is
  * absent, but the core dot and a faint dusting say "this exists and is unpopulated" rather
@@ -101,7 +105,7 @@ export interface GalaxyOptions {
  */
 export function buildGalaxy({
   completeness,
-  radius = 190,
+  radius = GALAXY_RADIUS,
   tightness = 0.32,
   arms = 3,
   seed = 0x9a1a,

@@ -242,14 +242,33 @@ test('relative time reads the way a person would say it', () => {
   assert.equal(relativeTime('2026-08-13T12:00:00Z', now), '2d ago');
 });
 
-test('GET /api/cost/today is mounted with an honest empty when the ledger is down', async () => {
+/**
+ * Amended by `runner-engineer` — see
+ * `comms/inbox/observability-engineer/…-ledger-state-is-explicit.md`, filed as a
+ * decision-request because `/api/cost/today` is your route.
+ *
+ * This used to assert `runs: 0` when the ledger was unreachable. That was the last place
+ * a broken ledger could still impersonate the honest empty state: `{usd:null, runs:0}` is
+ * byte-identical to a healthy ledger on a day with no runs. The count is now `null` —
+ * unknown, not zero — and every response carries `ledger.state`. The ticker's rendering
+ * is unchanged, because it keys on `usd === null`.
+ */
+test('GET /api/cost/today distinguishes an unreadable ledger from an empty one', async () => {
   const runner = await buildRunner({ watch: false, observe: false });
   try {
     const res = await runner.app.inject({ method: 'GET', url: '/api/cost/today' });
     assert.equal(res.statusCode, 200);
-    const body = res.json() as { usd: number | null; runs: number };
+    const body = res.json() as {
+      usd: number | null;
+      runs: number | null;
+      unpricedRuns: number | null;
+      ledger: { state: string; hint: string };
+    };
     assert.equal(body.usd, null, 'CostTicker renders `no cost data`, never a plausible $0.00');
-    assert.equal(body.runs, 0);
+    assert.equal(body.runs, null, 'a count we cannot read is null — `0` would be a claim');
+    assert.equal(body.unpricedRuns, null);
+    assert.equal(body.ledger.state, 'absent');
+    assert.ok(body.ledger.hint.length > 0);
   } finally {
     await runner.close();
   }

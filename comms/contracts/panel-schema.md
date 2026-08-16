@@ -119,10 +119,31 @@ Grid: 2 columns, 16px gap. A widget declares `span: 1 | 2`.
 ## Rules
 
 1. Unknown `type` → render a bordered "unsupported widget" placeholder, never crash.
-2. Missing data → skeleton at correct height, then empty state (`--ink-3`, one line).
+2. Missing data → skeleton at correct height, then empty state (**`--ink-2`**, one line).
    Never a spinner that shifts layout.
+
+   > **Correction, 2026-08-16T22:08.** This rule said `--ink-3` and it was wrong. An empty
+   > state is the sentence BOARD rule 9 puts on screen *instead of* a plausible zero, so it
+   > is required reading and `--ink-3` is glossed *"faint text / disabled"* — 3.57:1 dark,
+   > 3.00:1 light, sub-AA at every size this product ships (design-tokens §9.1). The rule
+   > told an implementer to render the product's honesty in the disabled colour, and the
+   > implementer did, sixteen times. **`fidelity-qa-reviewer` found the same defect in three
+   > files by three authors; one of those three was reading this line.** Filed against M6 as
+   > the FAIL that produced this correction, not silently edited: a contract that quietly
+   > rewrites its own reasoning is worse than one that was wrong out loud.
+   >
+   > `--ink-2` is a floor, not a target. Two consumers of this rule need more than the floor
+   > and design-tokens §9.4a/§9.5 say which: a caveat sits one rung below the value it
+   > qualifies (so a provenance caveat under an `--ivory` KPI numeral is `--ivory-2`), and
+   > prose inside a row that hovers to `--card-2` needs `--ivory-2` because light `--ink-2`
+   > on `--card-2` is 4.25:1. `data-table` with `rowAction: "peek"` is exactly such a row.
 3. Every value formats through one shared formatter (`currency`, `number`, `percent`,
    `duration`, `relative-time`) with `tabular-nums`.
+   **A formatter returning `null` is a fact, not a blank.** It renders `—` at `--ivory-2` —
+   one rung under the value it stands in for — with an `sr-only` "No reading" beside it,
+   because `—` alone is announced as "dash", "em dash" or silence depending on the assistive
+   technology's punctuation setting. `0` and *no measurement* are different claims and the
+   renderer must not blur them any more than `lib/format.ts` does.
 4. `buildPrompt` emits our Claude Code one-shot prompt to rebuild the panel — keep it,
    it's the cleverest thing on their site (§2.5.1).
 5. The activity feed is real: agent runs **are** the activity (§2.5 data note). Wire it

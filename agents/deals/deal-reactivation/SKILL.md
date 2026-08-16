@@ -8,7 +8,7 @@ tier: assisted
 phase: 3-generate
 status: draft
 breaks_into: [stall-detector, last-touch-summariser, reactivation-drafter]
-wired_into: [hubspot, slack]
+wired_into: [hubspot, slack, workspace]
 replaces: "The quarterly ritual of scrolling the pipeline, feeling bad about the deals nobody has touched in a month, and closing the tab."
 ladder:
   human-led: "A pipeline review where someone reads out deal names and everyone nods."

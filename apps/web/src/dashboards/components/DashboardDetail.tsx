@@ -49,8 +49,14 @@ export function DashboardDetail({
           onClick={() => router.push(`/dashboards/${ring.prev.id}`)}
           aria-label={`Previous: ${ring.prev.railTitle}`}
         >
+          {/* `tone="muted"` (--ink-2), not the primitive's `faint` default. §9.3 blesses
+              --ink-3 for "a rail cap that repeats the heading beside it" — that is the MAP's
+              rail. This one names a DIFFERENT dashboard and is the only visible thing saying
+              the edge is navigation at all, so the carve-out does not reach it (§2.5.6). */}
           <span className={s.railDot} aria-hidden="true" />
-          <RailLabel orientation="up">{ring.prev.railTitle}</RailLabel>
+          <RailLabel orientation="up" tone="muted">
+            {ring.prev.railTitle}
+          </RailLabel>
         </button>
         <button
           type="button"
@@ -59,7 +65,9 @@ export function DashboardDetail({
           aria-label={`Next: ${ring.next.railTitle}`}
         >
           <span className={s.railDot} aria-hidden="true" />
-          <RailLabel orientation="down">{ring.next.railTitle}</RailLabel>
+          <RailLabel orientation="down" tone="muted">
+            {ring.next.railTitle}
+          </RailLabel>
         </button>
 
         <div className={s.detail}>

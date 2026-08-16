@@ -20,7 +20,17 @@
 import type { TraceSink } from './types.ts';
 
 export type LangfuseConfig = {
+  /** Where traces are POSTed. Compose-internal (`http://langfuse:3000`) in the stack. */
   baseUrl: string;
+  /**
+   * Where a **human's browser** reaches Langfuse. Distinct from `baseUrl` on purpose:
+   * `langfuse:3000` only resolves inside the compose network, so a link built from it is
+   * dead in the drawer even though the trace behind it landed correctly.
+   *
+   * Falls back to `baseUrl` when unset, which is right for a single-origin deployment and
+   * wrong-but-unchanged for compose — so infra sets `LANGFUSE_PUBLIC_URL` explicitly.
+   */
+  publicUrl?: string;
   publicKey: string;
   secretKey: string;
   projectId: string;
@@ -154,20 +164,42 @@ export function createLangfuseSink(config: LangfuseConfig): TraceSink {
       }
     },
 
+    /**
+     * Built from `publicUrl`, not `baseUrl`. The two are the same string in a
+     * single-origin deployment and different in compose, where the runner POSTs to
+     * `http://langfuse:3000` and the human clicks `http://127.0.0.1:3001`. Using the send
+     * host for the link produced a URL that was correct for the container and dead for
+     * the person holding the phone.
+     */
     urlFor(traceId: string): string {
-      return `${config.baseUrl.replace(/\/+$/, '')}/project/${config.projectId}/traces/${traceId}`;
+      const origin = (config.publicUrl || config.baseUrl).replace(/\/+$/, '');
+      return `${origin}/project/${config.projectId}/traces/${traceId}`;
     },
   };
 }
 
-/** Sink used when Langfuse is not configured: runs still work, traces just aren't shipped. */
-export function createNullSink(baseUrl = 'http://langfuse.tailnet:3000', projectId = 'local'): TraceSink {
+/**
+ * Sink used when Langfuse is not configured: runs still work, traces just aren't shipped.
+ *
+ * **`urlFor` returns `null`, and that is the whole point of this function.** It used to
+ * default to `http://langfuse.tailnet:3000/project/local/traces/<id>` — a well-formed URL,
+ * on a host that does not exist, for a project that was never created, pointing at a trace
+ * that was never sent. That string was written into `ops.agent_runs.trace_url` and rendered
+ * as a live link in LAST RUNS and the drawer.
+ *
+ * It is the same defect as reporting a 0/20 brain at 45%, `runs: 0` during a database
+ * outage, and `tailscale: "online"` from a host with no Tailscale: **a configured value
+ * reported as an observed one.** There is no trace, so there is no link. `null` is the
+ * only honest answer, and every consumer already handles it — `traceUrl` is nullable in the
+ * run store, the ledger column and the SSE `start`/`done` frames alike.
+ */
+export function createNullSink(): TraceSink {
   return {
     async send(): Promise<void> {
       /* traces disabled */
     },
-    urlFor(traceId: string): string {
-      return `${baseUrl.replace(/\/+$/, '')}/project/${projectId}/traces/${traceId}`;
+    urlFor(): string | null {
+      return null;
     },
   };
 }
@@ -179,6 +211,9 @@ export function sinkFromEnv(env: Record<string, string | undefined> = process.en
   const publicKey = env.LANGFUSE_PUBLIC_KEY;
   const secretKey = env.LANGFUSE_SECRET_KEY;
   const projectId = env.LANGFUSE_PROJECT_ID ?? 'default';
+  // Browser-facing origin for links, set by compose alongside the send host. Blank is
+  // treated as unset so an empty `${LANGFUSE_PUBLIC_URL:-}` does not produce `/project/...`.
+  const publicUrl = env.LANGFUSE_PUBLIC_URL?.trim() || undefined;
   if (!baseUrl || !publicKey || !secretKey) return createNullSink();
-  return createLangfuseSink({ baseUrl, publicKey, secretKey, projectId });
+  return createLangfuseSink({ baseUrl, publicUrl, publicKey, secretKey, projectId });
 }

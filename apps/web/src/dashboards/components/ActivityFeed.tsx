@@ -13,12 +13,15 @@ export function ActivityFeed({ widget }: { widget: ActivityFeedWidget }): React.
       <QueryGate query={widget.query} emptyState={widget.emptyState} height={220}>
         {(data) => {
           const rows = activityFrom(data).slice(0, limit);
-          if (rows.length === 0) return <p className="text-meta text-ink-3">No runs in this window.</p>;
+          // Empty state and clock are both required reading (tokens contract §9.2): the
+          // sentence appears *instead of* a run count, and a feed whose stamps cannot be
+          // read is a list, not a feed. Neither is decorative, so neither is --ink-3.
+          if (rows.length === 0) return <p className="text-meta text-ink-2">No runs in this window.</p>;
           return (
             <ol className="flex flex-col gap-3">
               {rows.map((row, i) => (
                 <li key={`${row.at}-${i}`} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                  <time className="text-meta tabular-nums text-ink-3" dateTime={row.at}>
+                  <time className="text-meta tabular-nums text-ink-2" dateTime={row.at}>
                     {formatClock(row.at) ?? '—'}
                   </time>
                   <p className="text-small text-ivory">

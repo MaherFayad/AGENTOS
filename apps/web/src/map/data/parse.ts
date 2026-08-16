@@ -44,6 +44,12 @@ function parseBounds(raw: unknown): GraphBounds | null {
   return { x: [x0, x1], y: [y0, y1] };
 }
 
+/** A whole count, or `null` for "not measured" — never coerced to 0, which is a claim. */
+const count = (value: unknown): number | null => {
+  const n = num(value);
+  return n !== null && Number.isInteger(n) && n >= 0 ? n : null;
+};
+
 function parseCore(raw: unknown): GraphCore | null {
   if (!isRecord(raw)) return null;
   const x = num(raw.x);
@@ -51,7 +57,20 @@ function parseCore(raw: unknown): GraphCore | null {
   const brain = num(raw.brainCompleteness);
   if (x === null || y === null) return null;
   const completeness = brain === null ? 0 : Math.min(1, Math.max(0, brain));
-  return { x, y, brainCompleteness: completeness };
+  const brainTotal = count(raw.brainTotal);
+  const answered = count(raw.brainAnswered);
+  return {
+    x,
+    y,
+    brainCompleteness: completeness,
+    // A count without its denominator says nothing, and a count above it is a lie the map
+    // would repeat in words. Both drop to "not measured" rather than being rendered.
+    brainTotal: brainTotal !== null && brainTotal > 0 ? brainTotal : null,
+    brainAnswered:
+      brainTotal !== null && brainTotal > 0 && answered !== null && answered <= brainTotal
+        ? answered
+        : null,
+  };
 }
 
 function parseDepartment(raw: unknown): GraphDepartment | null {

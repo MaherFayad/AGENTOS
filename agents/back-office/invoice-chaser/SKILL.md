@@ -8,7 +8,7 @@ tier: autonomous
 phase: 4-orchestrate
 status: draft
 breaks_into: [ageing-builder, reminder-drafter, escalation-ladder]
-wired_into: [gmail]
+wired_into: [gmail, workspace]
 replaces: "Chasing money you have already earned, badly, three weeks late, because nobody wanted to be the person who sent that email."
 ladder:
   human-led: "Someone notices a payment is late, usually when reconciling, usually well after it was."

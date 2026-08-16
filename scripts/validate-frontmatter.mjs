@@ -46,9 +46,24 @@ const PHASES = ['1-foundation', '2-capture', '3-generate', '4-orchestrate'];
 const STATUSES = ['live', 'draft', 'failing'];
 const APPROVALS = ['none', 'required'];
 const INPUT_TYPES = ['text', 'url', 'number', 'select', 'textarea', 'date'];
+/** ADR-009. `none` is the opt-out for an agent whose deliverable is a side effect. */
+const PRODUCES = ['md', 'json', 'pdf', 'txt', 'none'];
+const DEFAULT_PRODUCES = 'md';
+
+/**
+ * The concrete tools that can create a file in the scratch workspace (ADR-009, invariant 7).
+ *
+ * Derived against the connector registry's `tools` rather than against a list of connector
+ * *names*, so the check stays true the day `runner-engineer` adds a connector that grants
+ * file tools. MCP families (`mcp__x__*`) are deliberately not counted: whether a given MCP
+ * server can write the run's cwd is not knowable from its name, and guessing yes is how
+ * `company-interview` came to declare two connectors, neither of which could write the
+ * `output.md` its own system prompt demanded.
+ */
+const ARTIFACT_WRITE_TOOLS = ['Write', 'Edit', 'Bash'];
 
 const REQUIRED = ['name', 'description', 'department', 'cluster', 'icon', 'tier', 'phase', 'status', 'replaces', 'ladder', 'the_human'];
-const OPTIONAL = ['breaks_into', 'builds_on', 'wired_into', 'inputs', 'schedule', 'approval', 'deliver'];
+const OPTIONAL = ['breaks_into', 'builds_on', 'wired_into', 'produces', 'inputs', 'schedule', 'approval', 'deliver'];
 const KNOWN_FIELDS = new Set([...REQUIRED, ...OPTIONAL]);
 const STRING_ARRAY_FIELDS = ['breaks_into', 'builds_on', 'wired_into'];
 
@@ -414,17 +429,24 @@ function checkDeliver(fm, err) {
 /**
  * Invariant 5: `wired_into` names must exist in this registry. Keys starting with `$`
  * are comments (JSON has no comment syntax) and are ignored. Shape is
- * `{ [slug]: { label, tools[], note? } }` — the same shape the runner's CONNECTOR_REGISTRY
- * uses, so a name that validates here is a name the runner can actually grant.
+ * `{ [slug]: { label, tools[], note?, available?, since? } }` — the same shape the runner's
+ * CONNECTOR_REGISTRY uses, so a name that validates here is a name the runner can actually
+ * grant.
+ *
+ * `available: false` / `since: "M9"` are optional and owned by `runner-engineer` (ADR-009
+ * decision 5): a connector whose backing server is not wired yet. They are read defensively
+ * — absent means available — so this validator does not need a change in a file it does not
+ * own before the check can exist.
  *
  * @param {unknown} value
- * @returns {{ names: Set<string>, errors: string[] }}
+ * @returns {{ names: Set<string>, defs: Map<string, {tools: string[], available: boolean, since: string|null}>, errors: string[] }}
  */
 export function parseConnectorRegistry(value) {
   const errors = [];
   const names = new Set();
+  const defs = new Map();
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return { names, errors: ['must be an object keyed by connector slug, not an array'] };
+    return { names, defs, errors: ['must be an object keyed by connector slug, not an array'] };
   }
   for (const [name, def] of Object.entries(value)) {
     if (name.startsWith('$')) continue;
@@ -437,7 +459,7 @@ export function parseConnectorRegistry(value) {
       continue;
     }
     for (const k of Object.keys(def)) {
-      if (!['label', 'tools', 'note'].includes(k)) errors.push(`${name}: unknown field "${k}"`);
+      if (!['label', 'tools', 'note', 'available', 'since'].includes(k)) errors.push(`${name}: unknown field "${k}"`);
     }
     if (!isStr(def.label)) errors.push(`${name}.label is required`);
     if (!Array.isArray(def.tools) || def.tools.length === 0) {
@@ -446,12 +468,24 @@ export function parseConnectorRegistry(value) {
       for (const t of def.tools) if (!isStr(t)) errors.push(`${name}.tools contains a non-string`);
     }
     if (def.note !== undefined && !isStr(def.note)) errors.push(`${name}.note must be a string`);
+    if (def.available !== undefined && typeof def.available !== 'boolean') errors.push(`${name}.available must be true or false`);
+    if (def.since !== undefined && !isStr(def.since)) errors.push(`${name}.since must be a milestone string like "M9"`);
     names.add(name);
+    defs.set(name, {
+      tools: Array.isArray(def.tools) ? def.tools.filter(isStr) : [],
+      available: def.available !== false,
+      since: isStr(def.since) ? def.since : null,
+    });
   }
   if (names.size === 0) {
     errors.push('registry has no connectors — every wired_into name would fail invariant 5');
   }
-  return { names, errors };
+  return { names, defs, errors };
+}
+
+/** ADR-009 invariant 7: can this connector create the run's `output.md`? */
+export function connectorCanWriteArtifact(def) {
+  return Boolean(def) && def.tools.some((t) => ARTIFACT_WRITE_TOOLS.includes(t));
 }
 
 function checkLadder(fm, err) {
@@ -515,7 +549,7 @@ async function checkContractDrift(err) {
     const m = new RegExp(`export const ${name} = \\[([^\\]]*)\\] as const`, 's').exec(text);
     return m ? [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]) : null;
   };
-  for (const [name, ours] of [['DEPARTMENTS', DEPARTMENTS], ['TIERS', TIERS], ['PHASES', PHASES], ['STATUSES', STATUSES], ['APPROVALS', APPROVALS], ['INPUT_TYPES', INPUT_TYPES]]) {
+  for (const [name, ours] of [['DEPARTMENTS', DEPARTMENTS], ['TIERS', TIERS], ['PHASES', PHASES], ['STATUSES', STATUSES], ['APPROVALS', APPROVALS], ['INPUT_TYPES', INPUT_TYPES], ['PRODUCES', PRODUCES]]) {
     const theirs = pull(name);
     if (!theirs) { err(null, `packages/contracts/src/frontmatter.ts does not export ${name} — the validator and the types have diverged`); continue; }
     if (theirs.join('|') !== ours.join('|')) {
@@ -571,6 +605,8 @@ export async function validateAll() {
 
   // --- connector registry (invariant 5 — required, not optional) ----
   let connectors = null;
+  /** @type {Map<string, {tools: string[], available: boolean, since: string|null}>} */
+  let connectorDefs = new Map();
   if (!(await exists(CONNECTORS))) {
     globalErr(
       'agents/_registry/connectors.json',
@@ -580,7 +616,10 @@ export async function validateAll() {
     try {
       const result = parseConnectorRegistry(JSON.parse(await readFile(CONNECTORS, 'utf8')));
       for (const m of result.errors) globalErr('agents/_registry/connectors.json', m);
-      if (result.names.size) connectors = result.names;
+      if (result.names.size) {
+        connectors = result.names;
+        connectorDefs = result.defs;
+      }
     } catch (e) {
       globalErr('agents/_registry/connectors.json', `is not valid JSON: ${e.message}`);
     }
@@ -676,9 +715,36 @@ export async function validateAll() {
     const buildsOn = checkStringArray(fm, 'builds_on', err, slug);
     const wiredInto = checkStringArray(fm, 'wired_into', err, slug);
 
+    // ADR-009 invariant 7. An agent whose deliverable is a document but whose allowlist
+    // contains nothing that can create a file does not fail — it *succeeds*, produces no
+    // artifact, and reports `ok`. That is the one failure mode a validator has to catch,
+    // because at run time it looks exactly like success.
+    const produces = fm.produces === undefined ? DEFAULT_PRODUCES : fm.produces;
+    if (fm.produces !== undefined && !PRODUCES.includes(fm.produces)) {
+      err(`produces "${fm.produces}" is not one of ${PRODUCES.join(' | ')}`);
+    }
+
     if (connectors) {
       for (const tool of wiredInto) {
-        if (!connectors.has(tool)) err(`wired_into "${tool}" is not in the connector registry — the runner would reject the run (§3.2). Wire the connector or drop the name; wired_into is the tool allowlist, not documentation`);
+        if (!connectors.has(tool)) {
+          err(`wired_into "${tool}" is not in the connector registry — the runner would reject the run (§3.2). Wire the connector or drop the name; wired_into is the tool allowlist, not documentation`);
+          continue;
+        }
+        const def = connectorDefs.get(tool);
+        if (def && !def.available) {
+          warn(`wired_into "${tool}" is declared but not wired yet${def.since ? ` (${def.since})` : ''} — it resolves to no tool at run time. Honest to declare, but the agent runs without it`);
+        }
+      }
+
+      if (PRODUCES.includes(produces) && produces !== 'none') {
+        const writers = wiredInto.filter((name) => connectorCanWriteArtifact(connectorDefs.get(name)));
+        if (writers.length === 0) {
+          err(
+            `produces: ${produces}, but no connector in wired_into can write a file — the runner asks every agent to write \`output.md\` (prompt.ts) and extracts that file as the artifact (artifacts.ts). ` +
+              `With nothing that grants ${ARTIFACT_WRITE_TOOLS.join('/')}, the run produces no artifact and still reports \`ok\`. ` +
+              `Add \`workspace\` to wired_into, or set \`produces: none\` if this agent genuinely delivers only a side effect (ADR-009)`,
+          );
+        }
       }
     }
 

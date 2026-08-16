@@ -53,6 +53,20 @@ export const NODE_LABEL = {
   offset: 14,
 } as const;
 
+/**
+ * §3.3 — the words under the core while the Second Brain is 0/20 answered. Counter-scaled
+ * by the camera so it stays at a fixed screen size: it is a sentence to be read, not a
+ * feature of the map, and it disappears the moment the first answer lands.
+ */
+export const BRAIN_EMPTY = {
+  eyebrow: { size: 11, tracking: 11 * 0.3 },
+  headline: { size: 13, tracking: 0 },
+  hint: { size: 11, tracking: 0 },
+  /** Distance below the core dot to the first line, and the rhythm between lines. */
+  offset: 26,
+  row: 17,
+} as const;
+
 /** Leaf dots are unlabelled until hovered — 150 permanent labels is noise, not a map. */
 export const LEAF_LABEL = {
   size: 10,

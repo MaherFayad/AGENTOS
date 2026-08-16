@@ -8,7 +8,7 @@ tier: assisted
 phase: 3-generate
 status: draft
 breaks_into: [action-item-extractor, owner-assigner, recap-writer]
-wired_into: [gmail]
+wired_into: [gmail, workspace]
 replaces: "The four commitments made out loud in a meeting that exist nowhere afterwards, and the recap email everyone means to send on the way to the next call."
 ladder:
   human-led: "Whoever remembers writes notes, and the actions live in one person's head until someone chases them."

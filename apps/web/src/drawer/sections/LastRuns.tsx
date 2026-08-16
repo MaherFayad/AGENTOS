@@ -26,6 +26,14 @@ export type RunsState =
   | { kind: 'ready'; rows: RunRow[] }
   | { kind: 'failed'; message: string };
 
+/**
+ * M8 NOTE — these are now **rendered** strings, not just `title` text. They moved into the
+ * accessibility tree to fix the colour-only status defect, which makes them user-facing copy
+ * that belongs in `i18n/strings.en.ts`. `check-rtl.mjs` does not flag them: it matches JSX
+ * text and attribute literals, and a string in a const map is invisible to it. So this is
+ * debt the checker will not remind anyone about — hence the comment.
+ * Seven keys, for `rtl-arabic-pdpl-specialist`, alongside the other 10 in `sections/**`.
+ */
 const STATUS_WORD: Record<RunRow['status'], string> = {
   queued: 'queued',
   ok: 'finished',
@@ -82,7 +90,16 @@ export function LastRuns({ state }: { state: RunsState }) {
         const label = `Run ${when ?? 'at an unrecorded time'} — ${STATUS_WORD[row.status]}`;
         const content = (
           <>
+            {/* Status is data ink, and data ink alone is not an answer for anyone who is not
+             * looking at it. The dot carries the value visually; this text carries the same
+             * value to a screen reader. It lives inside `content`, which BOTH branches render,
+             * because the branch that actually ships today is the non-link one: `traceUrl` is
+             * null on every row while `LANGFUSE_*` is unset, and a <span> with a `title` is
+             * neither focusable nor reliably announced. Putting it here rather than on the
+             * wrapper also means the <a> branch gets the word into its accessible *name*
+             * (name-from-content), not into a `title` description that AT may drop. */}
             <span className={s.dot} data-status={row.status} aria-hidden="true" />
+            <span className={s.srOnly}>{STATUS_WORD[row.status]}</span>
             <span className={s.runTime}>{when ?? 'time not recorded'}</span>
             <CostCell row={row} />
             {duration ? <span className={s.runMeta}>{duration}</span> : null}

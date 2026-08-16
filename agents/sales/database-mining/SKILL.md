@@ -8,7 +8,7 @@ tier: assisted
 phase: 1-foundation
 status: draft
 breaks_into: [icp-filter, contact-resolver, list-deduper]
-wired_into: [exa, postgres]
+wired_into: [exa, postgres, workspace]
 replaces: "Four browser tabs, a CSV nobody trusts, and a Tuesday afternoon spent copying rows into a spreadsheet that will be stale by Thursday."
 ladder:
   human-led: "Someone exports a list and eyeballs it for anything obviously wrong."

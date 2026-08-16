@@ -8,7 +8,7 @@ tier: assisted
 phase: 2-capture
 status: draft
 breaks_into: [intent-classifier, severity-scorer, reply-drafter, escalation-router]
-wired_into: [gmail]
+wired_into: [gmail, workspace]
 replaces: "An inbox read top to bottom every morning, where the outage report sits four messages below a question about invoice formatting."
 ladder:
   human-led: "Someone opens the inbox and works down it in whatever order it arrived."

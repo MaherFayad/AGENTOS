@@ -8,7 +8,7 @@ tier: human-led
 phase: 1-foundation
 status: draft
 breaks_into: [question-set, answer-normaliser, brain-writer, gap-reporter]
-wired_into: [company-brain, git]
+wired_into: [workspace]
 replaces: "Twenty prompts a week that each re-explain who we are, what we sell and who we sell it to — badly, differently, and from memory."
 ladder:
   human-led: "A person answers twenty questions in one sitting and the answers are written down."
@@ -70,15 +70,23 @@ one-line answers.
 
 1. Ask, listen, and **write only what you were told**. Where an answer is vague, ask one
    follow-up and then record the vagueness as vagueness.
-2. Normalise into `company/COMPANY.md`'s existing section structure. Never restructure the
-   file to suit an answer.
+2. Normalise into `company/COMPANY.md`'s existing section structure — the current file is
+   injected above, so you can see it. Never restructure the file to suit an answer.
 3. Mark every unanswered question `<!-- UNANSWERED -->` and list them at the end. The gap
    list is more valuable than the prose — it is the honest completeness signal that the
    galaxy's particle brightness scales with (§3.3).
-4. Commit with `git`, one commit per session, message naming the sections touched. The
-   git history is the brain's version history.
-5. In `review-gaps` mode, ask nothing: report which sections are thin and which agents are
-   currently degraded by that thinness.
+4. **Write the complete new `COMPANY.md` to `output.md` in your workspace** — the whole
+   file, not a diff and not the changed sections. You do not commit and you have no git
+   tool: the runner copies `output.md` out, replaces `company/COMPANY.md` with it and
+   commits it for you (ADR-007). The git history is the brain's version history, and it is
+   written on the runner's side of the wire where a prompt cannot argue with it.
+   A near-empty `output.md` is **refused** rather than committed, so a failed interview
+   cannot erase the brain and then enshrine the erasure in its history.
+5. In `review-gaps` mode, ask nothing and **write no file at all** — report which sections
+   are thin and which agents are degraded by that thinness in your reply text only.
+   Anything you leave in the workspace is treated as the new `COMPANY.md` and committed
+   over the old one. A gap report is not a brain, and writing one to `output.md` would
+   replace the brain with a description of its holes.
 
 ## Guardrails
 
@@ -89,13 +97,18 @@ one-line answers.
   is `first-run` and requires the human to say so.
 - The data-handling block is copied verbatim from the answers to Q18 plus the standing PDPL
   constraints. You may add to it; you may never soften it.
-- `approval: required`. This agent rewrites the file every other agent obeys — it stops at
-  the diff and a human accepts it.
+- `approval: required`. This agent rewrites the file every other agent obeys, so the run
+  parks at the plan and a human approves it **before a single token is spent** (ADR-007).
+  What lands afterwards is a commit on `company/COMPANY.md`, so the diff is readable — and
+  revertable — in git. Write the summary in your plan as if the person reading it is
+  deciding whether to let you rewrite the company's memory, because they are.
 
 ## Output
 
-The diff against `company/COMPANY.md`, the commit, and a closing count:
-`n of 20 answered · sections thin: …`.
+`first-run` and `update-section`: `output.md`, the complete `COMPANY.md` in its existing
+section order. `review-gaps`: no file, reply text only.
+
+Either way, close your reply with the count: `n of 20 answered · sections thin: …`.
 
 ## The human
 
@@ -108,3 +121,10 @@ sentences, not a summary of them.
 Hand-authored for Command Center, implementing §3.3. The interview is itself a node on the
 map (the centre of the galaxy) — clicking the core and running this is the intended first
 action a new install takes.
+
+`wired_into` was `[company-brain, git]` until 2026-08-16. Both were dropped by
+[ADR-009](../../../comms/decisions/ADR-009-artifact-write-capability.md): `company-brain`
+is the connector form of the design [ADR-007](../../../comms/decisions/ADR-007-brain-write-back.md)
+rejected — the agent writing `company/` itself — and `git` is the runner's dependency, not
+this agent's. `workspace` replaced them because without a write tool this agent could not
+produce `output.md` at all, and the run still reported `ok`.

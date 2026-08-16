@@ -33,6 +33,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { provenance } from './lib/provenance.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SCAN_ROOT = join(ROOT, 'apps', 'web');
@@ -53,6 +54,24 @@ const TW_CONFIG = 'apps/web/tailwind.config.ts';
 /** The token file and its own test. Neither can obey the rules they define. */
 const isTokenSource = (f) => f === TOKENS_CSS || f === TOKENS_TEST;
 
+/**
+ * A test is not a component, and `no-theme-branch` is a rule about components.
+ *
+ * Any test that checks a token's contrast in both themes has to name both themes:
+ * it reads tokens.css, slices it at `body.light`, and says `theme === 'dark'`.
+ * That is the test doing its job, not a component branching. Flagging it makes the
+ * *correct* thing to write fail CI, which teaches people to write the wrong thing
+ * or to reach for a whole-file exemption that also silences the hex rule.
+ *
+ * Nothing is lost by exempting tests here. A real theme branch has to exist in a
+ * component before a test can assert it, and the component file is still checked.
+ * This started as a hardcoded pair (theme.ts / theme.test.ts); it is the general
+ * form of that same intent, prompted by drawer-engineer's drawer-contrast.test.ts.
+ *
+ * Deliberately narrow: tests remain subject to every other rule, including no-hex.
+ */
+const isTest = (f) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(f);
+
 /** Where chrome lives. Data ink on a fill or a border here is a failure (§1.3). */
 const CHROME_DIRS = [
   'apps/web/src/app/',
@@ -61,7 +80,7 @@ const CHROME_DIRS = [
   'apps/web/src/components/chrome/',
 ];
 
-const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', 'public']);
+const SKIP_DIRS = new Set(['node_modules', '.next', '.next-build', 'dist', 'build', 'coverage', '.turbo', 'public']);
 const EXTS = /\.(tsx?|jsx?|mjs|cjs|css|scss)$/;
 
 const TAILWIND_PALETTE =
@@ -161,7 +180,7 @@ const RULES = [
   },
   {
     id: 'no-theme-branch',
-    skip: (f) => isTokenSource(f) || f === THEME_TS || f === THEME_TEST,
+    skip: (f) => isTokenSource(f) || f === THEME_TS || f === THEME_TEST || isTest(f),
     test: (code) => {
       const variant = code.match(/\b(?:dark|light):[a-z][a-z0-9-]*/);
       if (variant) return `theme variant "${variant[0]}"`;
@@ -282,10 +301,15 @@ async function main() {
 
   for (const f of files) await check(f);
 
+  // What this result is a result ABOUT. See scripts/lib/provenance.mjs — two runs of this
+  // exact script once reported 31 and 0 and were mistaken for two disagreeing instruments.
+  const prov = provenance(ROOT, 'apps/web');
+
   if (process.argv.includes('--json')) {
-    console.log(JSON.stringify({ scanned, violations, exemptions }, null, 2));
+    console.log(JSON.stringify({ provenance: prov, scanned, violations, exemptions }, null, 2));
   } else {
     console.log('\nToken discipline');
+    console.log(`  scanned at        ${prov.line}`);
     console.log(`  files scanned     ${scanned}`);
     console.log(`  violations        ${violations.length}`);
     console.log(`  exemptions        ${exemptions.length}`);

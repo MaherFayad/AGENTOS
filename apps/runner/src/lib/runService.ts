@@ -16,7 +16,7 @@ import type { RunInputValue, RunRequest } from '@agnetos/contracts';
 import { ApiError, toApiError } from './errors';
 import type { RunnerConfig } from './config';
 import { loadAgent, validateInputs, type AgentRecord } from './agents';
-import { isToolAllowed, unknownConnectorError } from './allowlist';
+import { isPathInsideScratch, isToolAllowed, unknownConnectorError } from './allowlist';
 import { readCompanyBrain } from './brain';
 import { buildPlanSummary, buildPrompt } from './prompt';
 import { createScratch, destroyScratch, extractArtifact } from './artifacts';
@@ -55,10 +55,15 @@ export interface RunnerServices {
 const noopLogger: RunnerLogger = { info: () => {}, warn: () => {}, error: () => {} };
 
 export function createRunnerServices(config: RunnerConfig, logger: RunnerLogger = noopLogger): RunnerServices {
+  const ledger = new SpendLedger(config);
+  // A spend file that cannot be written makes the Part V cap soft, and used to do so in
+  // complete silence. `/api/status.budget.persisted` carries it for machines; this carries
+  // it for whoever is reading the logs.
+  ledger.onPersistFailure = (message) => logger.warn({}, message);
   return {
     config,
     store: new RunStore(),
-    ledger: new SpendLedger(config),
+    ledger,
     langfuse: new LangfuseSink(config),
     session: createSdkSession,
     logger,
@@ -284,6 +289,9 @@ async function execute(
     try {
       state.status = 'running';
       scratchDir = await createScratch(config, state.runId);
+      // Captured as a const so the gate below cannot observe a later reassignment of the
+      // outer `scratchDir` (which the `finally` block nulls out on teardown).
+      const scratch = scratchDir;
 
       const events = services.session({
         systemPrompt: prompt.system,
@@ -293,7 +301,12 @@ async function execute(
         model: config.model,
         signal: state.abort.signal,
         abortController: state.abort,
-        isToolAllowed: (toolName) => isToolAllowed(record.allowlist, toolName),
+        // Two gates, both required. The name must be in `wired_into` (BOARD rule 4), AND
+        // any path it carries must resolve inside this run's scratch workspace. The second
+        // half used to be a comment in `allowlist.ts` rather than code, which is how twelve
+        // agents came to be widened to `workspace` on a boundary that did not exist.
+        isToolAllowed: (toolName, input) =>
+          isToolAllowed(record.allowlist, toolName) && isPathInsideScratch(scratch, input),
       });
 
       let sessionError: { message: string; retryable: boolean } | null = null;
@@ -357,7 +370,9 @@ async function execute(
         });
       }
 
-      const brainWrite = await writeBackBrain(config, record.slug, artifact);
+      // `inputs` is passed so the write-back can honour the mode the human chose:
+      // `review-gaps` reports on the brain and must never replace it.
+      const brainWrite = await writeBackBrain(config, record.slug, artifact, inputs);
       if (brainWrite) {
         await writeBrainSnapshot(config, brainWrite.completeness);
         state.stream.emit('token', {

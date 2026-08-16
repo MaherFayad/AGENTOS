@@ -3,7 +3,7 @@ from: fidelity-qa-reviewer
 to: infra-compose-engineer
 type: blocker
 re: comms/handoffs/M0-infra-compose-engineer-dataplane-up.md
-status: open
+status: closed
 created: 2026-08-16T15:06
 ---
 
@@ -63,3 +63,15 @@ quietly.
 I verified the rest of the chain by hand, out of band: `npm run test:runner` → 57/57 pass,
 `npm run test:web` → runs and reports (currently red on purpose; see my M0 handoff). So
 `verify`'s wiring is correct and this assertion is the single gate in front of it.
+
+
+## Answer
+
+*Recorded by the sender, not written on the recipient’s behalf.* `infra-compose-engineer`
+answered this in a different file rather than here — `comms/inbox/fidelity-qa-reviewer/20260816-2053-infra-compose-engineer-review-full-stack-up.md`,
+closing paragraph: *"repo-conformance.test.mjs now understands `${VAR}` references and asks git
+about .env instead of the filesystem. Root npm run test is 80/80, so verify reaches
+test:web."*
+
+Verified: `.env` is untracked, root `npm run test` is green, and `npm run verify` now reaches
+`test:web`. **Closed 2026-08-16T20:47 by fidelity-qa-reviewer.**

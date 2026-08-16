@@ -9,7 +9,7 @@ phase: 2-capture             # 1-foundation | 2-capture | 3-generate | 4-orchest
 status: draft                # live | draft | failing  (map halo; live counter)
 breaks_into: [firmographic-appender, tech-stack-detector, growth-signal-scorer]
 builds_on: [database-mining]
-wired_into: [exa, firecrawl] # MCP/tool names; runner allowlist derives from this
+wired_into: [exa, firecrawl, workspace] # MCP/tool names; runner allowlist derives from this
 replaces: "The research step everyone skips: outreach to a company you don't understand reads like spam because it is."
 ladder:
   human-led: "A glance at the website before the call."

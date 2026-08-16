@@ -41,6 +41,27 @@ COPY --chown=runner:nodejs package.json ./
 COPY --chown=runner:nodejs packages/contracts ./packages/contracts
 COPY --chown=runner:nodejs apps/runner ./apps/runner
 
+# ---------------------------------------------------------------------------
+# /workspaces — scratch (§3.2), artifacts (§3.4) AND the spend ledger (Part V).
+# ---------------------------------------------------------------------------
+# THIS IS A BILLING CONTROL, not a permissions nit. `runner_workspaces` is a named volume;
+# Docker seeds an empty one from the image's directory INCLUDING its ownership, so creating
+# it here — as root, before `USER runner` — is what makes it come up 1001:1001 on this box
+# and on the VPS. Without it the volume mounts root-owned, the runner (uid 1001) gets
+# EACCES, and three things break in increasing order of expense:
+#
+#   1. `createScratch` throws on every non-dry run, AFTER the billing gate, so it reads as
+#      a model failure rather than a mount failure;
+#   2. no artifact ever reaches disk;
+#   3. `SpendLedger.persist()` (apps/runner/src/lib/billing.ts:40,58) writes
+#      /workspaces/spend.json and SWALLOWS its error by design — a failed persist must not
+#      fail a run that already succeeded. So the Part V monthly cap silently reset to
+#      $0.00 on every restart. A cap a crash loop can drive through is a speed bump.
+#
+# Diagnosed by `runner-engineer` (comms/inbox/infra-compose-engineer/20260816-2121-…).
+# `artifacts` is created explicitly so the runner never has to mkdir the volume root.
+RUN mkdir -p /workspaces/artifacts && chown -R runner:nodejs /workspaces
+
 # The runner executes TypeScript directly via tsx rather than shipping a compiled dist.
 # @agnetos/contracts is source-only (no build step) so web and runner cannot drift, and a
 # transpile-on-boot server removes an entire class of build-ordering bugs at M0.

@@ -17,6 +17,7 @@ export * from './frontmatter';
 export * from './graph';
 export * from './api';
 export * from './panels';
+export * from './project';
 
 // ---------------------------------------------------------------------------
 // Ambiguity resolutions.

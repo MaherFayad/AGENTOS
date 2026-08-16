@@ -21,7 +21,8 @@ phase: 2-capture             # 1-foundation | 2-capture | 3-generate | 4-orchest
 status: live                 # live | draft | failing — map halo + "N OF 22 LIVE" counter
 breaks_into: [firmographic-appender, tech-stack-detector, growth-signal-scorer]
 builds_on: [database-mining]
-wired_into: [exa, firecrawl]  # MCP/tool names; runner allowlist derives from this
+wired_into: [exa, firecrawl, workspace]  # MCP/tool names; runner allowlist derives from this
+produces: md                 # md | json | pdf | txt | none — default md (ADR-009)
 replaces: "The research step everyone skips: outreach to a company you don't understand reads like spam because it is."
 ladder:
   human-led: "A glance at the website before the call."
@@ -52,6 +53,7 @@ deliver: {slack: "#sales-ops"}
 | `breaks_into` | — | `BREAKS INTO` chips → leaf nodes on map; chip click = fly-to |
 | `builds_on` | — | `BUILDS ON` dashed chip; also a map edge (prerequisite link) |
 | `wired_into` | — | `WIRED INTO` list **and** the runner's tool allowlist (security-relevant) |
+| `produces` | — | the artifact kind the run leaves behind; `md\|json\|pdf\|txt\|none`, **default `md`**. `none` = the deliverable is a side effect. Paired with `wired_into` by invariant 7 (ADR-009) |
 | `replaces` | ✔ | `WHAT IT REPLACES` quote box |
 | `ladder.*` | ✔ | `THE LADDER` three rows; all three keys required |
 | `the_human` | ✔ | `THE HUMAN` closing paragraph |
@@ -74,6 +76,13 @@ deliver: {slack: "#sales-ops"}
    runner is a `blocker` message to `runner-engineer`, not a silent TODO.
 6. `status: live` is set by observability (real runs exist), not by hand. Hand-set values
    get overwritten by `agent-auditor` (§3.4).
+7. **An agent with `produces` other than `none` must declare at least one connector that
+   grants a file-writing tool** (`Write`, `Edit` or `Bash` — derived from the registry's
+   `tools`, not from connector names). ADR-009. The runner asks every agent to write
+   `output.md` and extracts that file as the run's artifact; an agent with no write tool
+   produces nothing **and reports `ok`**, which is worse than failing. In practice the
+   declaration is `workspace`, never a runner-side base grant — the allowlist is exactly
+   `wired_into` and never a superset (BOARD rule 4, §3.2).
 
 ## Connector registry
 
@@ -82,6 +91,13 @@ kebab-case slugs; each value is `{label, tools[], note?}`. Keys starting with `$
 comments. The runner's code registry (`CONNECTOR_REGISTRY` in the runner) must have the
 same keys — the JSON is the data half, the runner is the grant. Adding a connector
 deliberately widens what agents in this library can do.
+
+A connector row may also carry `available: false` and `since: "M9"` for a connector whose
+backing server is not wired yet (ADR-009 decision 5, `runner-engineer`'s call). The
+validator reads both defensively — absent means available — and **warns**, per agent, that
+the declaration resolves to no tool at run time. It warns rather than fails because
+invariant 7 already fails the case that matters: an agent whose only connectors are unbuilt
+cannot write its artifact.
 
 `cluster` values are validated against `agents/_registry/clusters.json` (ADR-001): keys
 are the seven department slugs; each value is an ordered `{slug, label}[]` whose first
@@ -93,6 +109,15 @@ three entries are the department's map sub-labels (§2.1).
 before layout recompute. A file failing validation is excluded from the map with a
 console warning — it never renders half-parsed. The connector registry file is **required**;
 without it every `wired_into` name is unchecked and invariant 5 is a comment.
+
+## Resolved — ADR-009
+
+`produces` and invariant 7 come from
+[ADR-009](../decisions/ADR-009-artifact-write-capability.md), filed after `runner-engineer`
+found that `intelligence/company-interview` declared two connectors, neither of which could
+write the `output.md` its own system prompt demanded — and that **all 12 agents in the
+library had the same shape**. The fix is a declaration on the agent, never a base grant in
+the runner.
 
 ## Resolved — ADR-001
 

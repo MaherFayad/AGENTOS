@@ -1,26 +1,36 @@
 # status — fidelity-qa-reviewer
 
-**Updated:** 2026-08-16T15:06
-**Milestone:** M0
-**State:** working
+**Updated:** 2026-08-16T22:30
+**Milestone:** Phase 0 step 0.1 — complete
+**State:** review
 
 ## Now
-Wired a real test runner into `apps/web` — 56 test files had never executed. Baseline
-filed: 48 of 56 pass, 8 hang and have never run an assertion.
+**Phase 0 step 0.1 is done. M1, M2, M5, M6 all PASS; leads may flip all four.** Runner's
+step-0.3 prereqs PASS (I broke the confinement gate to check its test — it failed correctly).
+`test:web` green: 56 files, 406 tests.
 
 ## Blocked on
-Nothing for me. Two items routed and open:
-- `comms/inbox/shell-navigation-engineer/20260816-1506-fidelity-qa-reviewer-shell-tests-deadlock.md`
-  — 8 shell tests deadlock on a circular `vi.mock` factory. `test:web` stays red until fixed.
-- `comms/inbox/infra-compose-engineer/20260816-1506-fidelity-qa-reviewer-verify-blocked-secret-scan.md`
-  — `npm run verify` stops before `test:web` on a secret-scanner hit in their M0 handoff.
+Nothing. Four routed and open, none blocking a milestone:
+- `shell-navigation-engineer` — **FAIL**: `CostTicker` states a false narrative during a
+  ledger outage. An upgrade of my own 20:47 note that I wrongly called non-blocking.
+- `design-system-guardian` — ADR needed: spec line 184 names `--ink-3` for the §2.5.6 rails;
+  §9 overrode it inside a bug fix, which their own §9.5 forbids. Plus `check-comms` still red.
+- `map-galaxy-engineer` — the two §2.2 rails take `RailLabel`'s faint default. M1 stays PASS.
+- User decision on `comms/inbox/_all/20260816-2110-…` (the 1440px gap).
 
 ## Last handoff
-`comms/handoffs/M0-fidelity-qa-reviewer-test-runner.md`
+`comms/handoffs/M1-fidelity-qa-reviewer-review-queue-burndown.md`
 
 ## Next
-1. Answer the Part VI review queue in `comms/inbox/fidelity-qa-reviewer/` — 20 open
-   `review-request` messages, none answered since the runner landed. Re-check any PASS
-   that was claimed on `apps/web` tests, since none of them had run.
-2. Raise the `tsconfig.json` gap: test files are excluded from `tsc --noEmit`, so they
-   execute but are still not type-checked. Needs an owner and a milestone.
+1. Re-gate the CostTicker fix by **re-running the outage**, not by reading the diff.
+2. Fold three method corrections into `cc-fidelity-check`, all learned today from agents I
+   was reviewing:
+   - **Check default props, not just call sites.** A grep cannot see `tone="faint"`.
+     It hid 2 of 20 sites from me and from the token owner.
+   - **When N authors make the same mistake, look for the rule that told them to.**
+     `panel-schema.md` rule 2 said `--ink-3`. I filed three instances; one was prescribed.
+   - **"What would have to be true for this to be wrong, and did anyone look?"**
+     (`runner-engineer`). Five fabricated numbers and three comments-mistaken-for-guarantees
+     today were all one failure: something *declared* read as something *observed*.
+3. Standing acceptance case, now proven: stop Postgres, confirm no surface shows a plausible
+   zero — or a plausible narrative.

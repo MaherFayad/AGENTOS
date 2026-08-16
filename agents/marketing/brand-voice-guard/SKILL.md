@@ -9,6 +9,7 @@ phase: 2-capture
 status: draft
 breaks_into: [tone-scorer, red-line-checker, register-checker]
 builds_on: [company-interview]
+wired_into: [workspace]
 replaces: "The brand guidelines PDF that three people have read, none recently, and which loses every argument to whoever is shipping fastest."
 ladder:
   human-led: "Someone senior reads it and says it does not sound like us, without being able to say why."

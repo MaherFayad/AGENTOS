@@ -30,8 +30,12 @@ export interface AgentSessionOptions {
    * The runner's own gate. Returns false for anything outside the allowlist — see the
    * enforcement-point comment in `allowlist.ts` for why this exists alongside
    * `allowedTools`.
+   *
+   * **It takes the tool's `input`, not just its name.** For `workspace` the name alone was
+   * never the boundary: `Write` is permitted, `Write("/repo/.env")` must not be. The cwd
+   * only decides where a relative path resolves.
    */
-  isToolAllowed: (toolName: string) => boolean;
+  isToolAllowed: (toolName: string, input: unknown) => boolean;
 }
 
 export type AgentSessionFactory = (options: AgentSessionOptions) => AsyncIterable<AgentSessionEvent>;
@@ -82,10 +86,12 @@ export const createSdkSession: AgentSessionFactory = async function* createSdkSe
       permissionMode: 'dontAsk',
       abortController: options.abortController,
       canUseTool: async (toolName: string, input: unknown) => {
-        if (!options.isToolAllowed(toolName)) {
+        if (!options.isToolAllowed(toolName, input)) {
           return {
             behavior: 'deny' as const,
-            message: `"${toolName}" is not in this agent's wired_into list.`,
+            message:
+              `"${toolName}" was refused: it is either outside this agent's wired_into list, ` +
+              'or it asked for a path outside this run’s scratch workspace.',
           };
         }
         return { behavior: 'allow' as const, updatedInput: input };
@@ -111,7 +117,7 @@ export const createSdkSession: AgentSessionFactory = async function* createSdkSe
         if (call) {
           // Belt and braces: even if the SDK's own gating ever changes, a call outside
           // the agent's `wired_into` never reaches the stream as an executed tool.
-          if (!options.isToolAllowed(call.name)) {
+          if (!options.isToolAllowed(call.name, call.input)) {
             yield {
               type: 'tool',
               name: call.name,

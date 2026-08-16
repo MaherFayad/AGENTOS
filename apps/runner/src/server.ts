@@ -10,12 +10,13 @@ import { loadConfig, type RunnerConfig } from './lib/config.ts';
 import { createRunnerServices, type RunnerLogger, type RunnerServices } from './lib/runService.ts';
 import { createGraphWatcher, type GraphWatcher } from './lib/watcher.ts';
 import { registerApi, type ApiContext } from './routes/api.ts';
-import { createObservability, type Observability } from './observability/index.ts';
+import { createLedgerConnection, type LedgerConnection } from './lib/ledgerConnection.ts';
 
 export interface BuiltRunner {
   app: FastifyInstance;
   services: RunnerServices;
   watcher: GraphWatcher | null;
+  ledger: LedgerConnection;
   close: () => Promise<void>;
 }
 
@@ -50,14 +51,26 @@ export async function buildRunner(options: BuildOptions = {}): Promise<BuiltRunn
 
   const services = createRunnerServices(config, logger);
 
-  if (options.observe !== false && process.env.DATABASE_URL) {
-    try {
-      const obs: Observability = await createObservability();
+  /**
+   * The ledger connection **supervises** itself: it retries, it reconnects, and it reports
+   * which of the three states it is in. What used to be here was one `await` in a
+   * `try/catch` — a runner that lost the race against `initdb` printed "observability is
+   * not up" and stayed detached for the life of the process, while the stack reported
+   * healthy and `/api/metrics/*` returned 503. That failure is indistinguishable from the
+   * honest "no runs yet" empty state, which is how it survived a whole session unnoticed.
+   *
+   * `services.obs` is assigned and un-assigned by the supervisor. Nothing may capture it:
+   * `startRun` reads `services.obs` per run, and the metrics routes read
+   * `ledger.current()` per request.
+   */
+  const ledger = createLedgerConnection({
+    configured: options.observe !== false && Boolean(process.env.DATABASE_URL),
+    logger,
+    onChange: (obs) => {
       services.obs = obs;
-    } catch (err) {
-      logger.warn({ err }, 'observability is not up — runs still work; LAST RUNS and the cost ticker will be empty');
-    }
-  }
+    },
+  });
+  await ledger.start();
 
   const app = Fastify({
     logger: {
@@ -105,6 +118,7 @@ export async function buildRunner(options: BuildOptions = {}): Promise<BuiltRunn
   const ctx: ApiContext = {
     services,
     watcher,
+    ledger,
     startedAt: new Date().toISOString(),
     websocket,
     sockets,
@@ -141,10 +155,13 @@ export async function buildRunner(options: BuildOptions = {}): Promise<BuiltRunn
     app,
     services,
     watcher,
+    ledger,
     close: async () => {
       clearInterval(sweep);
       await watcher?.close();
-      await services.obs?.close();
+      // The supervisor owns the pool's lifetime now — closing `services.obs` directly
+      // would leave a retry timer running against a handle nobody holds.
+      await ledger.close();
       await app.close();
     },
   };

@@ -54,11 +54,17 @@ export type Observability = Instrumentation & {
  */
 export async function createObservability(
   env: Record<string, string | undefined> = process.env,
+  /**
+   * Called when an idle pooled client dies. Without a listener the Pool rethrows and the
+   * runner process exits — see `db/client.ts`. `runner-engineer`'s ledger supervisor
+   * passes its reconnect handler here.
+   */
+  onError?: (error: unknown) => void,
 ): Promise<Observability> {
   // Infra's compose names the business database `APP_DATABASE_URL` (Langfuse has
   // its own `DATABASE_URL` on a different database). Accept either; never the
   // Langfuse-internal URL — that would put our ledger in their schema.
-  const db = await connect(env.DATABASE_URL ?? env.APP_DATABASE_URL);
+  const db = await connect(env.DATABASE_URL ?? env.APP_DATABASE_URL, { onError });
   await migrate(db);
   const instrumentation = createInstrumentation({ sink: sinkFromEnv(env), ledger: createLedger(db) });
   return {

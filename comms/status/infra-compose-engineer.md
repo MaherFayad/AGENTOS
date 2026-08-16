@@ -1,27 +1,31 @@
 # status — infra-compose-engineer
 
-**Updated:** 2026-08-16T11:48
-**Milestone:** M0
+**Updated:** 2026-08-16T21:47
+**Milestone:** M0 (Phase 0 steps 0.2, 0.6 + three coordinator follow-ups)
 **State:** review
 
 ## Now
-Data plane is genuinely up for the first time. `postgres` + `langfuse` healthy on
-loopback, `agnetos` ledger migrated (3/3), runner attached — the "observability is not
-up" warning is gone. `.env` created, gitignored, real secrets.
+Nothing in flight. Six services healthy on loopback. Since the handoff: `/workspaces` now
+seeds as uid 1001 from the image — that silently disabled the Part V spend ledger, so the
+monthly cap was resetting every restart; verified persistent across restart AND recreate.
+Langfuse org/project/key seeded headlessly, **no volume reset needed** (migrated-but-empty
+seeds fine), keys authenticate with a negative control. `happy` commented out of compose —
+its image never existed anywhere; absence is now explicit rather than fictional.
 
 ## Blocked on
-Nothing of mine. Two things need the human, not an agent:
-`RUNNER_ANTHROPIC_API_KEY` (no run can execute until it exists, so every dashboard stays
-honestly empty) and stopping the Penpot containers (`check-bind.mjs` exits 1 on their
-`0.0.0.0` binds — every AgnetOS bind is clean).
+The user, for both. No agent can unblock either.
+1. `RUNNER_ANTHROPIC_API_KEY` — the only thing left between here and step 0.3.
+2. Tailscale credentials + the host-install vs `network_mode: service:tailscale` decision.
+   **Parked at the coordinator's instruction. Not acting on it.**
 
 ## Last handoff
-`comms/handoffs/M0-infra-compose-engineer-dataplane-up.md`
+`comms/handoffs/M0-infra-compose-engineer-full-stack-up.md` (+ 21:46 addendum)
 
 ## Next
-1. Wait on `observability-engineer` — `/api/metrics/runs` is down on a real
-   `make_interval` type bug (`queries.ts:238`), filed with repro + fix.
-2. Start `ofelia` + `caddy` once the web image builds; ofelia picks up the ADR-008 prune
-   job with no HUP. Prune endpoint already verified against the live DB.
-3. On `TS_AUTHKEY`: set `TLS_MODE=tailscale`, `TAILSCALE_IP`, `CC_HOST`, run
-   `--profile tls`, re-run `check-bind.mjs`.
+1. Nothing of mine until a secret lands. Not idle-waiting — no unblocked Part V work left.
+2. On the API key: restart runner, hand 0.3 to `runner-engineer`, watch the first
+   `spend.json` persist (the one link in the billing chain I could not test).
+3. When `sessions-relay-engineer` asks: write `infra/happy.Dockerfile` around
+   `happy-server-self-host` and uncomment the block; first boot decides the PGlite footprint.
+4. Not mine, filed, do not duplicate: the `langfuse.tailnet` null-sink URL and
+   `/api/status`'s fake `tailscale: online` are both runner code.

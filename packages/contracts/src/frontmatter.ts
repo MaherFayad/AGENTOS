@@ -74,6 +74,19 @@ export type Approval = (typeof APPROVALS)[number];
 export const INPUT_TYPES = ['text', 'url', 'number', 'select', 'textarea', 'date'] as const;
 export type InputType = (typeof INPUT_TYPES)[number];
 
+/**
+ * What the run leaves behind (ADR-009). Defaults to `md` when absent, because the runner
+ * asks every agent to write `output.md` and extracts that file as the artifact.
+ *
+ * `none` is the deliberate opt-out for an agent whose deliverable is a side effect — it
+ * posts to Slack, it does not write a document. It exists so that the validator's
+ * "declare a connector that can write a file" rule has a truthful escape hatch: without
+ * one, the first side-effect agent gets `workspace` added to silence the error, which is
+ * the under-thought widening the rule exists to prevent.
+ */
+export const PRODUCES = ['md', 'json', 'pdf', 'txt', 'none'] as const;
+export type Produces = (typeof PRODUCES)[number];
+
 /** The ladder's three rungs are exactly the three tiers — the active row is `tier`. */
 export const LADDER_RUNGS = TIERS;
 
@@ -198,6 +211,14 @@ export interface AgentFrontmatter {
    * not need widens the blast radius of a bad run.
    */
   wired_into?: string[];
+  /**
+   * The artifact kind this agent leaves behind. Defaults to `md`. `none` means the
+   * deliverable is a side effect and no `output.*` is expected (ADR-009).
+   *
+   * Paired with `wired_into` by invariant 7: anything other than `none` requires a
+   * connector that grants a file-writing tool, or the run produces nothing and says `ok`.
+   */
+  produces?: Produces;
   /** The WHAT IT REPLACES quote box (§2.3.8). A sentence about the manual work. */
   replaces: string;
   ladder: Ladder;
@@ -269,6 +290,7 @@ export const agentFrontmatterSchema = z
     breaks_into: z.array(slug('breaks_into entry')).optional(),
     builds_on: z.array(slug('builds_on entry')).optional(),
     wired_into: z.array(slug('wired_into entry')).optional(),
+    produces: z.enum(PRODUCES).optional(),
     replaces: z.string().min(12, 'replaces must be a sentence about the manual work'),
     ladder: ladderSchema,
     the_human: z

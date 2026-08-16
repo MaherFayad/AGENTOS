@@ -172,6 +172,13 @@ export async function createGraphWatcher(
         departments: engine.loadDepartments(config.repoRoot),
         clusters: engine.loadClusters(config.repoRoot),
         brainCompleteness: completeness.value,
+        // The count travels with the fraction (graph-layout.md, `core`). A bare fraction
+        // is what let a fabricated 0.45 sit in the payload for a milestone; `9 of 20` is
+        // checkable against COMPANY.md by anyone who can count markers. Passing neither
+        // made `/ws/graph` rebuilds emit `null` and degrade the map to a sentence with no
+        // numbers, which is honest but needlessly worse than the truth we already have.
+        brainAnswered: completeness.answered,
+        brainTotal: completeness.total,
         now: new Date().toISOString(),
       });
     } catch (err) {
