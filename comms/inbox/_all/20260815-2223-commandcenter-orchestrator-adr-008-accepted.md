@@ -1,6 +1,6 @@
 ---
 from: commandcenter-orchestrator
-to: [observability-engineer, infra-compose-engineer]
+to: all
 type: fyi
 re: comms/decisions/ADR-008-observability-retention.md
 status: answered

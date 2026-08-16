@@ -24,7 +24,7 @@ function SignalItem({ signal }: { signal: Signal }): React.JSX.Element {
     signal.query ?? { source: 'static', value: 0, note: 'placeholder for a signal with no query' },
   );
   const rendered = signal.query
-    ? renderSignal(signal, result.status, result.data, result.loading)
+    ? renderSignal(signal, result.status, result.data, result.loading, result.message)
     : { tone: signal.tone, lead: signal.lead, detail: signal.detail };
 
   return (
@@ -38,14 +38,26 @@ function SignalItem({ signal }: { signal: Signal }): React.JSX.Element {
   );
 }
 
+/**
+ * `pending` is what the strip says when the source is **wired and returned nothing** —
+ * "No failed runs in this window." It is a claim about the data, so it must not be
+ * printed when the source could not be read at all: a route that is missing a filter and
+ * a window that genuinely holds no failures are different facts, and only one of them
+ * is "no failed runs". An `unavailable` result therefore shows its own sentence.
+ */
 function renderSignal(
   signal: Signal,
   status?: string,
   data?: unknown,
   loading?: boolean,
+  message?: string,
 ): { tone: SignalTone; lead: string; detail?: string } {
   if (!signal.query) return { tone: signal.tone, lead: signal.lead, detail: signal.detail };
   if (loading) return { tone: 'wait', lead: signal.pending ?? 'Waiting on a figure.', detail: signal.detail };
+
+  if (status === 'unavailable' || status === 'error') {
+    return { tone: 'wait', lead: message ?? 'No figure yet.' };
+  }
 
   const value = toScalar(data);
   if (status !== 'ok' || value === null) {

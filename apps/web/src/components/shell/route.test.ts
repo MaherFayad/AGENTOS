@@ -7,6 +7,7 @@ import {
   viewHasLiveCounter,
   viewHasZoom,
   viewHref,
+  viewSurface,
 } from './route';
 
 describe('parseShellRoute', () => {
@@ -91,5 +92,28 @@ describe('per-view capabilities', () => {
   it('gives the live counter to the canvas views only', () => {
     expect(viewHasLiveCounter('map')).toBe(true);
     expect(viewHasLiveCounter('sessions')).toBe(false);
+  });
+});
+
+describe('viewSurface — the §2.0 offset contract', () => {
+  it('lets the two full-bleed canvases paint under the transparent bar', () => {
+    expect(viewSurface('map')).toBe('canvas');
+    expect(viewSurface('dashboards')).toBe('canvas');
+  });
+
+  it('reserves the chrome band for views that lay out in document flow', () => {
+    // The bug this replaced: CHART printed its department tabs on the same row as the
+    // search pill, because nothing reserved the band the floating bar occupies.
+    expect(viewSurface('chart')).toBe('flow');
+    expect(viewSurface('sessions')).toBe('flow');
+  });
+
+  it('defaults every view to flow, so a new view is safe on the day it is added', () => {
+    const flow = VIEWS.filter((view) => viewSurface(view) === 'flow');
+    const canvas = VIEWS.filter((view) => viewSurface(view) === 'canvas');
+    // Exceptions are listed; membership is not. If this ever inverts, a view added
+    // tomorrow starts underneath the bar and nobody finds out until a screenshot.
+    expect(canvas.length).toBeLessThan(flow.length + canvas.length);
+    expect(flow.length).toBeGreaterThan(0);
   });
 });

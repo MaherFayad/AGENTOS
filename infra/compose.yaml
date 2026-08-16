@@ -174,6 +174,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-agnetos}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
       POSTGRES_DB: ${POSTGRES_DB:-langfuse}
+      # Read by ./postgres/init/01-databases.sh below. initdb creates only POSTGRES_DB;
+      # these two are the run ledger (§3.5) and the relay store (§3.1), which live in
+      # their own databases so a ledger dump never drags Langfuse's schema along.
+      APP_DB: ${APP_DB:-agnetos}
+      HAPPY_DB: ${HAPPY_DB:-happy}
       # Deterministic collation so a dump restores identically on the VPS.
       POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
     volumes:
@@ -181,6 +186,10 @@ services:
       # driver:local volume — not a bind mount to a host path (which would break the
       # portability rule) and not a cloud volume driver. Backups: see infra/BACKUP.md.
       - langfuse_pgdata:/var/lib/postgresql/data
+      # Runs ONCE, on first init of an empty volume, to create APP_DB and HAPPY_DB.
+      # In compose rather than a typed `createdb` because of the portability rule: if it
+      # isn't in this file, it doesn't exist on the VPS either.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       # Loopback, and 5433 so it cannot collide with a Postgres already on the host.
       - '${DEV_BIND_ADDR:-127.0.0.1}:${POSTGRES_HOST_PORT:-5433}:5432'

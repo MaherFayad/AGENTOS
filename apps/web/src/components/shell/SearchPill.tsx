@@ -102,7 +102,10 @@ export function SearchPill(): React.JSX.Element {
 
   return (
     <div className="relative">
-      <div className="flex h-8 w-[184px] items-center gap-2 rounded-full border border-line bg-card px-3 transition-colors focus-within:border-line-2 hover:border-line-2 sm:w-[220px]">
+      {/* 150px on the narrowest phones so the pill and `+ New session` still fit one row
+          at 375px (§3.6); the spec's width from `sm` up. Search is the keyboard path to
+          the canvas, so it is never the control that gets dropped. */}
+      <div className="flex h-8 w-[150px] items-center gap-2 rounded-full border border-line bg-card px-3 transition-colors focus-within:border-line-2 hover:border-line-2 min-[420px]:w-[184px] sm:w-[220px]">
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" className="shrink-0 text-ink-2">
           <circle cx="7" cy="7" r="4.5" />
           <path d="M10.5 10.5 14 14" strokeLinecap="round" />
@@ -147,6 +150,16 @@ export function SearchPill(): React.JSX.Element {
                   id={`${listId}-${index}`}
                   role="option"
                   aria-selected={index === active}
+                  // Named explicitly, because the accessible name computed from the
+                  // children is not the label: `highlightSegments` splits it mid-word to
+                  // brighten the matched characters, and the accname algorithm joins those
+                  // element boundaries with spaces — "acen" over "Account Enrichment"
+                  // announces as "Ac count En richment". Search is the keyboard path to
+                  // every node on a canvas galaxy (§2.0), so the announced string has to
+                  // be the real one.
+                  aria-label={`${result.item.label}, ${
+                    result.item.kind === 'agent' ? (result.item.department ?? 'agent') : result.item.kind
+                  }`}
                   onMouseEnter={() => setActive(index)}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => select(result.item)}

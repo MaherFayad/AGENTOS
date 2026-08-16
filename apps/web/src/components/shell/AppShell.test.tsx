@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './AppShell';
-import { GRAPH_FIXTURE, pathnameRef, stubFetch } from './test-harness';
+import { GRAPH_FIXTURE, pathnameRef, stubFetch, stubFullscreenSupport } from './test-harness';
 
-vi.mock('next/navigation', async () => (await import('./test-harness')).navigationMock());
-vi.mock('./ui', async () => (await import('./test-harness')).uiMock());
+vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
+vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
@@ -13,14 +13,21 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-beforeEach(() =>
+/** Undo for `stubFullscreenSupport` — jsdom has no Fullscreen API; see the harness. */
+let restoreFullscreen: () => void = () => undefined;
+
+beforeEach(() => {
+  restoreFullscreen = stubFullscreenSupport();
   stubFetch({
     '/api/graph': { json: GRAPH_FIXTURE },
     '/api/status': { json: { tailscale: 'online', queueDepth: 0 } },
     '/api/cost/today': { json: { usd: 12.4 } },
-  }),
-);
-afterEach(() => vi.unstubAllGlobals());
+  });
+});
+afterEach(() => {
+  restoreFullscreen();
+  vi.unstubAllGlobals();
+});
 
 const renderShellAt = (pathname: string) => {
   pathnameRef.current = pathname;
@@ -50,7 +57,12 @@ describe('AppShell (§2.0 as a whole)', () => {
     // The centre column is `auto`; the sides are equal `1fr`. This is what lets the
     // fourth tab and the cost ticker land without moving the tabs (§2.0).
     expect(header?.className).toContain('grid-cols-[1fr_auto_1fr]');
-    expect(header?.querySelector('[role="tablist"]')?.parentElement?.className).toContain('justify-self-center');
+    // `closest`, not `parentElement`: ViewTabs wraps the control in a `display: contents`
+    // div (a handle for its scroll-into-view effect) which has no box of its own, so the
+    // centring column is its ancestor rather than the tablist's direct parent.
+    const column = header?.querySelector('[role="tablist"]')?.closest('.justify-self-center');
+    expect(column).toBeTruthy();
+    expect(column?.className).toContain('col-start-2');
   });
 
   it('reserves the safe-area insets on all four edges (§3.6)', () => {

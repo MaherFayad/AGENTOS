@@ -84,6 +84,7 @@ cleanly and records the note; the run ends `done{status:"denied", denialNote}`.
 | route | returns |
 |---|---|
 | `GET /api/graph` | the **stored** layout artifact — see `contracts/graph-layout.md`. Never simulated (ADR-003) |
+| `GET /api/agents` | `{agents:[{slug, path, frontmatter}], skipped:[{slug, reason}]}` — the list projection CHART's matrix draws from (§2.6) |
 | `GET /api/agents/:slug` | `{slug, path, frontmatter, body, runnable:{tools[], missingConnectors[], approvalRequired, scheduled}}` |
 | `GET /api/runs?agent=&limit=5` | `{runs:[{runId, agent, status, startedAt, durationMs, costUsd, traceUrl}]}` |
 | `GET /api/cost/today` | `{usd}` — **`observability-engineer`'s route**, not the runner's |
@@ -91,8 +92,20 @@ cleanly and records the note; the run ends `done{status:"denied", denialNote}`.
 | `GET /api/status` | `{tailscale, queueDepth, activeRuns, pendingApprovals, runnerConfigured, budget, brain, graphBuilt, startedAt}` |
 
 `:slug` is `department/agent-slug` and contains a slash — the route is a wildcard match
-on everything after `/api/agents/`. Rows carry `startedAt` as ISO 8601, not a
-pre-rendered "3m ago", so relative time stays live without polling.
+on everything after `/api/agents/`. **Callers must not `encodeURIComponent` the whole
+slug**: the separator is part of the path, not a value inside a segment. Encode each
+segment and join with `/`, so a folder name that ever grows a `%`, `?` or `#` still
+arrives intact (the runner decodes each segment, and a stray `%` would otherwise throw
+before any handler ran). Rows carry `startedAt` as ISO 8601, not a pre-rendered "3m ago",
+so relative time stays live without polling.
+
+The list form omits `body` and `runnable` on purpose: a twelve-tile matrix does not need
+twelve system prompts, and the cheapest read in the app must not become the most
+expensive. An agent whose frontmatter fails the schema is **absent** from `agents[]` and
+named in `skipped[]` — the same rule the map follows, so the two views cannot disagree
+about which agents exist. `GET /api/agents/` (trailing slash) is the collection too; it
+used to answer 400 `bad_request`, which read like the caller's mistake when the route was
+simply missing.
 
 The one field the runner overlays onto the stored graph payload is
 `core.brainCompleteness` (§3.3), which it computes from `company/`. Positions are served

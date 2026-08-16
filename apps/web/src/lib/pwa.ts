@@ -110,11 +110,21 @@ export async function promptInstall(): Promise<'accepted' | 'dismissed' | 'unava
   return outcome;
 }
 
-/** True when running as an installed PWA rather than a browser tab. */
+/**
+ * True when running as an installed PWA rather than a browser tab (§3.6).
+ *
+ * `matchMedia` is guarded, not assumed: iOS Safari answers this through
+ * `navigator.standalone` instead, and jsdom does not implement `matchMedia` at all — so
+ * an unguarded call throws inside `useEffect` and takes the whole shell down in tests.
+ * "Cannot tell" resolves to "browser tab", which is the state that shows *more* UI
+ * (the install hint), so the failure mode is a redundant nudge rather than a missing one.
+ */
 export function isStandalone(): boolean {
   if (typeof window === 'undefined') return false;
   const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone;
-  return window.matchMedia('(display-mode: standalone)').matches || iosStandalone === true;
+  if (iosStandalone === true) return true;
+  if (!window.matchMedia) return false;
+  return window.matchMedia('(display-mode: standalone)').matches;
 }
 
 /**

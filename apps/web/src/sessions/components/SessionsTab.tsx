@@ -17,8 +17,10 @@
  * ========================================================================== */
 
 import { useRouter } from 'next/navigation';
+import { useT } from '@/i18n';
 import { formatCost, formatElapsed, shortenRepo } from '../lib/format';
-import { countWaiting, stateLabel } from '../lib/sort';
+import { countWaiting } from '../lib/sort';
+import { STATE_KEY } from '../lib/stateKey';
 import { useNow, useSessionList } from '../data/useSessionList';
 import { useSessionKey } from '../data/useSessionKey';
 import { KeyGate } from './KeyGate';
@@ -31,6 +33,7 @@ export function SessionsTab({
 }: {
   spawnRequested?: boolean;
 } = {}): React.JSX.Element {
+  const t = useT();
   const { status, key, error, unlock } = useSessionKey();
   const { list } = useSessionList(key);
   const now = useNow();
@@ -48,42 +51,40 @@ export function SessionsTab({
   return (
     <div className={s.tab}>
       <header className={s.header}>
-        <span className={s.eyebrow}>SESSIONS</span>
+        <span className={`u-eyebrow ${s.eyebrow}`}>{t('sessions.eyebrow')}</span>
         {waiting > 0 ? (
-          <span className={s.waitingCount}>{waiting} waiting on you</span>
+          <span className={`u-nums ${s.waitingCount}`}>
+            {t('sessions.waiting', { count: waiting })}
+          </span>
         ) : null}
       </header>
-      <p className={s.billingNote}>
-        Billed to your Claude subscription — not the runner’s monthly cap.
-      </p>
+      <p className={s.billingNote}>{t('sessions.billing')}</p>
 
       {spawnRequested ? (
         <p className={s.spawn} role="status">
-          A new session starts on a machine running Claude Code, not in this browser. Pair
-          that machine with the relay and it will appear here.
+          {t('sessions.spawn')}
         </p>
       ) : null}
 
       <div className={s.list} role="list">
-        {list.state === 'loading' ? <p className={s.empty}>Reading the relay…</p> : null}
+        {list.state === 'loading' ? (
+          <p className={s.empty}>{t('sessions.list.loading')}</p>
+        ) : null}
 
         {list.state === 'unavailable' ? (
           <p className={s.empty}>
-            <span className={s.emptyTitle}>No answer from the relay</span>
-            {list.message}
+            <span className={s.emptyTitle}>{t('empty.relay.title')}</span>
+            {list.message || t('empty.relay.body')}
           </p>
         ) : null}
 
         {list.state === 'ready' && list.sessions.length === 0 ? (
           <p className={s.empty}>
-            <span className={s.emptyTitle}>Nothing is running</span>
-            Start a Claude Code session on any machine paired with this relay and it will
-            appear here — with its transcript, and with a button to answer its permission
-            prompts from wherever you are.
+            <span className={s.emptyTitle}>{t('empty.sessions.title')}</span>
+            {t('empty.sessions.body')}
             {list.undecryptable > 0 ? (
               <span className={s.emptyHint}>
-                {list.undecryptable} session{list.undecryptable === 1 ? '' : 's'} on the relay
-                could not be decrypted with this device’s key.
+                {t('sessions.list.undecryptable', { count: list.undecryptable })}
               </span>
             ) : null}
           </p>
@@ -102,8 +103,7 @@ export function SessionsTab({
 
         {list.state === 'ready' && list.sessions.length > 0 && list.undecryptable > 0 ? (
           <p className={s.emptyHint}>
-            {list.undecryptable} more session{list.undecryptable === 1 ? '' : 's'} on the relay
-            could not be decrypted with this device’s key.
+            {t('sessions.list.undecryptable', { count: list.undecryptable })}
           </p>
         ) : null}
       </div>
@@ -122,8 +122,9 @@ function SessionRow({
   now: number;
   onOpen: () => void;
 }): React.JSX.Element {
-  const { meta, envelope } = session;
-  const label = stateLabel(meta.state);
+  const t = useT();
+  const { meta } = session;
+  const label = t(STATE_KEY[meta.state]);
 
   return (
     <button
@@ -153,7 +154,9 @@ function SessionRow({
         </span>
       </span>
 
-      <span className={s.rowNumbers}>
+      {/* Durations and money are LTR islands inside an RTL line (§1.4) —
+          `.u-nums` isolates them so "$1.20" never renders as "1.20$". */}
+      <span className={`u-nums ${s.rowNumbers}`}>
         <span className={s.elapsed}>{formatElapsed(now - meta.startedAt)}</span>
         <span className={s.cost}>{formatCost(meta.costUsd)}</span>
       </span>

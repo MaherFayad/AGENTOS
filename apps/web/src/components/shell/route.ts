@@ -105,6 +105,29 @@ export function breadcrumbFor(route: ShellRoute): BreadcrumbConfig | null {
   }
 }
 
+/**
+ * How a view relates to the chrome band — the §2.0 shell contract.
+ *
+ * `canvas` — the view paints edge to edge *under* the transparent bar on purpose.
+ *   MAP's galaxy must be draggable from edge to edge; DASHBOARDS' carousel is an
+ *   absolutely-positioned full-bleed composition. These views place their own
+ *   content clear of the chrome using `var(--shell-inset-t/b)`.
+ * `flow` — the view lays content out in document flow from the top. The shell
+ *   reserves its own band for it, so the first row starts below the bar.
+ *
+ * **`flow` is the default, and that is the whole point.** The bug this replaced was
+ * CHART rendering its department tabs on the same row as the search pill. Listing
+ * the exceptions rather than the members means a view added tomorrow is safe on the
+ * day it is added, and a view that wants to paint under the bar has to say so.
+ */
+export type ViewSurface = 'canvas' | 'flow';
+
+const CANVAS_VIEWS: readonly ShellView[] = ['map', 'dashboards'];
+
+export function viewSurface(view: ShellView): ViewSurface {
+  return CANVAS_VIEWS.includes(view) ? 'canvas' : 'flow';
+}
+
 /** Zoom applies to the two canvas views only (contracts/graph-layout.md). */
 export function viewHasZoom(view: ShellView): boolean {
   return view === 'map' || view === 'chart';

@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionStatus } from './ConnectionStatus';
 import { renderShell, stubFetch } from './test-harness';
 
-vi.mock('next/navigation', async () => (await import('./test-harness')).navigationMock());
-vi.mock('./ui', async () => (await import('./test-harness')).uiMock());
+vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
+vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -13,7 +13,9 @@ describe('ConnectionStatus (§2.0 bottom-right)', () => {
     stubFetch({ '/api/status': { json: { tailscale: 'online', queueDepth: 2 } } });
     renderShell(<ConnectionStatus />);
     await waitFor(() => expect(screen.getByText('ONLINE')).toBeTruthy());
-    expect(screen.getByText('2 QUEUED')).toBeTruthy();
+    // "QUEUED" is its own span so it can be dropped below 420px (the pill would otherwise
+    // clip on a phone); the reading is still one string to a reader.
+    expect(screen.getByText((_, el) => el?.textContent === '2 QUEUED')).toBeTruthy();
   });
 
   it('says so in a sentence when the endpoint is not built yet', async () => {

@@ -27,3 +27,4 @@ company/.brain.json
 .DS_Store
 Thumbs.db
 *.log
+.gstack/

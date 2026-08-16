@@ -10,8 +10,14 @@
  * ========================================================================== */
 
 import { useState } from 'react';
+import { useT } from '@/i18n';
 import { relayToken, setRelayToken } from '../relay/client';
 import s from '../sessions.module.css';
+
+/** The CLI command the secret comes from. A command name, not copy — it is the
+ *  same nine characters in every language, so it is interpolated rather than
+ *  translated (§1.4). */
+const HAPPY_AUTH = 'happy auth';
 
 export function KeyGate({
   onUnlock,
@@ -20,6 +26,7 @@ export function KeyGate({
   onUnlock: (secret: string) => void | Promise<void>;
   error: string | null;
 }): React.JSX.Element {
+  const t = useT();
   const [secret, setSecret] = useState('');
   const [token, setToken] = useState('');
   const alreadyPaired = Boolean(relayToken());
@@ -36,23 +43,19 @@ export function KeyGate({
           setToken('');
         }}
       >
-        <h1 className={s.gateTitle}>Unlock your sessions</h1>
-        <p className={s.gateBody}>
-          Transcripts are end-to-end encrypted. Paste the recovery secret from{' '}
-          <code>happy auth</code> on the machine running Claude Code and this browser will
-          decrypt them locally.
-        </p>
+        <h1 className={s.gateTitle}>{t('sessions.gate.title')}</h1>
+        <p className={s.gateBody}>{t('sessions.gate.body', { command: HAPPY_AUTH })}</p>
         <input
           className={s.gateInput}
           type="password"
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
-          placeholder="recovery secret"
+          placeholder={t('sessions.gate.secret')}
           autoComplete="off"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label="Recovery secret"
+          aria-label={t('sessions.gate.secret')}
         />
         {alreadyPaired ? null : (
           <input
@@ -60,26 +63,23 @@ export function KeyGate({
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="relay token (optional until happy-server is live)"
+            placeholder={t('sessions.gate.tokenHint')}
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            aria-label="Relay pairing token"
+            aria-label={t('sessions.gate.token')}
           />
         )}
         <button type="submit" className={`${s.pill} ${s.pillSecondary}`} disabled={!secret.trim()}>
-          Unlock
+          {t('sessions.gate.unlock')}
         </button>
         {error ? (
           <p className={s.error} role="alert">
             {error}
           </p>
         ) : null}
-        <p className={s.gateNote}>
-          The key is derived here and stored in this browser only. It is never sent to the
-          relay, never written to a log, and cannot be exported by any script on this page.
-        </p>
+        <p className={s.gateNote}>{t('sessions.gate.note')}</p>
       </form>
     </div>
   );

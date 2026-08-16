@@ -3,7 +3,7 @@
 /**
  * Is the runner actually there?
  *
- * §3.2 gives the drawer ▶ Run now and ⏰ Schedule, and the rule for M2 is blunt: don't
+ * §3.2 gives the drawer ▶ Run now and Schedule, and the rule for M2 is blunt: don't
  * ship a fake ▶ that does nothing. So the buttons ask `GET /api/status` once, and until
  * they get an answer they are disabled with a tooltip that says which of the three states
  * they are in. A disabled button with an honest reason is a feature; an enabled button

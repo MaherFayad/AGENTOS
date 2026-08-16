@@ -4,8 +4,8 @@ import { SearchPill } from './SearchPill';
 import { on, resetBusForTests } from '../../lib/shell-bus';
 import { GRAPH_FIXTURE, renderShell, routerMock, stubFetch } from './test-harness';
 
-vi.mock('next/navigation', async () => (await import('./test-harness')).navigationMock());
-vi.mock('./ui', async () => (await import('./test-harness')).uiMock());
+vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
+vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
 
 beforeEach(() => stubFetch({ '/api/graph': { json: GRAPH_FIXTURE } }));
 afterEach(() => {

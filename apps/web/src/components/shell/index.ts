@@ -15,9 +15,11 @@ export {
   viewHref,
   viewHasZoom,
   viewHasLiveCounter,
+  viewSurface,
   VIEWS,
   VIEW_LABELS,
   type ShellView,
   type ShellRoute,
+  type ViewSurface,
 } from './route';
 export { NEW_SESSION_HREF } from './NewSessionAction';

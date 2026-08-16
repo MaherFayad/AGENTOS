@@ -15,6 +15,13 @@ export function KpiTile({ kpi }: { kpi: Kpi }): React.JSX.Element {
   const delta = useResolved(kpi.delta?.query ?? kpi.query);
   const spark = useResolved(kpi.sparkline?.query ?? kpi.query);
 
+  // A resolver may attach a provenance caveat to an `ok` figure — today that is
+  // "10 of 121 runs unpriced" on a spend tile, where the sum is a floor rather than a
+  // total. It rides on the caption line rather than a new one, so a tile that acquires a
+  // caveat does not change height and the KPI row does not reflow (§2.5 rule 2).
+  const caveat = value.status === 'ok' && !value.loading ? value.message : undefined;
+  const caption = [kpi.caption, caveat].filter(Boolean).join(' · ') || undefined;
+
   return (
     <Card radius="sm" padded className="min-w-0">
       <p className="flex items-center gap-1.5 text-label uppercase tracking-wider-1 text-ink-2">
@@ -29,7 +36,7 @@ export function KpiTile({ kpi }: { kpi: Kpi }): React.JSX.Element {
           {kpi.delta && !value.loading && delta.status === 'ok' ? (
             <Delta kpi={kpi} change={toScalar(delta.data)} />
           ) : null}
-          {kpi.caption ? <p className="text-label text-ink-3">{kpi.caption}</p> : null}
+          {caption ? <p className="text-label text-ink-3">{caption}</p> : null}
         </div>
         {kpi.sparkline && !spark.loading && spark.status === 'ok' ? (
           <Spark values={toSeries(spark.data).map((p) => p.v)} tone={kpi.sparkline.tone ?? 'teal'} />

@@ -11,22 +11,28 @@ import {
 } from 'react';
 import { usePathname } from 'next/navigation';
 import { emit, on } from '../../lib/shell-bus';
+import { useReducedMotion } from '../primitives/motion';
 import { parseShellRoute, type ShellRoute } from './route';
 import { useGraphIndex, usePanelIndex, useSearchIndex, type DepartmentCounts, type SearchIndex } from './useSearchIndex';
 import type { Resource } from './useEndpoint';
 import type { GraphIndex } from './useSearchIndex';
 
-/** True when the OS asks for less motion (§1.6). Read once, then live-updated. */
+/**
+ * True when the OS asks for less motion (§1.6).
+ *
+ * A thin alias over the guardian's `useReducedMotion`, kept only because the shell's
+ * public surface (`components/shell/index.ts`) already exports this name. The
+ * hand-rolled `useState` + `useEffect` version this replaced was a second
+ * implementation of a §1.6 rule, and a worse one: it read `window.matchMedia`
+ * unguarded (so it threw outright in any environment without it, jsdom included) and
+ * had no `addListener` fallback for Safari < 14.
+ *
+ * Imported from `../primitives/motion` rather than from `./ui`, deliberately: `./ui` is
+ * the shell's *component* import site and the shell's tests replace it wholesale, so a
+ * behavioural hook routed through it would be silently stubbed out.
+ */
 export function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReduced(query.matches);
-    const listener = (event: MediaQueryListEvent): void => setReduced(event.matches);
-    query.addEventListener('change', listener);
-    return () => query.removeEventListener('change', listener);
-  }, []);
-  return reduced;
+  return useReducedMotion();
 }
 
 export interface ShellState {

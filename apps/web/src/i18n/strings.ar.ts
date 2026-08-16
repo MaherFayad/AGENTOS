@@ -177,6 +177,56 @@ export const ar: Catalog = {
   'sessions.compose.send': 'إرسال',
   'sessions.meta.elapsed': 'قيد التشغيل منذ {duration}',
 
+  // «المُرحِّل» is the relay throughout this section — one term per concept, so
+  // the gate, the list and the transcript are talking about the same thing.
+  'sessions.eyebrow': 'الجلسات',
+  'sessions.waiting': {
+    one: 'جلسة واحدة بانتظارك',
+    two: 'جلستان بانتظارك',
+    few: '{count} جلسات بانتظارك',
+    many: '{count} جلسة بانتظارك',
+    other: '{count} جلسة بانتظارك',
+  },
+  'sessions.billing': 'محسوبة على اشتراكك في Claude، لا على السقف الشهري للمشغّل.',
+  'sessions.spawn':
+    'تبدأ الجلسة الجديدة على جهاز يعمل عليه Claude Code، لا في هذا المتصفّح. اربط ذلك الجهاز بالمُرحِّل فتظهر الجلسة هنا.',
+  'sessions.list.loading': 'جارٍ قراءة المُرحِّل…',
+  'sessions.list.undecryptable': {
+    one: 'تعذّر فكّ تشفير جلسة واحدة على المُرحِّل بمفتاح هذا الجهاز.',
+    two: 'تعذّر فكّ تشفير جلستين على المُرحِّل بمفتاح هذا الجهاز.',
+    few: 'تعذّر فكّ تشفير {count} جلسات على المُرحِّل بمفتاح هذا الجهاز.',
+    many: 'تعذّر فكّ تشفير {count} جلسة على المُرحِّل بمفتاح هذا الجهاز.',
+    other: 'تعذّر فكّ تشفير {count} جلسة على المُرحِّل بمفتاح هذا الجهاز.',
+  },
+
+  'sessions.view.back': 'الجلسات',
+  'sessions.view.title': 'الجلسة',
+  'sessions.view.meta': '{id} · محسوبة على اشتراكك في Claude',
+  'sessions.connection.connecting': 'جارٍ الاتّصال بالجلسة…',
+  'sessions.connection.reconnecting': 'جارٍ إعادة الاتّصال. ما تراه هو كلّ شيء حتّى لحظة الانقطاع.',
+  'sessions.connection.offline': 'غير متّصل. هذا نصّ الجلسة كما كان عند آخر اتّصال.',
+  'sessions.transcript.label': 'نصّ الجلسة',
+  'sessions.transcript.gap':
+    'فاتت بعض الأسطر بينما كان هذا الجهاز غير متّصل، وكان مخزن الإعادة في المُرحِّل قد تجاوزها.',
+  'sessions.transcript.permission': 'إذن · {tool} · {summary}',
+  'sessions.compose.label': 'مراسلة هذه الجلسة',
+  'sessions.permission.eyebrow': 'بانتظارك',
+
+  'sessions.push.enable': 'تنبيه هذا الهاتف',
+  'sessions.push.enabled': 'الإشعارات مفعّلة',
+  'sessions.push.names': 'إظهار أسماء الجلسات على شاشة القفل',
+  'sessions.push.failed': 'تعذّر تفعيل الإشعارات.',
+
+  'sessions.gate.title': 'فتح جلساتك',
+  'sessions.gate.body':
+    'نصوص الجلسات مشفّرة من طرف إلى طرف. الصق مفتاح الاسترجاع الذي يطبعه {command} على الجهاز الذي يعمل عليه Claude Code، وسيفكّ هذا المتصفّح تشفيرها محلّيًا.',
+  'sessions.gate.secret': 'مفتاح الاسترجاع',
+  'sessions.gate.token': 'رمز اقتران المُرحِّل',
+  'sessions.gate.tokenHint': 'رمز المُرحِّل، اختياري الآن',
+  'sessions.gate.unlock': 'فتح القفل',
+  'sessions.gate.note':
+    'يُشتقّ المفتاح هنا ويُخزَّن في هذا المتصفّح وحده. لا يُرسَل إلى المُرحِّل، ولا يُكتَب في أيّ سجلّ، ولا يمكن لأيّ نصّ برمجيّ في هذه الصفحة تصديره.',
+
   /* §3.2 Runs --------------------------------------------------------------- */
   'run.state.queued': 'في الانتظار',
   'run.state.running': 'قيد التشغيل',
@@ -220,8 +270,16 @@ export const ar: Catalog = {
   'empty.chartCell.title': 'لا شيء في هذا المستوى وهذه المرحلة',
   'empty.chartCell.body': 'الخانة الفارغة جواب حقيقي: لم تُرسم هنا أيّ مهمّة بعد.',
 
-  'empty.sessions.title': 'لا جلسات مفتوحة',
-  'empty.sessions.body': 'ابدأ واحدة هنا فتتبعك إلى هاتفك، بطلبات الإذن كلّها.',
+  'empty.sessions.title': 'لا شيء يعمل الآن',
+  'empty.sessions.body':
+    'ابدأ جلسة Claude Code على أيّ جهاز مقترن بهذا المُرحِّل فتظهر هنا، بنصّها وبزرّ يجيب عن طلبات الإذن أينما كنت.',
+
+  'empty.relay.title': 'لا جواب من المُرحِّل',
+  'empty.relay.body':
+    'لم يضِع شيء. الجلسات ما زالت على أجهزتها، وتمتلئ هذه القائمة فور أن يجيب المُرحِّل.',
+
+  'empty.transcript.title': 'لا شيء بعد',
+  'empty.transcript.body': 'لم تقل هذه الجلسة شيئًا منذ أن بدأت. اكتب في الأسفل لتوجيهها.',
 
   'empty.audit.title': 'لم يجرِ أيّ تدقيق',
   'empty.audit.body': 'يمشي المدقّق على المستودع والآثار، ثمّ يعلّم الخريطة. يستغرق ذلك دقيقة تقريبًا.',

@@ -77,7 +77,7 @@ export interface AgentDoc {
 }
 
 /**
- * `GET /api/runs?agent=&limit=5` row.
+ * `GET /api/metrics/runs?agent=&limit=5` row — the durable ledger, `ops.agent_runs`.
  *
  * `startedAt` is ISO 8601 and relative time is rendered client-side — the contract is
  * explicit about it, so LAST RUNS stays live without polling. Every other field is
@@ -88,9 +88,22 @@ export interface RunRow {
   startedAt?: string;
   status: RunStatus;
   costUsd?: number;
+  /**
+   * How `costUsd` was arrived at, straight from the ledger (`ops.agent_runs.cost_source`).
+   * A database CHECK ties the two together: `unpriced` **implies** `cost_usd IS NULL`, and
+   * any other source implies a non-null cost. So this is the difference between "this run
+   * cost nothing to speak of" and "nobody ever priced this run" — two facts that a bare
+   * missing number cannot tell apart, and that LAST RUNS must not conflate (Part VII.3).
+   *
+   * Optional because `GET /api/runs` (the in-memory queue view) does not send it.
+   */
+  costSource?: CostSource;
   durationMs?: number;
   traceUrl?: string;
 }
+
+/** `ops.agent_runs.cost_source` — mirrors `apps/runner/src/observability/pricing.ts`. */
+export type CostSource = 'sdk' | 'derived' | 'unpriced';
 
 /* -----------------------------------------------------------------------------
  * SSE union — flattened from `RunStreamEvent` in packages/contracts/src/api.ts.

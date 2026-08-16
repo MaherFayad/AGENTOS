@@ -1,7 +1,7 @@
 import { render, type RenderResult } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
-import { DURATION, EASE, withReducedMotion } from '../primitives/motion';
+import { pathnameRef, routerMock } from './test-mocks';
 import { ShellProvider } from './ShellContext';
 
 /**
@@ -10,71 +10,31 @@ import { ShellProvider } from './ShellContext';
  * The shell reads two endpoints on mount, so every component test has to say what those
  * endpoints did. That is deliberate: "what does this look like when the runner is down"
  * is a first-class case here, not an afterthought.
+ *
+ * IMPORT THIS FROM TESTS, NEVER FROM A `vi.mock` FACTORY. This module imports
+ * `./ShellContext`, which imports `next/navigation` — a module the tests mock. A factory
+ * that awaits this file deadlocks the worker at import time. The factories live in
+ * `./test-mocks`, which is a leaf for exactly that reason; the full mechanism is written
+ * up there.
  */
 
-export const routerMock = {
-  push: vi.fn(),
-  replace: vi.fn(),
-  back: vi.fn(),
-  forward: vi.fn(),
-  refresh: vi.fn(),
-  prefetch: vi.fn(),
-};
-
-export const pathnameRef = { current: '/map' };
-
-/** The `next/navigation` mock every shell test uses. */
-export function navigationMock(): Record<string, unknown> {
-  return {
-    usePathname: () => pathnameRef.current,
-    useRouter: () => routerMock,
-    useSearchParams: () => new URLSearchParams(),
-  };
-}
+/** Re-exported so tests keep one import site. Defined in the leaf — see the note above. */
+export { pathnameRef, routerMock };
 
 /**
- * A minimal stand-in for the design system, so shell tests assert shell behaviour and
- * not the guardian's markup. The prop names mirror `components/primitives/**` exactly —
- * if they drift, `tsc` fails on the real import in `ui.ts` and this mock is the next
- * thing to fix.
+ * Declare that the Fullscreen API exists, and return the undo.
  *
- * The motion values are re-exported from the real module rather than retyped: §1.6
- * numbers live in exactly one file, tests included.
+ * jsdom implements none of it, so `document.fullscreenEnabled` is `undefined` and
+ * `FullscreenToggle` correctly renders nothing — a control that cannot work is worse
+ * than an absent one (§2.0). Every real browser we target reports `true`, so a suite
+ * asserting the §2.0 chrome has to say which of the two worlds it is testing.
  */
-export function uiMock(): Record<string, unknown> {
-  return {
-    Pill: ({ children, ...rest }: { children: ReactNode }) => <button {...rest}>{children}</button>,
-    Eyebrow: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-    GlassPanel: ({ children, className }: { children: ReactNode; className?: string }) => (
-      <div className={className}>{children}</div>
-    ),
-    SegmentedControl: ({
-      options,
-      value,
-      onChange,
-      label,
-    }: {
-      options: Array<{ value: string; label: string }>;
-      value: string;
-      onChange: (next: string) => void;
-      label: string;
-    }) => (
-      <div role="tablist" aria-label={label}>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            role="tab"
-            aria-selected={option.value === value}
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    ),
-    DURATION,
-    EASE,
-    withReducedMotion,
+export function stubFullscreenSupport(enabled = true): () => void {
+  const original = Object.getOwnPropertyDescriptor(Document.prototype, 'fullscreenEnabled');
+  Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: enabled });
+  return () => {
+    delete (document as Partial<Document>).fullscreenEnabled;
+    if (original) Object.defineProperty(Document.prototype, 'fullscreenEnabled', original);
   };
 }
 

@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ViewTabs } from './ViewTabs';
 import { renderShell, routerMock, stubFetch } from './test-harness';
 
-vi.mock('next/navigation', async () => (await import('./test-harness')).navigationMock());
-vi.mock('./ui', async () => (await import('./test-harness')).uiMock());
+vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
+vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
 
 beforeEach(() => stubFetch({}));
 afterEach(() => {
@@ -33,5 +33,20 @@ describe('ViewTabs (§2.0 segmented control)', () => {
     renderShell(<ViewTabs />);
     fireEvent.click(screen.getByRole('tab', { name: 'SESSIONS' }));
     expect(routerMock.push).toHaveBeenCalledWith('/sessions');
+  });
+
+  // On a 375px phone the four labels overflow and TopBar scrolls them. Landing on
+  // /sessions from a push notification must not leave the selected tab off-screen.
+  it('scrolls the selected tab into view — the fourth tab overflows on a phone', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderShell(<ViewTabs />, { pathname: '/sessions/abc' });
+      expect(scrollIntoView).toHaveBeenCalled();
+      expect(scrollIntoView.mock.instances[0]).toBe(screen.getByRole('tab', { name: 'SESSIONS' }));
+      expect(scrollIntoView.mock.calls[0][0]).toMatchObject({ inline: 'nearest', block: 'nearest' });
+    } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
   });
 });

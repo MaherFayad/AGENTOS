@@ -233,3 +233,60 @@ body.light {
     --reveal-y:   0px;
   }
 }
+
+/* -----------------------------------------------------------------------------
+ * §2.0 Shell metrics — the band the floating chrome occupies.
+ *
+ * Owner: shell-navigation-engineer. Colour and type tokens above are
+ * design-system-guardian's; these are geometry only and carry no colour.
+ *
+ * WHY THIS EXISTS. The §2.0 bar is transparent and floats over the canvas — that
+ * is the design and it stays. The consequence is that the top and bottom of the
+ * viewport are *claimed* by chrome, and any view that lays its content out in
+ * document flow starting at y=0 prints underneath it. CHART did exactly that:
+ * its department tab bar landed on the same row as the search pill and the
+ * segmented control.
+ *
+ * The fix is a contract, not a nudge. The shell declares how much room it takes;
+ * views read it. Nobody types 72px into their own stylesheet and nobody has to
+ * remember to update it when the bar changes.
+ *
+ * There are two ways to read the band, and both are correct:
+ *   1. `var(--shell-inset-t)` / `var(--shell-inset-b)` — the numbers below. Static,
+ *      available during SSR and to plain CSS.
+ *   2. The same two variables, re-published by <AppShell> from a ResizeObserver on
+ *      the real chrome once it has painted. The breadcrumb strip only exists in a
+ *      drill-in, so the true top band is taller on `/chart/marketing` than on
+ *      `/chart`; measurement is what keeps the declared value from drifting away
+ *      from the rendered one.
+ * A view therefore never needs to know which state it is in — it reads one var.
+ *
+ * Safe areas (§3.6) are inside the inset: on a notched phone the band grows with
+ * the notch, because TopBar's own padding already carries env(safe-area-inset-*).
+ * -------------------------------------------------------------------------- */
+:root {
+  --shell-control-h: 32px;  /* every control in the bar is one 32px pill (§2.0) */
+  --shell-pad-t:     14px;  /* TopBar's own top padding */
+  --shell-pad-b:     16px;  /* BottomBar's own bottom padding */
+  --shell-gap:       14px;  /* clear air between the chrome and the first view row */
+
+  /* The chrome's own occupied height, safe areas included. <AppShell> overwrites
+     these two with the measured value once the bar has painted — which is why the
+     gap is added *outside* them, in --shell-inset-*, and not baked in here. */
+  --shell-bar-t: calc(var(--shell-pad-t) + var(--shell-control-h) + env(safe-area-inset-top, 0px));
+  --shell-bar-b: calc(var(--shell-pad-b) + var(--shell-control-h) + env(safe-area-inset-bottom, 0px));
+
+  /* What a document-flow view must keep clear, top and bottom. Read these. */
+  --shell-inset-t: calc(var(--shell-bar-t) + var(--shell-gap));
+  --shell-inset-b: calc(var(--shell-bar-b) + var(--shell-gap));
+}
+
+/* The insets are re-declared on the shell root, and that is not redundant: a custom
+ * property's calc() is resolved where it is *declared*, so the :root copies above are
+ * frozen at the declared bar height. Repeating the formula here is what lets AppShell's
+ * measured `--shell-bar-*` (set inline on this element) flow through into the inset the
+ * views actually read. Without this rule the measurement would be silently ignored. */
+[data-shell-root] {
+  --shell-inset-t: calc(var(--shell-bar-t) + var(--shell-gap));
+  --shell-inset-b: calc(var(--shell-bar-b) + var(--shell-gap));
+}

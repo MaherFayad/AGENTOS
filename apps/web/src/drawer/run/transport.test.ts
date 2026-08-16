@@ -10,11 +10,16 @@ describe('fetchRunTransport — reconnect is GET /api/run/:runId/stream', () => 
     const calls: Array<{ url: string; method: string; lastEventId?: string | null; lastEventQuery?: string | null }> =
       [];
 
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.close();
-      },
-    });
+    // A fresh stream per call. One shared instance is disturbed by the first response and
+    // makes the second `new Response(body)` throw — which `fetchRunTransport` correctly
+    // reports as a lost connection, so the test failed on its own fixture rather than on
+    // the behaviour it is asserting.
+    const body = (): ReadableStream<Uint8Array> =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
 
     vi.stubGlobal(
       'fetch',
@@ -27,7 +32,7 @@ describe('fetchRunTransport — reconnect is GET /api/run/:runId/stream', () => 
           lastEventId: headers.get('Last-Event-ID'),
           lastEventQuery: new URL(url, 'http://drawer.test').searchParams.get('lastEventId'),
         });
-        return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+        return new Response(body(), { status: 200, headers: { 'content-type': 'text/event-stream' } });
       }),
     );
 

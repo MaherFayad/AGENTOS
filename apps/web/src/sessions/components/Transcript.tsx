@@ -18,6 +18,7 @@
  * ========================================================================== */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useT } from '@/i18n';
 import { buildOffsets, isPinnedToBottom, windowFor } from '../lib/virtual';
 import s from '../sessions.module.css';
 import type { TranscriptEntry } from '../types';
@@ -32,6 +33,7 @@ export function Transcript({
   entries: readonly TranscriptEntry[];
   gap: boolean;
 }): React.JSX.Element {
+  const t = useT();
   const scroller = useRef<HTMLDivElement | null>(null);
   const heights = useRef(new Map<number, number>());
   const [, forceRender] = useState(0);
@@ -75,13 +77,15 @@ export function Transcript({
   const visible = entries.slice(win.start, win.end);
 
   return (
-    <div className={s.transcript} ref={scroller} onScroll={onScroll} role="log" aria-live="polite">
-      {gap ? (
-        <p className={s.gap}>
-          Some lines were missed while this device was offline — the relay’s replay buffer
-          had already rolled past them.
-        </p>
-      ) : null}
+    <div
+      className={s.transcript}
+      ref={scroller}
+      onScroll={onScroll}
+      role="log"
+      aria-live="polite"
+      aria-label={t('sessions.transcript.label')}
+    >
+      {gap ? <p className={s.gap}>{t('sessions.transcript.gap')}</p> : null}
 
       <div style={{ height: win.padTop }} aria-hidden="true" />
       {visible.map((entry, i) => (
@@ -91,8 +95,8 @@ export function Transcript({
 
       {entries.length === 0 ? (
         <p className={s.empty}>
-          <span className={s.emptyTitle}>Nothing yet</span>
-          This session hasn’t said anything since it started. Type below to steer it.
+          <span className={s.emptyTitle}>{t('empty.transcript.title')}</span>
+          {t('empty.transcript.body')}
         </p>
       ) : null}
     </div>
@@ -108,19 +112,27 @@ function Row({
   index: number;
   onMeasure: (index: number, height: number) => void;
 }): React.JSX.Element {
+  const t = useT();
   const ref = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
     if (ref.current) onMeasure(index, ref.current.offsetHeight);
   });
 
+  // Program output does not mirror (§1.4). `.u-ltr-island` pins each line to
+  // LTR and isolates it, so a stack trace or a diff stays readable under
+  // dir="rtl" — while the prose around it (the gap notice, the empty state)
+  // stays in the page direction.
   return (
-    <div className={s.entry} data-kind={entry.kind} ref={ref}>
+    <div className={`u-ltr-island ${s.entry}`} data-kind={entry.kind} ref={ref}>
       {entry.kind === 'permission' ? (
         // The live card is docked above the composer, always reachable without
         // scrolling. This line is the history of it.
         <span>
-          [permission] {entry.permission?.tool ?? 'tool'} — {entry.permission?.summary ?? ''}
+          {t('sessions.transcript.permission', {
+            tool: entry.permission?.tool ?? '',
+            summary: entry.permission?.summary ?? '',
+          })}
         </span>
       ) : (
         entry.text

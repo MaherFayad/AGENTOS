@@ -4,16 +4,23 @@
  * §2.3 item 4 — the skill-file card, and the two buttons SkillTree does not have.
  *
  *   ⬇ 1 runnable skill file · yours to download      [ Take it ↓ ]
- *   [ ▶ Run now ]  [ ⏰ Schedule ]
+ *   [ ▶ Run now ]  [ (clock) Schedule ]
  *
- * `Take it ↓` downloads the SKILL.md folder as a zip. ▶ Run now and ⏰ Schedule are the
+ * `Take it ↓` downloads the SKILL.md folder as a zip. ▶ Run now and Schedule are the
  * reason this product exists (§3.2), so they are never decorative: each is either wired or
  * disabled with the reason in its tooltip.
+ *
+ * The Schedule glyph is a **lucide `Clock`**, not U+23F0. That codepoint has no
+ * text-presentation variant, so every platform paints it as a full-colour emoji that no
+ * CSS `color` can reach — a saturated clock in monochrome chrome (§1.3, BOARD constraint 1).
+ * `⬇` and `▶` are text-presentation by default and inherit `currentColor`, so they stay.
+ * Asked for in `comms/inbox/_all/20260816-1235-orchestrator-clock-emoji-breaks-monochrome.md`.
  *
  * Owner: drawer-engineer
  */
 
 import { useState } from 'react';
+import { Clock } from 'lucide-react';
 import { Pill } from '../primitives';
 import { describeCron } from '../data/format';
 import type { Capabilities } from '../run/useRunnerAvailability';
@@ -106,8 +113,9 @@ export function SkillFileCard({
             variant="secondary"
             onClick={() => setEditing((open) => !open)}
             title="Set a cron schedule for this agent"
+            leading={<Clock size={12} aria-hidden="true" />}
           >
-            ⏰ Schedule
+            Schedule
           </Pill>
         ) : (
           <span
@@ -119,8 +127,8 @@ export function SkillFileCard({
             <span id="drawer-schedule-disabled-reason" className={s.srOnly}>
               {capabilities.reason}
             </span>
-            <Pill variant="secondary" disabled>
-              ⏰ Schedule
+            <Pill variant="secondary" disabled leading={<Clock size={12} aria-hidden="true" />}>
+              Schedule
             </Pill>
           </span>
         )}

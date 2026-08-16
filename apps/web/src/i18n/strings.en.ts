@@ -180,6 +180,49 @@ export const en = {
   'sessions.compose.send': 'Send',
   'sessions.meta.elapsed': 'Running for {duration}',
 
+  /* The list tab. `sessions.eyebrow` is natural case on purpose — the caps are
+   * `text-transform` on `.u-eyebrow` (rule 1 above), and Arabic has no case. */
+  'sessions.eyebrow': 'Sessions',
+  'sessions.waiting': {
+    one: '{count} waiting on you',
+    other: '{count} waiting on you',
+  } satisfies Plural,
+  'sessions.billing': 'Billed to your Claude subscription, not the runner’s monthly cap.',
+  'sessions.spawn': 'A new session starts on a machine running Claude Code, not in this browser. Pair that machine with the relay and it will appear here.',
+  'sessions.list.loading': 'Reading the relay…',
+  'sessions.list.undecryptable': {
+    one: 'One session on the relay could not be decrypted with this device’s key.',
+    other: '{count} sessions on the relay could not be decrypted with this device’s key.',
+  } satisfies Plural,
+
+  /* One session, full screen. */
+  'sessions.view.back': 'Sessions',
+  'sessions.view.title': 'Session',
+  'sessions.view.meta': '{id} · billed to your Claude subscription',
+  'sessions.connection.connecting': 'Connecting to the session…',
+  'sessions.connection.reconnecting': 'Reconnecting. You are seeing everything up to the drop.',
+  'sessions.connection.offline': 'Offline. This is the transcript as of the last connection.',
+  'sessions.transcript.label': 'Session transcript',
+  'sessions.transcript.gap': 'Some lines were missed while this device was offline. The relay’s replay buffer had already rolled past them.',
+  'sessions.transcript.permission': 'Permission · {tool} · {summary}',
+  'sessions.compose.label': 'Message this session',
+  'sessions.permission.eyebrow': 'Waiting on you',
+
+  /* Push (§3.6 seam). The ask happens on a tap, never on mount. */
+  'sessions.push.enable': 'Notify this phone',
+  'sessions.push.enabled': 'Notifications on',
+  'sessions.push.names': 'Show session names on the lock screen',
+  'sessions.push.failed': 'Notifications could not be turned on.',
+
+  /* The key gate — the honest consequence of end-to-end encryption (§3.1). */
+  'sessions.gate.title': 'Unlock your sessions',
+  'sessions.gate.body': 'Transcripts are end-to-end encrypted. Paste the recovery secret that {command} prints on the machine running Claude Code, and this browser decrypts them locally.',
+  'sessions.gate.secret': 'Recovery secret',
+  'sessions.gate.token': 'Relay pairing token',
+  'sessions.gate.tokenHint': 'Relay token, optional for now',
+  'sessions.gate.unlock': 'Unlock',
+  'sessions.gate.note': 'The key is derived here and stored in this browser only. It is never sent to the relay, never written to a log, and cannot be exported by any script on this page.',
+
   /* ---------------------------------------------------------------------------
    * §3.2 Runs, schedules, approvals.
    * ------------------------------------------------------------------------ */
@@ -228,8 +271,14 @@ export const en = {
   'empty.chartCell.title': 'Nothing at this tier and phase',
   'empty.chartCell.body': 'An empty cell is a real answer: no job here has been mapped yet.',
 
-  'empty.sessions.title': 'No sessions open',
-  'empty.sessions.body': 'Start one here and it follows you to your phone, permission prompts and all.',
+  'empty.sessions.title': 'Nothing is running',
+  'empty.sessions.body': 'Start a Claude Code session on any machine paired with this relay and it appears here, with its transcript and a button to answer its permission prompts from wherever you are.',
+
+  'empty.relay.title': 'No answer from the relay',
+  'empty.relay.body': 'Nothing is lost. The sessions are still on their machines, and this list fills in the moment the relay answers.',
+
+  'empty.transcript.title': 'Nothing yet',
+  'empty.transcript.body': 'This session has not said anything since it started. Type below to steer it.',
 
   'empty.audit.title': 'No audit has run',
   'empty.audit.body': 'The auditor walks the repository and the traces, then marks the map. It takes about a minute.',

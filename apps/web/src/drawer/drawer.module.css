@@ -6,6 +6,14 @@
  * lives in a second file stops being one by M8).
  *
  * RULES OBSERVED HERE
+ *  - No type literal. `@apply text-label / text-label-sm / text-meta / text-small /
+ *    text-pill / text-chip` pulls the named §1.4 roles out of tailwind.config.ts (owner:
+ *    design-system-guardian) so size, weight and leading travel together and this file
+ *    holds no px. Tracking is var(--track-1…4), which styles/rtl.css re-points to
+ *    `normal` under :lang(ar) in one place — a literal .3em here would be a bug rather
+ *    than a style, because Arabic is a connected script and tracking severs the joins
+ *    (§1.4). Pattern and reasoning: sessions.module.css, via
+ *    comms/handoffs/M8-rtl-arabic-pdpl-sessions-conformance.md.
  *  - No color literal. Every colour is var(--token) from styles/tokens.css.
  *  - No duration literal. Every timing is var(--dur-*) / var(--ease-*), which also
  *    inherits the prefers-reduced-motion guard from the token layer.
@@ -42,6 +50,22 @@
 .drawer {
   --drawer-w: 300px;
   --slide: -100%;
+
+  /* Four sizes §1.4 does not have a rung for. Same situation (and same remedy) as
+   * `--ses-fs-gate` in sessions.module.css; a decision-request is open with
+   * design-system-guardian. Named here rather than inlined so that when the rungs arrive
+   * the swap is four lines in one place.
+   *   --drw-fs-title  §2.3.2 specifies the drawer title as 24/700. The scale steps
+   *                   16px (body) → 28px (kpi-sm) and the title sits in that gap.
+   *   --drw-fs-close  the ✕ glyph; sized to the 26px hit target, not to a text role.
+   *   --drw-fs-rung   THE LADDER's row labels and §2.6.5's autonomy toggles. Below
+   *                   `text-label-sm` (10px) on purpose — they are captions beside the
+   *                   copy they label, never headings above it.
+   *   --drw-fs-badge  the `NOW` badge, which has to sit inside a ladder rung. */
+  --drw-fs-title: 24px;
+  --drw-fs-close: 14px;
+  --drw-fs-rung: 9px;
+  --drw-fs-badge: 8px;
 
   position: fixed;
   inset-block: 0;
@@ -108,7 +132,23 @@
   border-end-start-radius: var(--r-panel);
 }
 
-/* Monochrome focus ring, never the browser's blue (§1.3). */
+/* Monochrome focus ring, never the browser's blue (§1.3).
+ *
+ * Two rules, and the first one is the one that was missing. `.panel :focus-visible` is a
+ * DESCENDANT selector, so it never matched `.panel` itself — and `.panel` is exactly the
+ * element `useFocusTrap` calls `.focus()` on when the drawer opens (role="dialog",
+ * tabindex="-1"). Chrome then matched its own `:focus-visible` on the panel root and
+ * painted `outline: auto` in `rgb(153, 200, 255)`: a browser-blue rectangle around the
+ * whole drawer, on every open, in a chrome that is supposed to be monochrome.
+ *
+ * Seating focus on the dialog container is a screen-reader affordance, not a keyboard
+ * position the user navigated to, so it draws nothing. The ring belongs to the controls
+ * inside, which the second rule still paints ivory. */
+.panel:focus,
+.panel:focus-visible {
+  outline: none;
+}
+
 .panel :focus-visible {
   outline: 2px solid var(--ivory);
   outline-offset: 2px;
@@ -145,7 +185,7 @@
   border: 0;
   border-radius: var(--r-pill);
   color: var(--ink-2);
-  font-size: 14px;
+  font-size: var(--drw-fs-close);
   line-height: 1;
   cursor: pointer;
   transition: color var(--dur-hover) var(--ease-reveal), background var(--dur-hover) var(--ease-reveal);
@@ -161,22 +201,22 @@
  * -------------------------------------------------------------------------- */
 .title {
   margin-block: 12px 0;
-  font-size: 24px;
+  font-size: var(--drw-fs-title);
   font-weight: 700;
   line-height: 1.15;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--track-accent);
   color: var(--ivory);
 }
 
 .breadcrumb {
   margin-block-start: 6px;
-  font-size: 12px;
+  @apply text-meta;
   color: var(--ink-2);
 }
 
 .description {
   margin-block-start: 12px;
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.6;
   color: var(--ivory-2);
 }
@@ -192,22 +232,23 @@
 
 .sectionLabel {
   margin: 0 0 10px;
-  font-size: 11px;
+  @apply text-label;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.3em;
+  letter-spacing: var(--track-2);
   color: var(--ink-2);
 }
 
 .sectionNote {
   margin-block-start: 8px;
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   line-height: 1.5;
   color: var(--ink-3);
 }
 
 .empty {
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.5;
   color: var(--ink-3);
 }
@@ -229,7 +270,7 @@
 }
 
 .skillCardLine {
-  font-size: 12px;
+  @apply text-meta;
   color: var(--ivory-2);
 }
 
@@ -268,7 +309,7 @@
   justify-content: center;
   block-size: 32px;
   padding-inline: 12px;
-  font-size: 13px;
+  @apply text-pill;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -295,7 +336,8 @@
 
 .chip {
   font: inherit;
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   line-height: 1.2;
   padding: 5px 9px;
   border: var(--border-w) solid var(--line-2);
@@ -329,7 +371,7 @@
  * 6. WIRED INTO — plain text list
  * -------------------------------------------------------------------------- */
 .plainList {
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.6;
   color: var(--ivory-2);
 }
@@ -344,7 +386,7 @@
   border: var(--border-w) solid var(--line);
   border-inline-start: 2px solid var(--line-2);
   border-radius: var(--r-card-sm);
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.6;
   color: var(--ivory-2);
 }
@@ -370,7 +412,7 @@
 }
 
 .ladderLabel {
-  font-size: 9px;
+  font-size: var(--drw-fs-rung);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: var(--track-1);
@@ -379,7 +421,7 @@
 }
 
 .ladderText {
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.55;
   color: var(--ink-3);
 }
@@ -396,8 +438,8 @@
   display: inline-block;
   margin-inline-start: 6px;
   padding: 1px 5px;
-  font-size: 8px;
-  letter-spacing: 0.2em;
+  font-size: var(--drw-fs-badge);
+  letter-spacing: var(--track-1);
   border: var(--border-w) solid var(--line-2);
   border-radius: var(--r-pill);
   color: var(--ivory);
@@ -408,7 +450,7 @@
  * 10. THE HUMAN
  * -------------------------------------------------------------------------- */
 .paragraph {
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.65;
   color: var(--ivory-2);
 }
@@ -434,7 +476,7 @@
   border-radius: var(--r-chip);
   color: var(--ivory-2);
   font: inherit;
-  font-size: 12px;
+  @apply text-meta;
   text-align: start;
   cursor: pointer;
   transition: background var(--dur-hover) var(--ease-reveal);
@@ -457,6 +499,13 @@
   flex: 0 0 auto;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
+}
+
+/* "unpriced" — a word where a number would be. One step dimmer than the real numbers so
+ * the eye reads the priced column first and does not mistake it for a cheap run. */
+.runMetaAbsent {
+  color: var(--ink-3);
+  font-variant-numeric: normal;
 }
 
 /* Status is a value, so it gets data ink (§1.3). */
@@ -504,7 +553,8 @@
 }
 
 .fieldLabel {
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   color: var(--ink-2);
 }
 
@@ -516,7 +566,7 @@
   inline-size: 100%;
   padding: 8px 10px;
   font: inherit;
-  font-size: 12px;
+  @apply text-meta;
   color: var(--ivory);
   background: var(--card);
   border: var(--border-w) solid var(--line);
@@ -542,7 +592,8 @@
 }
 
 .fieldError {
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   color: var(--ink-coral);
 }
 
@@ -559,9 +610,9 @@
   flex: 1 1 0;
   padding: 6px 4px;
   font: inherit;
-  font-size: 9px;
+  font-size: var(--drw-fs-rung);
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: var(--track-1);
   text-transform: uppercase;
   color: var(--ink-3);
   background: transparent;
@@ -590,14 +641,14 @@
 }
 
 .skillName {
-  font-size: 13px;
+  @apply text-pill;
   font-weight: 600;
   color: var(--ivory);
 }
 
 .skillDescription {
   margin-block-start: 4px;
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.55;
   color: var(--ivory-2);
 }
@@ -640,10 +691,10 @@
 }
 
 .consoleTitle {
-  font-size: 10px;
+  @apply text-label-sm;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.3em;
+  letter-spacing: var(--track-2);
   color: var(--ink-2);
 }
 
@@ -652,7 +703,7 @@
   overflow-y: auto;
   padding: 10px 12px;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.5;
   color: var(--ivory-2);
   white-space: pre-wrap;
@@ -680,7 +731,8 @@
 
 .consoleTrimmed {
   padding-block-end: 6px;
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   color: var(--ink-3);
 }
 
@@ -691,7 +743,8 @@
   gap: 8px;
   padding: 8px 12px;
   border-block-start: var(--border-w) solid var(--line);
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
@@ -706,16 +759,16 @@
 }
 
 .approvalLabel {
-  font-size: 10px;
+  @apply text-label-sm;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.3em;
+  letter-spacing: var(--track-2);
   color: var(--ink-amber);
 }
 
 .approvalPlan {
   margin-block-start: 8px;
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.55;
   color: var(--ivory);
 }
@@ -731,13 +784,13 @@
  * -------------------------------------------------------------------------- */
 .status {
   padding-block: 24px;
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.6;
   color: var(--ivory-2);
 }
 
 .statusHint {
   margin-block-start: 8px;
-  font-size: 12px;
+  @apply text-meta;
   color: var(--ink-2);
 }

@@ -82,7 +82,14 @@ test('layout mounts I18nProvider and globals.css imports rtl.css', async () => {
   const globals = await readFile(join(ROOT, 'apps', 'web', 'src', 'app', 'globals.css'), 'utf8');
   assert.match(layout, /I18nProvider/);
   assert.match(layout, /directionOf/);
-  assert.match(globals, /@import '\.\/styles\/rtl\.css'/);
+  // globals.css lives in src/app/ and rtl.css in src/styles/, so the import is
+  // '../styles/rtl.css'. The assertion used to pin './styles/rtl.css', a path
+  // that has never resolved from src/app/ — the import was right and the test
+  // was describing a layout the repo does not have. Matched loosely on the tail
+  // of the path so moving globals.css one directory does not fail a file it
+  // does not own; what this test actually guards is that the ONLY stylesheet
+  // the entrypoint loads still pulls in the RTL layer.
+  assert.match(globals, /@import\s+'[^']*styles\/rtl\.css'/);
 });
 
 test('COMPANY.md carries the standing PDPL block every run inherits', async () => {

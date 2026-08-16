@@ -338,6 +338,33 @@ export type GraphSocketMessage<TNode = unknown> =
    */
   | { type: 'stale'; reason: string };
 
+/**
+ * `GET /api/agents` — the list projection of `agents/**`, for CHART's matrix (§2.6).
+ *
+ * Deliberately **not** `AgentDetail[]`: the list omits `body` and `runnable`. A matrix of
+ * twelve agents does not need twelve system prompts to draw a grid, and shipping them
+ * would make the cheapest read in the app the most expensive one. A caller that needs
+ * either field is looking at one agent, and `GET /api/agents/:slug` is that route.
+ *
+ * Files that fail the frontmatter schema are **absent**, not half-parsed — the same rule
+ * the map follows (frontmatter-schema.md § Validation). `skipped[]` names them so a
+ * missing tile has a reason instead of being silently fewer rows.
+ */
+export interface AgentSummary {
+  /** `department/agent-slug`. */
+  slug: string;
+  /** Repo-relative path of the SKILL.md this was parsed from. */
+  path: string;
+  /** Frontmatter exactly as parsed. Shape is `frontmatter.ts` (agent-library-curator). */
+  frontmatter: Record<string, unknown>;
+}
+
+export interface AgentsIndex {
+  agents: AgentSummary[];
+  /** Agents excluded from `agents[]`, with the reason. Render as a warning, never as a row. */
+  skipped: Array<{ slug: string; reason: string }>;
+}
+
 /** `GET /api/agents/:slug` — parsed frontmatter + body, for the drawer and chart drawer. */
 export interface AgentDetail {
   /** `department/agent-slug`. */
@@ -437,6 +464,12 @@ export const RUNNER_ROUTES = {
   approvals: { method: 'GET', path: '/api/approvals' },
   approvalDecision: { method: 'POST', path: '/api/approvals/:runId' },
   graph: { method: 'GET', path: '/api/graph' },
+  /**
+   * The collection. Registered before the wildcard below so `/api/agents` is a list and
+   * not "an agent whose id is the empty string" — the 400 it used to return read like the
+   * caller's mistake when the route was simply missing.
+   */
+  agentsIndex: { method: 'GET', path: '/api/agents' },
   agent: { method: 'GET', path: '/api/agents/*' },
   runs: { method: 'GET', path: '/api/runs' },
   panels: { method: 'GET', path: '/api/panels' },

@@ -17,6 +17,7 @@
  *     reachable without scrolling however long the transcript is.
  * ========================================================================== */
 
+import { useT } from '@/i18n';
 import s from '../sessions.module.css';
 import type { PermissionRequest } from '../types';
 
@@ -29,16 +30,23 @@ export function PermissionCard({
   busy: boolean;
   onDecide: (requestId: string, allow: boolean) => void;
 }): React.JSX.Element {
+  const t = useT();
+
   return (
     <section className={s.permission} aria-labelledby={`perm-${request.requestId}`}>
-      <span className={s.permissionEyebrow}>WAITING ON YOU</span>
-      <h2 className={s.permissionTool} id={`perm-${request.requestId}`}>
+      {/* Natural case in the catalogue; the caps come from `.u-label`, which
+          also carries the Arabic compensation for the tracking it drops (§1.4). */}
+      <span className={`u-label ${s.permissionEyebrow}`}>
+        {t('sessions.permission.eyebrow')}
+      </span>
+      <h2 className={`u-ltr-island ${s.permissionTool}`} id={`perm-${request.requestId}`}>
         {request.tool}
       </h2>
       <p className={s.permissionSummary}>{request.summary}</p>
 
+      {/* The command, verbatim. Program text does not mirror (§1.4). */}
       {request.detail?.length ? (
-        <pre className={s.permissionDetail}>{request.detail.join('\n')}</pre>
+        <pre className={`u-ltr-island ${s.permissionDetail}`}>{request.detail.join('\n')}</pre>
       ) : null}
 
       <div className={s.permissionActions}>
@@ -48,7 +56,7 @@ export function PermissionCard({
           disabled={busy}
           onClick={() => onDecide(request.requestId, false)}
         >
-          Deny
+          {t('sessions.permission.deny')}
         </button>
         <button
           type="button"
@@ -56,7 +64,7 @@ export function PermissionCard({
           disabled={busy}
           onClick={() => onDecide(request.requestId, true)}
         >
-          Allow
+          {t('sessions.permission.allow')}
         </button>
       </div>
     </section>

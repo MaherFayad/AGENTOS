@@ -74,14 +74,50 @@ async function postJson(path: string, payload: unknown): Promise<unknown> {
   return response.json().catch(() => ({}));
 }
 
-/** `GET /api/agents/:slug` — parsed frontmatter + body. */
-export async function fetchAgent(slug: string, signal?: AbortSignal): Promise<AgentDoc> {
-  return normalizeAgentDoc(await getJson(`/api/agents/${slug}`, signal), slug);
+/**
+ * `:slug` is `department/agent-slug` and **contains a slash on purpose** — the route is
+ * "a wildcard match on everything after `/api/agents/`" (api-contracts.md, Reads). So the
+ * separator must survive, and everything either side of it must not.
+ *
+ * `encodeURIComponent(slug)` would be wrong: it turns the separator into `%2F` and, while
+ * the runner's `slugParam` happens to decode that back, it makes the URL disagree with the
+ * contract's own example. Encoding each segment keeps the path shape the contract
+ * describes while still escaping a `?`, `#`, `%` or space if a folder name ever grows one
+ * — the runner's `decodeURIComponent` throws a URIError on a stray `%`, which would
+ * surface to the drawer as an unexplained 500.
+ */
+function slugPath(slug: string): string {
+  return slug.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 
-/** `GET /api/runs?agent=&limit=5` — the LAST RUNS rows (owner: `observability-engineer`). */
+/** `GET /api/agents/:slug` — parsed frontmatter + body. */
+export async function fetchAgent(slug: string, signal?: AbortSignal): Promise<AgentDoc> {
+  return normalizeAgentDoc(await getJson(`/api/agents/${slugPath(slug)}`, signal), slug);
+}
+
+/**
+ * `GET /api/metrics/runs?agent=&limit=5` — the LAST RUNS rows
+ * (owner: `observability-engineer`, `comms/specs/observability.md`).
+ *
+ * **Not `GET /api/runs`.** That route is the runner's *in-memory* queue view
+ * (`services.store.list()`), so it holds only what the current runner process executed and
+ * is empty after every restart — LAST RUNS could never show history, and the blank would
+ * come back on every deploy even once a real API key is set. `/api/metrics/runs` is the
+ * durable ledger (`ops.agent_runs` in Postgres): same row shape plus `costSource` and
+ * `traceUrl`, `startedAt` as ISO 8601 so relative time still stays live without polling.
+ *
+ * The `agent=` filter is server-side (`lastRuns(db, {agent}, limit)`), so this asks for
+ * five rows and receives five rows — no client-side filtering of a wide page, which would
+ * silently show four rows for a busy agent. `limit` is clamped to 50 upstream.
+ *
+ * `/api/runs` is still the right read for anything about *this process* — the live queue,
+ * a run that has not been flushed to the ledger yet. It is simply not history.
+ */
 export async function fetchRuns(slug: string, limit = 5, signal?: AbortSignal): Promise<RunRow[]> {
-  return normalizeRuns(await getJson(`/api/runs?agent=${encodeURIComponent(slug)}&limit=${limit}`, signal), limit);
+  return normalizeRuns(
+    await getJson(`/api/metrics/runs?agent=${encodeURIComponent(slug)}&limit=${limit}`, signal),
+    limit,
+  );
 }
 
 /** `POST /api/schedule` — writes `schedule:` into frontmatter via a git commit. */
@@ -118,5 +154,5 @@ export async function fetchRunnerStatus(
 export const DOWNLOAD_ROUTE_AGREED = false;
 
 export function downloadUrl(slug: string): string {
-  return `${API_BASE}/api/agents/${slug}/download`;
+  return `${API_BASE}/api/agents/${slugPath(slug)}/download`;
 }

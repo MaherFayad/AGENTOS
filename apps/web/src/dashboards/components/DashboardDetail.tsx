@@ -41,7 +41,7 @@ export function DashboardDetail({
   };
 
   return (
-    <DashboardQueryProvider range={range} segment={segment}>
+    <DashboardQueryProvider panel={panel} range={range} segment={segment}>
       <div className={cx(s.view)}>
         <button
           type="button"

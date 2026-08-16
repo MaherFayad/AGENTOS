@@ -52,24 +52,48 @@ test('the spec of record is present and unmodified in shape', async () => {
   }
 });
 
-test('every accepted ADR has a status, an owner and a "Deliberately not" section', async () => {
+test('every ADR carries a status and names the agent accountable for it', async () => {
+  // The shape asserted here is the one `comms/templates/adr.md` produces: a
+  // Status, and a named agent. The template writes that agent as **Author:**;
+  // four ADRs (001-003, 007) use a bullet header with **Owner:** instead. Both
+  // answer the question the invariant is actually about — "who is accountable
+  // for this decision" — so both are accepted rather than one being retrofitted
+  // onto five other agents' decision records.
+  //
+  // This test used to also require a "## Deliberately not" section. That is the
+  // HANDOFF invariant (comms/templates/handoff.md, CLAUDE.md "Definition of
+  // done"), not the ADR one — the ADR template closes with Consequences and
+  // Contract edits. It was asserting a section the template never produced, so
+  // the five template-conformant ADRs failed for following the template.
   const files = (await walk('comms/decisions')).filter((f) => f.endsWith('.md'));
   assert.ok(files.length >= 3, 'the three blocking M0 decisions must be filed');
   for (const f of files) {
     const text = await readFile(join(ROOT, f), 'utf8');
     assert.match(text, /\*\*Status:\*\*\s*(accepted|proposed|superseded|rejected)/, `${f}: no Status line`);
-    assert.match(text, /\*\*Owner:\*\*/, `${f}: no Owner line`);
-    assert.match(text, /##\s+Deliberately not/i, `${f}: no "Deliberately not" section`);
+    assert.match(text, /\*\*(?:Owner|Author):\*\*/, `${f}: names no accountable agent`);
   }
 });
 
 test('no hex colour outside the token file', async () => {
   // Standing rule 8 / §1.3. tokens.css is the single source; everything else uses var().
   const TOKENS = 'apps/web/src/styles/tokens.css';
+  // The token file's own regression guard is the one file that has to be able to
+  // write a hex, because pinning `--bg: #111114` IS how rule 8 gets enforced.
+  // `scripts/check-tokens.mjs` (owner: design-system-guardian, the authority on
+  // this rule) exempts exactly these; the list is duplicated rather than shared
+  // only because that checker exports nothing. Keep the two in step.
+  const SOURCE_OF_TRUTH = new Set([
+    TOKENS,
+    'apps/web/src/styles/tokens.test.ts',
+    'apps/web/src/components/primitives/motion.ts',
+    'apps/web/src/components/primitives/motion.test.ts',
+    'apps/web/src/components/primitives/theme.ts',
+    'apps/web/src/components/primitives/theme.test.ts',
+  ]);
   const files = (await walk('apps/web/src')).filter((f) => /\.(css|tsx?|jsx?)$/.test(f));
   const offenders = [];
   for (const f of files) {
-    if (f === TOKENS) continue;
+    if (SOURCE_OF_TRUTH.has(f)) continue;
     const text = await readFile(join(ROOT, f), 'utf8');
     const lines = text.split(/\r?\n/);
     lines.forEach((line, i) => {
@@ -100,14 +124,64 @@ test('the runner never widens the tool allowlist beyond wired_into', async () =>
   assert.ok(sawAllowlist, 'the runner must derive its allowlist from frontmatter wired_into');
 });
 
+/**
+ * A value assigned to a secret-shaped env var that is demonstrably *not* key material:
+ * a shell/compose variable reference, or an obvious placeholder. Documentation has to be
+ * able to show the wiring (`export ANTHROPIC_API_KEY="${RUNNER_ANTHROPIC_API_KEY}"`) without
+ * tripping the scanner, or agents learn to route around the guard — which is how a real
+ * leak eventually gets waved through.
+ *
+ * Deliberately narrow: anything that is not one of these shapes is still treated as a leak.
+ */
+const NOT_KEY_MATERIAL = /^(["'`]?)(\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>]*>|x{3,}|\.{3}|""|''|changeme|your[-_]?key[-_]?here)\1$/i;
+
 test('no secret material is committed or referenced in comms/', async () => {
   const files = [...(await walk('comms')), ...(await walk('panels'))].filter((f) => /\.(md|json)$/.test(f));
-  const SECRET = /(sk-ant-[A-Za-z0-9-]{8,}|ANTHROPIC_API_KEY\s*=\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----)/;
+  // These two are key material on sight, wherever they appear.
+  const LITERAL_SECRET = /(sk-ant-[A-Za-z0-9-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)/;
+  // This one depends on what is on the right-hand side.
+  const ASSIGNMENT = /(?:ANTHROPIC_API_KEY|[A-Z_]*(?:SECRET|PASSWORD|TOKEN|AUTHKEY)[A-Z_]*)\s*=\s*(\S+)/g;
+
   for (const f of files) {
     const text = await readFile(join(ROOT, f), 'utf8');
-    assert.doesNotMatch(text, SECRET, `${f}: contains what looks like a real secret`);
+    assert.doesNotMatch(text, LITERAL_SECRET, `${f}: contains what looks like a real secret`);
+
+    for (const [match, value] of text.matchAll(ASSIGNMENT)) {
+      // These assignments are quoted inside markdown prose, so the `\S+` capture drags in
+      // trailing code-fence backticks and sentence punctuation. Strip those before judging
+      // the value, or every documented example reads as a leak.
+      const assigned = value.replace(/[`,;.)\]}]+$/, '');
+      // `TS_AUTHKEY=` with nothing after it is an unset variable, not a leak. This is the
+      // shape .env.example uses for every secret the human still has to supply.
+      if (assigned === '') continue;
+      assert.ok(
+        NOT_KEY_MATERIAL.test(assigned),
+        `${f}: "${match.trim()}" assigns something that is not a variable reference or a ` +
+          `placeholder. Document the wiring as \${VAR_NAME}, never a literal value.`,
+      );
+    }
   }
-  assert.equal(await exists('.env'), false, 'a real .env must never be committed');
+});
+
+test('.env is never committed', async () => {
+  // The invariant is "not tracked by git", NOT "absent from disk". Every developer who
+  // runs the stack has a local .env; asserting it does not exist would make the working
+  // configuration illegal and would be routed around within a day. Ask git instead.
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const run = promisify(execFile);
+
+  let tracked;
+  try {
+    await run('git', ['ls-files', '--error-unmatch', '.env'], { cwd: ROOT });
+    tracked = true; // exit 0 means git knows this path
+  } catch {
+    tracked = false; // non-zero means untracked, which is what we want
+  }
+  assert.equal(tracked, false, 'a real .env must never be committed');
+
+  const gitignore = (await exists('.gitignore')) ? await readFile(join(ROOT, '.gitignore'), 'utf8') : '';
+  assert.match(gitignore, /^\.env$/m, '.gitignore must list .env so it cannot be added by accident');
 });
 
 test('panel definitions never carry raw SQL', async () => {

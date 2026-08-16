@@ -4,8 +4,8 @@ import { BreadcrumbStrip } from './BreadcrumbStrip';
 import { on, resetBusForTests } from '../../lib/shell-bus';
 import { GRAPH_FIXTURE, renderShell, stubFetch } from './test-harness';
 
-vi.mock('next/navigation', async () => (await import('./test-harness')).navigationMock());
-vi.mock('./ui', async () => (await import('./test-harness')).uiMock());
+vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
+vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>

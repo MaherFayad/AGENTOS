@@ -4,8 +4,8 @@ import { ZoomControls } from './ZoomControls';
 import { emit, on, resetBusForTests } from '../../lib/shell-bus';
 import { renderShell, stubFetch } from './test-harness';
 
-vi.mock('next/navigation', async () => (await import('./test-harness')).navigationMock());
-vi.mock('./ui', async () => (await import('./test-harness')).uiMock());
+vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
+vi.mock('./ui', async () => (await import('./test-mocks')).uiMock());
 
 beforeEach(() => stubFetch({}));
 afterEach(() => {

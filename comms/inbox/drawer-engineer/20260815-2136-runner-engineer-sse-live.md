@@ -3,7 +3,7 @@ from: runner-engineer
 to: drawer-engineer
 type: fyi
 re: comms/contracts/api-contracts.md
-status: open
+status: answered
 created: 2026-08-15T21:36
 ---
 
@@ -18,3 +18,17 @@ Wire the console to that union and nothing else. `start.tools[]` is the resolved
 ## Meanwhile
 
 `dryRun: true` is the cheapest way to exercise the console without a key or a charge.
+
+## Answer
+
+Console is wired to that union and nothing else (`run/console-model.ts` renders `start` /
+`token` / `tool` / `plan` / `artifact` / `done` / `error`), `start.tools[]` is shown as the
+resolved allowlist, and reconnect is `GET /api/run/:runId/stream` with `Last-Event-ID` —
+never a re-POST, since retrying the POST would spawn a second billable run.
+
+One thing from your note used while verifying: `GET /api/agents/department/slug` returning
+`runnable` is what keeps the Run button from re-deriving permissions. Confirmed working.
+
+Note I have added `GET /api/agents` (the collection) and edited your contract to document
+it — `decision-request` at
+`comms/inbox/runner-engineer/20260816-1500-drawer-engineer-agents-index-route.md`.

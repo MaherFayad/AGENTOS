@@ -75,13 +75,30 @@ const EXPRESSION: Record<MetricName, string> = {
 };
 
 /**
+ * "N hours ago", as an expression Postgres can resolve without a function lookup.
+ *
+ * The obvious spelling — `make_interval(hours => $n)` — is a trap. `make_interval`
+ * takes `int` for every unit except `secs`, and Postgres resolves the overload at
+ * **parse** time, so a `float8` argument throws before a single row is read and before
+ * a `IS NULL` guard can spare it. It fails identically whether the parameter is 24,
+ * 24.5 or NULL. Multiplying a unit interval has no overload to resolve, keeps the
+ * parameter `float8`, and is exact for fractional windows rather than truncating them
+ * (`0.5` really means thirty minutes, not zero hours).
+ *
+ * Every time window in this file goes through these two helpers. Nothing here calls
+ * `make_interval`, and nothing should: a query in this file is only ever checked by a
+ * real Postgres, so the safest expression is the one with no signature to get wrong.
+ */
+const hoursAgo = (param: string) => `(${param}::float8 * interval '1 hour')`;
+
+/**
  * Window + filter predicate shared by every ops query. `$1` and `$2` are the window
  * bounds in hours ago; `$3`–`$5` are the optional filters, each a no-op when null.
  */
 const RUN_SCOPE = `
     ${REAL_RUNS}
-      AND started_at >= now() - make_interval(hours => $1)
-      AND started_at <  now() - make_interval(hours => $2)
+      AND started_at >= now() - ${hoursAgo('$1')}
+      AND started_at <  now() - ${hoursAgo('$2')}
       AND ($3::text IS NULL OR agent = $3)
       AND ($4::text IS NULL OR department = $4)
       AND ($5::text IS NULL OR status = $5)
@@ -235,7 +252,7 @@ export async function lastRuns(
       AND ($1::text IS NULL OR agent = $1)
       AND ($2::text IS NULL OR department = $2)
       AND ($3::text IS NULL OR status = $3)
-      AND ($4::float8 IS NULL OR started_at >= now() - make_interval(hours => $4))
+      AND ($4::float8 IS NULL OR started_at >= now() - ${hoursAgo('$4')})
     ORDER BY started_at DESC
     LIMIT $5
   `;
@@ -307,151 +324,15 @@ export async function runToolCalls(db: DbClient, runId: string) {
 }
 
 /* ------------------------------------------------------------------------- *
- * Named query registry — `query.source: "sql"` in the panel contract.
- * ------------------------------------------------------------------------- */
-
-export type ParamType = 'int' | 'string' | 'range';
-
-export type NamedQuery = {
-  /** What the panel is asking for, in a sentence. Shown in the panel validator's errors. */
-  description: string;
-  /** Ordered parameter list. `$1` is params[0], and so on. */
-  params: { name: string; type: ParamType; default?: number | string }[];
-  sql: string;
-};
-
-/**
- * Business queries, addressable by name. Adding one is a code change with a review —
- * which is the point: it is the boundary that keeps a JSON file in `panels/` from
- * being able to read arbitrary rows.
+ * The named query registry does NOT live here.
  *
- * These read `app.agent_outputs`, so a widget lights up the moment an agent starts
- * writing that `kind` and shows an honest empty state until then.
- */
-export const NAMED_QUERIES: Record<string, NamedQuery> = {
-  outputs_by_kind: {
-    description: 'Row count per output kind over the last N days — the "is anything writing yet" query.',
-    params: [{ name: 'days', type: 'int', default: 30 }],
-    sql: `
-      SELECT kind AS label, count(*)::int AS value
-      FROM app.agent_outputs
-      WHERE occurred_at >= now() - make_interval(days => $1)
-      GROUP BY kind
-      ORDER BY value DESC
-    `,
-  },
-
-  outputs_by_department: {
-    description: 'Rows written per department over the last N days (bar-list widget).',
-    params: [{ name: 'days', type: 'int', default: 30 }],
-    sql: `
-      SELECT department AS label, count(*)::int AS value
-      FROM app.agent_outputs
-      WHERE occurred_at >= now() - make_interval(days => $1)
-      GROUP BY department
-      ORDER BY value DESC
-    `,
-  },
-
-  outputs_recent: {
-    description: 'Most recent rows of one kind, newest first (data-table widget).',
-    params: [
-      { name: 'kind', type: 'string' },
-      { name: 'limit', type: 'int', default: 20 },
-    ],
-    sql: `
-      SELECT o.entity_key, o.occurred_at, o.agent, o.payload, r.trace_url
-      FROM app.agent_outputs o
-      LEFT JOIN ops.agent_runs r ON r.run_id = o.run_id
-      WHERE o.kind = $1
-      ORDER BY o.occurred_at DESC
-      LIMIT $2
-    `,
-  },
-
-  cost_by_agent: {
-    description: 'Runner spend per agent over the last N days (cost-table widget).',
-    params: [{ name: 'days', type: 'int', default: 28 }],
-    sql: `
-      SELECT agent AS label,
-             sum(cost_usd)::float8 AS value,
-             count(*)::int AS runs,
-             (count(*) FILTER (WHERE cost_usd IS NULL))::int AS unpriced
-      FROM ops.agent_runs
-      WHERE ${REAL_RUNS}
-        AND started_at >= now() - make_interval(days => $1)
-      GROUP BY agent
-      ORDER BY value DESC
-    `,
-  },
-
-  runs_per_day: {
-    description: 'Daily run volume over the last N days (area-chart widget).',
-    params: [{ name: 'days', type: 'int', default: 28 }],
-    sql: `
-      SELECT date_trunc('day', started_at)::date AS t, count(*)::int AS v
-      FROM ops.agent_runs
-      WHERE ${REAL_RUNS}
-        AND started_at >= now() - make_interval(days => $1)
-      GROUP BY 1
-      ORDER BY 1
-    `,
-  },
-};
-
-/**
- * Validate and order a named query's parameters. Rejects unknown names, wrong types
- * and missing required values — before anything is bound, let alone executed.
- */
-export function bindNamedQuery(
-  name: string,
-  supplied: Record<string, unknown> = {},
-): { sql: string; params: unknown[] } {
-  const query = NAMED_QUERIES[name];
-  if (!query) {
-    throw Object.assign(new Error(`Unknown query "${name}".`), {
-      code: 'unknown_query',
-      hint: `Known queries: ${Object.keys(NAMED_QUERIES).join(', ')}.`,
-    });
-  }
-
-  const params = query.params.map((spec) => {
-    const raw = supplied[spec.name] ?? spec.default;
-    if (raw === undefined) {
-      throw Object.assign(new Error(`Query "${name}" needs a "${spec.name}" parameter.`), {
-        code: 'missing_param',
-        hint: `Add "params": { "${spec.name}": … } to the panel's query.`,
-      });
-    }
-    if (spec.type === 'int') {
-      const n = Number(raw);
-      if (!Number.isInteger(n) || n < 0 || n > 3_650) {
-        throw Object.assign(new Error(`"${spec.name}" must be a whole number between 0 and 3650.`), {
-          code: 'bad_param',
-          hint: 'Check the panel definition.',
-        });
-      }
-      return n;
-    }
-    if (spec.type === 'range') {
-      const value = String(raw);
-      if (!isRange(value)) {
-        throw Object.assign(new Error(`"${spec.name}" must be one of ${Object.keys(RANGES).join(', ')}.`), {
-          code: 'bad_param',
-          hint: 'Check the panel definition.',
-        });
-      }
-      return RANGES[value];
-    }
-    const value = String(raw);
-    if (value.length > 128) {
-      throw Object.assign(new Error(`"${spec.name}" is too long.`), {
-        code: 'bad_param',
-        hint: 'Check the panel definition.',
-      });
-    }
-    return value;
-  });
-
-  return { sql: query.sql, params };
-}
+ * It is `./registry.ts`, and it is the only one. A second copy used to sit at the
+ * bottom of this file — same five names, subtly different SQL (`count(*)::int` here
+ * against `::float8` there, which is a different JSON type on the wire). Nothing
+ * imported it; `routes/metrics.ts` and `scripts/check-metrics.mjs` both read
+ * `registry.ts`. It was removed rather than reconciled: two definitions of
+ * `outputs_by_kind` is one definition too many, and the dead one is the one a reader
+ * finds first because this is the file called `queries.ts`.
+ *
+ * Add a business query in `registry.ts`. This file holds the ops metrics only.
+ * ------------------------------------------------------------------------- */

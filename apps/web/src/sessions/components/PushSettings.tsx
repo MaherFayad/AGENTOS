@@ -12,6 +12,7 @@
  * ========================================================================== */
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/i18n';
 import {
   disablePush,
   enablePush,
@@ -24,6 +25,7 @@ import type { NotificationDetail } from '../push/payload';
 import s from '../sessions.module.css';
 
 export function PushSettings(): React.JSX.Element | null {
+  const t = useT();
   const [enabled, setEnabled] = useState(false);
   const [detail, setDetail] = useState<NotificationDetail>('minimal');
   const [hint, setHint] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function PushSettings(): React.JSX.Element | null {
       }
       const result = await enablePush();
       if (result.ok) setEnabled(true);
-      else setHint(result.hint ?? 'Couldn’t enable notifications.');
+      else setHint(result.hint ?? t('sessions.push.failed'));
     } finally {
       setBusy(false);
     }
@@ -67,7 +69,7 @@ export function PushSettings(): React.JSX.Element | null {
         disabled={busy}
         aria-pressed={enabled}
       >
-        {enabled ? 'Notifications on' : 'Notify this phone'}
+        {enabled ? t('sessions.push.enabled') : t('sessions.push.enable')}
       </button>
       {enabled ? (
         <label className={s.pushDetail}>
@@ -76,7 +78,7 @@ export function PushSettings(): React.JSX.Element | null {
             checked={detail === 'full'}
             onChange={(e) => onDetail(e.target.checked ? 'full' : 'minimal')}
           />
-          Show session names on the lock screen
+          {t('sessions.push.names')}
         </label>
       ) : null}
       {hint ? (

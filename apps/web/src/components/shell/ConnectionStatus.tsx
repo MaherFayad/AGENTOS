@@ -52,10 +52,7 @@ export function ConnectionStatus(): React.JSX.Element {
           ? 'ONLINE'
           : status.data.tailscale.toUpperCase();
 
-  const queue =
-    status.state === 'ready' && status.data.queueDepth !== null
-      ? `${status.data.queueDepth} QUEUED`
-      : null;
+  const queue = status.state === 'ready' && status.data.queueDepth !== null ? status.data.queueDepth : null;
 
   const sentence =
     status.state === 'unavailable'
@@ -67,7 +64,11 @@ export function ConnectionStatus(): React.JSX.Element {
   return (
     <div
       title={sentence}
-      className="pointer-events-auto flex items-center gap-2 rounded-pill border border-line bg-card px-3 py-1.5 text-label-sm uppercase tracking-wider-1 text-ink-2"
+      // `whitespace-nowrap`: at 375px the bottom-right cluster is narrow enough that
+      // "0 QUEUED" breaks across two lines and the pill grows a second row. A status
+      // readout that changes height as the number changes is worse than one that is
+      // occasionally wide, so it stays on one line.
+      className="pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-pill border border-line bg-card px-3 py-1.5 text-label-sm uppercase tracking-wider-1 text-ink-2"
     >
       <span
         aria-hidden="true"
@@ -79,7 +80,13 @@ export function ConnectionStatus(): React.JSX.Element {
           <span aria-hidden="true" className="text-ink-3">
             ·
           </span>
-          <span className="tabular-nums">{queue}</span>
+          {/* The word is dropped below 420px so the two bottom-right pills fit a phone
+              without wrapping or clipping. The count is the reading; "QUEUED" is the
+              caption, and the `title`/sr-only sentence always carries the full wording. */}
+          <span className="tabular-nums">
+            {queue}
+            <span className="hidden min-[420px]:inline"> QUEUED</span>
+          </span>
         </>
       )}
       <span className="sr-only">{sentence}</span>

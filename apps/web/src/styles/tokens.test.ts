@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -11,7 +12,10 @@ import { describe, expect, it } from 'vitest';
  * side-by-side fidelity test at 1440px (Part VI acceptance).
  */
 
-const CSS = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url)), 'utf8');
+// NB: built by hand rather than `new URL('./tokens.css', import.meta.url)` — Vite
+// statically rewrites that exact pattern into a served asset URL, and `fileURLToPath`
+// then throws "The URL must be of scheme file". Same path, no rewrite.
+const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'tokens.css'), 'utf8');
 
 /**
  * Declarations grouped by selector. Comments are stripped first — otherwise the
@@ -169,7 +173,9 @@ describe('§1.6 motion', () => {
     expect(CSS).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
     const reduced = CSS.split('prefers-reduced-motion')[1] ?? '';
     for (const d of ['--dur-reveal', '--dur-drawer', '--dur-relax', '--dur-zoom', '--dur-count']) {
-      expect(reduced).toContain(`${d}: 1ms`);
+      // Whitespace-tolerant: tokens.css column-aligns its values, so an exact
+      // `${d}: 1ms` substring matches only the tokens that happen to have one space.
+      expect(reduced).toMatch(new RegExp(`${d}:\\s*1ms`));
     }
   });
 });

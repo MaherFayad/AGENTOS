@@ -20,12 +20,31 @@
  *     is already visible, because a thumb has no hover
  * ========================================================================== */
 
-/* The transcript needs a monospace family and Part I does not define one.
-   Requested as `--font-mono` from design-system-guardian; scoped here until
-   that lands so no unowned token is invented in tokens.css. */
+/* -----------------------------------------------------------------------------
+ * TYPE COMES FROM THE §1.4 SCALE, NEVER FROM A LITERAL.
+ *
+ * `@apply text-label / text-meta / text-small / text-body / text-pill / text-chip`
+ * pulls the named roles out of tailwind.config.ts (owner: design-system-guardian),
+ * so size, weight and leading travel together and this file holds no px. Tracking
+ * comes from `var(--track-1…4)`, which `styles/rtl.css` re-points to `normal`
+ * under `:lang(ar)` in one place — that is why a literal `.3em` here would be a
+ * bug rather than a style: Arabic is a connected script and tracking severs the
+ * joins (§1.4). The elements that carry tracking also carry `.u-label` /
+ * `.u-eyebrow` / `.u-tab` in the JSX, which is the hook rtl.css uses to put the
+ * emphasis back as weight and word-spacing.
+ *
+ * Two values are still local, both requested from design-system-guardian:
+ *   --ses-font-mono    Part I defines no monospace family (§3.1 needs one).
+ *   --ses-fs-gate      the §1.4 scale jumps 16px → 28px; the gate H1 sits in
+ *                      that hole. decision-request filed; until it lands this is
+ *                      the only way to hit the size without an arbitrary utility.
+ *   --ses-dot-breathe  §1.6 has no ambient-loop duration. Same decision-request.
+ * -------------------------------------------------------------------------- */
 .tab,
 .view {
   --ses-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --ses-fs-gate: 18px;
+  --ses-dot-breathe: 2.4s;
   --ses-safe-b: env(safe-area-inset-bottom, 0px);
   --ses-safe-t: env(safe-area-inset-top, 0px);
   --ses-safe-l: env(safe-area-inset-left, 0px);
@@ -42,6 +61,15 @@
   background: var(--bg);
   color: var(--ivory);
   font-family: var(--font-sans);
+}
+
+/* rtl-exempt: a notch is a physical edge of a physical device and does not move
+   when the reader's language does. `padding-inline-start: env(safe-area-inset-left)`
+   would pad the RIGHT edge under dir="rtl" and leave the cutout overlapping the
+   list. There is no design padding welded to these two lines — the inline
+   padding of the tab lives on .header / .list — so the physical keyword here is
+   the whole declaration and the correct answer. */
+.tab {
   padding-left: var(--ses-safe-l);
   padding-right: var(--ses-safe-r);
 }
@@ -54,13 +82,12 @@
   padding: 20px 20px 12px;
 }
 
-/* The wide-tracked cap label that appears everywhere in this product. */
+/* The wide-tracked cap label that appears everywhere in this product. Paired
+   with `.u-eyebrow` in the JSX: Latin gets the +0.35em track, Arabic gets the
+   same emphasis as weight and word-spacing instead (§1.4). */
 .eyebrow {
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.35em;
+  @apply text-label uppercase;
+  letter-spacing: var(--track-3);
   color: var(--ink-2);
 }
 
@@ -74,7 +101,7 @@
 .billingNote {
   margin: 0;
   padding: 0 20px 12px;
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.5;
   color: var(--ink-2);
 }
@@ -84,7 +111,7 @@
   padding: 12px 14px;
   border: var(--border-w) solid var(--line);
   border-radius: var(--r-card);
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.5;
   color: var(--ivory-2);
   background: var(--card);
@@ -107,8 +134,7 @@
   background: transparent;
   color: var(--ivory);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  @apply text-pill;
   cursor: pointer;
 }
 
@@ -121,7 +147,7 @@
   align-items: center;
   gap: 10px;
   min-height: 44px;
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.4;
   color: var(--ink-2);
 }
@@ -191,7 +217,7 @@
 }
 
 .rowName {
-  font-size: 15px;
+  @apply text-body;
   font-weight: 600;
   line-height: 1.25;
   color: var(--ivory);
@@ -205,7 +231,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.3;
   color: var(--ink-2);
   overflow: hidden;
@@ -232,13 +258,13 @@
 }
 
 .elapsed {
-  font-size: 13px;
+  @apply text-small;
   font-weight: 600;
   color: var(--ivory-2);
 }
 
 .cost {
-  font-size: 12px;
+  @apply text-meta;
   color: var(--ink-2);
 }
 
@@ -255,7 +281,7 @@
 
 .dot[data-state='working'] {
   background: var(--ivory-2);
-  animation: sesBreathe 2.4s var(--ease-reveal) infinite;
+  animation: sesBreathe var(--ses-dot-breathe) var(--ease-reveal) infinite;
 }
 
 .dot[data-state='waiting-permission'] {
@@ -288,7 +314,7 @@
   max-width: 34ch;
   text-align: center;
   color: var(--ivory-2);
-  font-size: 14px;
+  @apply text-small;
   line-height: 1.6;
 }
 
@@ -296,7 +322,7 @@
   display: block;
   margin-bottom: 8px;
   color: var(--ivory);
-  font-size: 15px;
+  @apply text-body;
   font-weight: 600;
 }
 
@@ -304,7 +330,7 @@
   display: block;
   margin-top: 10px;
   color: var(--ink-2);
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.6;
 }
 
@@ -356,10 +382,8 @@
   background: transparent;
   color: var(--ivory-2);
   font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
+  @apply text-label uppercase;
+  letter-spacing: var(--track-1);
   cursor: pointer;
 }
 
@@ -376,7 +400,7 @@
 
 .viewTitle {
   margin: 0;
-  font-size: 15px;
+  @apply text-body;
   font-weight: 600;
   line-height: 1.2;
   overflow: hidden;
@@ -386,7 +410,8 @@
 
 .viewMeta {
   margin: 3px 0 0;
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   color: var(--ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -398,7 +423,7 @@
 /* Honest about the network instead of showing a stale log as if it were live. */
 .banner {
   padding: 8px 16px;
-  font-size: 12px;
+  @apply text-meta;
   text-align: center;
   color: var(--ivory-2);
   background: var(--bg-2);
@@ -420,7 +445,7 @@
   -webkit-overflow-scrolling: touch;
   background: var(--screen);
   font-family: var(--ses-font-mono);
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.55;
   padding: 12px calc(14px + var(--ses-safe-r)) 12px calc(14px + var(--ses-safe-l));
 }
@@ -467,7 +492,8 @@
   border: var(--border-w) dashed var(--line-2);
   border-radius: var(--r-chip);
   color: var(--ink-2);
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   text-align: center;
 }
 
@@ -497,16 +523,14 @@
 .permissionEyebrow {
   display: block;
   margin-bottom: 8px;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
+  @apply text-label-sm uppercase;
+  letter-spacing: var(--track-2);
   color: var(--ink-copper-2);
 }
 
 .permissionTool {
   margin: 0 0 6px;
-  font-size: 15px;
+  @apply text-body;
   font-weight: 700;
   line-height: 1.25;
   color: var(--ivory);
@@ -514,7 +538,7 @@
 
 .permissionSummary {
   margin: 0;
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.5;
   color: var(--ivory-2);
 }
@@ -529,7 +553,8 @@
   border: var(--border-w) solid var(--line);
   border-radius: var(--r-chip);
   font-family: var(--ses-font-mono);
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   line-height: 1.5;
   color: var(--ivory-2);
   max-height: 30vh;
@@ -552,8 +577,7 @@
   padding: 0 18px;
   border-radius: var(--r-pill);
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  @apply text-pill;
   cursor: pointer;
   transition: opacity var(--dur-hover) var(--ease-reveal);
 }
@@ -604,9 +628,10 @@
   border-radius: var(--r-card);
   color: var(--ivory);
   font-family: var(--font-sans);
-  /* 16px prevents iOS Safari from zooming the viewport on focus. Do not
-     shrink this — the zoom is not recoverable with one thumb. */
-  font-size: 16px;
+  /* `text-body` is the §1.4 16px rung, and 16px is also what stops iOS Safari
+     zooming the viewport on focus. Do not drop to a smaller rung — the zoom is
+     not recoverable with one thumb. */
+  @apply text-body;
   line-height: 1.4;
 }
 
@@ -628,8 +653,7 @@
   background: var(--copper);
   color: var(--copper-ink);
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  @apply text-pill;
   cursor: pointer;
 }
 
@@ -649,14 +673,14 @@
 
 .gateTitle {
   margin: 0 0 10px;
-  font-size: 18px;
+  font-size: var(--ses-fs-gate);
   font-weight: 700;
   color: var(--ivory);
 }
 
 .gateBody {
   margin: 0 0 16px;
-  font-size: 13px;
+  @apply text-small;
   line-height: 1.6;
   color: var(--ivory-2);
 }
@@ -671,19 +695,20 @@
   border-radius: var(--r-card);
   color: var(--ivory);
   font-family: var(--font-sans);
-  font-size: 16px;
+  @apply text-body;
 }
 
 .gateNote {
   margin-top: 14px;
-  font-size: 11px;
+  @apply text-chip;
+  font-weight: 400;
   line-height: 1.6;
   color: var(--ink-3);
 }
 
 .error {
   margin: 12px 0 0;
-  font-size: 12px;
+  @apply text-meta;
   line-height: 1.5;
   color: var(--ivory-2);
 }

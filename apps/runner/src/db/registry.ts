@@ -129,7 +129,7 @@ function windowOf(
 ): { clause: string; params: ParamSpec[] } {
   if (!win) return { clause: '', params: [] };
   const column =
-    win.field === 'occurred_at' ? 'occurred_at' : `safe_ts(payload->>${p(win.field)})`;
+    win.field === 'occurred_at' ? 'occurred_at' : `app.safe_ts(payload->>${p(win.field)})`;
   const idx = nextParamIndex();
   return {
     clause: `\n        AND ${column} >= now() - make_interval(days => $${idx})`,
@@ -206,15 +206,15 @@ function total(cfg: {
     ({ where, p, nextIndex }) => {
       const valueField = p(cfg.field);
       const stale = cfg.staleOn
-        ? `\n        AND safe_ts(payload->>${p(cfg.staleOn.field)}) < now() - make_interval(days => $-${
+        ? `\n        AND app.safe_ts(payload->>${p(cfg.staleOn.field)}) < now() - make_interval(days => $-${
             // stale param is always the last declared parameter
             nextIndex() * -1
           })`
         : '';
       return `
-      SELECT coalesce(sum(safe_num(payload->>${valueField})), 0)::float8 AS value,
+      SELECT coalesce(sum(app.safe_num(payload->>${valueField})), 0)::float8 AS value,
              count(*)::int AS rows,
-             (count(*) FILTER (WHERE safe_num(payload->>${valueField}) IS NULL))::int AS unvalued
+             (count(*) FILTER (WHERE app.safe_num(payload->>${valueField}) IS NULL))::int AS unvalued
       FROM ${OUTPUTS}
       WHERE ${where}${stale}
   `;
@@ -254,7 +254,7 @@ function share(cfg: {
 
   const win = cfg.window
     ? `\n        AND ${
-        cfg.window.field === 'occurred_at' ? 'occurred_at' : `safe_ts(payload->>${s.p(cfg.window.field)})`
+        cfg.window.field === 'occurred_at' ? 'occurred_at' : `app.safe_ts(payload->>${s.p(cfg.window.field)})`
       } >= now() - make_interval(days => $${s.fixed.length + 1})`
     : '';
 
@@ -287,8 +287,8 @@ function ratio(cfg: {
   fields: string[];
 }): NamedQuery {
   const { sql, fixed, params } = build(cfg.scope, cfg.window, ({ where, p }) => `
-      SELECT sum(safe_num(payload->>${p(cfg.numerator)}))
-               / NULLIF(sum(safe_num(payload->>${p(cfg.denominator)})), 0) AS value,
+      SELECT sum(app.safe_num(payload->>${p(cfg.numerator)}))
+               / NULLIF(sum(app.safe_num(payload->>${p(cfg.denominator)})), 0) AS value,
              count(*)::int AS rows
       FROM ${OUTPUTS}
       WHERE ${where}
@@ -317,8 +317,8 @@ function medianElapsed(cfg: {
   fields: string[];
 }): NamedQuery {
   const { sql, fixed, params } = build(cfg.scope, cfg.window, ({ where, p }) => {
-    const start = `safe_ts(payload->>${p(cfg.from)})`;
-    const end = cfg.to === null ? 'now()' : `safe_ts(payload->>${p(cfg.to)})`;
+    const start = `app.safe_ts(payload->>${p(cfg.from)})`;
+    const end = cfg.to === null ? 'now()' : `app.safe_ts(payload->>${p(cfg.to)})`;
     return `
       SELECT percentile_cont(0.5) WITHIN GROUP (
                ORDER BY extract(epoch FROM (${end} - ${start})) * 1000
@@ -355,7 +355,7 @@ function grouped(cfg: {
   const { sql, fixed, params } = build(cfg.scope, cfg.window, ({ where, p, nextIndex }) => {
     const label = `coalesce(payload->>${p(cfg.by)}, ${p('Unattributed')})`;
     const value = cfg.sum
-      ? `coalesce(sum(safe_num(payload->>${p(cfg.sum)})), 0)::float8`
+      ? `coalesce(sum(app.safe_num(payload->>${p(cfg.sum)})), 0)::float8`
       : 'count(*)::float8';
     return `
       SELECT ${label} AS label, ${value} AS value, count(*)::int AS rows
@@ -390,12 +390,12 @@ function series(cfg: {
 }): NamedQuery {
   const bucket = cfg.bucket ?? 'day';
   const { sql, fixed, params } = build(cfg.scope, cfg.window, ({ where, p }) => {
-    const value = cfg.sum ? `coalesce(sum(safe_num(payload->>${p(cfg.sum)})), 0)::float8` : 'count(*)::float8';
+    const value = cfg.sum ? `coalesce(sum(app.safe_num(payload->>${p(cfg.sum)})), 0)::float8` : 'count(*)::float8';
     return `
-      SELECT date_trunc('${bucket}', safe_ts(payload->>${p(cfg.on)})) AS t, ${value} AS v
+      SELECT date_trunc('${bucket}', app.safe_ts(payload->>${p(cfg.on)})) AS t, ${value} AS v
       FROM ${OUTPUTS}
       WHERE ${where}
-        AND safe_ts(payload->>${p(cfg.on)}) IS NOT NULL
+        AND app.safe_ts(payload->>${p(cfg.on)}) IS NOT NULL
       GROUP BY 1
       ORDER BY 1
   `;
@@ -434,7 +434,7 @@ function rows(cfg: {
       FROM ${OUTPUTS} o
       LEFT JOIN ops.agent_runs r ON r.run_id = o.run_id
       WHERE ${where.replace(/\bkind =/g, 'o.kind =').replace(/\bpayload->>/g, 'o.payload->>').replace(/\boccurred_at\b/g, 'o.occurred_at')}
-      ORDER BY ${cfg.orderBy === 'occurred_at' ? 'o.occurred_at' : `safe_ts(o.payload->>${p(cfg.orderBy)})`} ${direction}
+      ORDER BY ${cfg.orderBy === 'occurred_at' ? 'o.occurred_at' : `app.safe_ts(o.payload->>${p(cfg.orderBy)})`} ${direction}
       LIMIT $-${nextIndex() * -1}
   `, [{ name: 'limit', type: 'int', default: cfg.limit ?? 20 }]);
   return {

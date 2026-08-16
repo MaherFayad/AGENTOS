@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -10,7 +11,9 @@ import { describe, expect, it } from 'vitest';
  * so a later "just this once" cannot land as a token-exempt comment.
  */
 
-const CSS = readFileSync(fileURLToPath(new URL('./rtl.css', import.meta.url)), 'utf8');
+// NB: see tokens.test.ts — Vite rewrites `new URL('./x', import.meta.url)` into an
+// asset URL, which `fileURLToPath` rejects. Same path, built without the pattern.
+const CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'rtl.css'), 'utf8');
 
 const TYPE_LITERAL = /\b(font-size|letter-spacing)\s*:\s*([^;!]+)/;
 const TYPE_OK = /var\(|inherit|normal|unset|initial|revert|currentColor/;

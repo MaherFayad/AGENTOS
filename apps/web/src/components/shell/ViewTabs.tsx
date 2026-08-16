@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SegmentedControl } from './ui';
 import { VIEWS, VIEW_LABELS, viewHref, type ShellView } from './route';
@@ -18,7 +18,8 @@ import { useShell } from './ShellContext';
  */
 export function ViewTabs(): React.JSX.Element {
   const router = useRouter();
-  const { route } = useShell();
+  const { route, reducedMotion } = useShell();
+  const host = useRef<HTMLDivElement>(null);
 
   const onChange = useCallback(
     (value: ShellView) => {
@@ -27,12 +28,39 @@ export function ViewTabs(): React.JSX.Element {
     [router],
   );
 
+  /**
+   * Keep the active tab on screen.
+   *
+   * The four labels are ~400px of wide-tracked caps, so on a 375px phone `TopBar`'s
+   * `overflow-x-auto` engages and the strip scrolls. Left alone, opening `/sessions`
+   * directly — which is exactly what a push notification link does (§3.6) — parks the
+   * one selected tab past the right edge, at `scrollLeft: 0`, and the shell looks like
+   * nothing is selected. Verified at 375×812 before this existed.
+   *
+   * `inline: 'nearest'` scrolls the minimum needed and does nothing when the tab is
+   * already visible, so the 1440px layout never moves. `scrollIntoView` is feature-tested
+   * because jsdom does not implement it.
+   */
+  useEffect(() => {
+    const active = host.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    if (typeof active?.scrollIntoView !== 'function') return;
+    active.scrollIntoView({
+      inline: 'nearest',
+      block: 'nearest',
+      behavior: reducedMotion ? 'auto' : 'smooth',
+    });
+  }, [route.view, reducedMotion]);
+
   return (
-    <SegmentedControl<ShellView>
-      label="Views"
-      value={route.view}
-      onChange={onChange}
-      options={VIEWS.map((view) => ({ value: view, label: VIEW_LABELS[view] }))}
-    />
+    // `display: contents` — a handle for the effect above, with no box of its own, so the
+    // control stays the direct child of the centring grid column.
+    <div ref={host} className="contents">
+      <SegmentedControl<ShellView>
+        label="Views"
+        value={route.view}
+        onChange={onChange}
+        options={VIEWS.map((view) => ({ value: view, label: VIEW_LABELS[view] }))}
+      />
+    </div>
   );
 }

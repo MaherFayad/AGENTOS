@@ -15,13 +15,14 @@ import {
   type ArtifactKind,
   type GraphSocketMessage,
   type RunRequest,
+  type AgentsIndex,
   type ScheduleRequest,
   type StatusResponse,
 } from '@agnetos/contracts';
 import { sendApiError } from './http.ts';
 import { registerMetricsRoutes } from './register-metrics.ts';
 import { ApiError, badRequest } from '../lib/errors.ts';
-import { loadAgent, toAgentDetail } from '../lib/agents.ts';
+import { listAgents, loadAgent, toAgentDetail } from '../lib/agents.ts';
 import { computeBrainCompleteness } from '../lib/brain.ts';
 import { graphIsBuilt, readGraph } from '../lib/graph.ts';
 import { listPanels, readPanel } from '../lib/panels.ts';
@@ -185,15 +186,39 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
     }
   });
 
+  /**
+   * The collection (§2.6 — CHART draws its matrix from this). Summaries only: no `body`,
+   * no `runnable`. See `AgentsIndex` for why.
+   *
+   * `listAgents` skips a file it cannot parse rather than throwing, so one bad SKILL.md
+   * costs its own tile and not the whole matrix — but the reason is reported in
+   * `skipped[]`, because a tile that vanishes silently is indistinguishable from an agent
+   * that was never written.
+   */
+  const agentsIndex = async (): Promise<AgentsIndex> => {
+    const skipped: AgentsIndex['skipped'] = [];
+    const records = await listAgents(config, (slug, reason) => skipped.push({ slug, reason }));
+    return {
+      agents: records.map((record) => ({ slug: record.slug, path: record.path, frontmatter: record.data })),
+      skipped,
+    };
+  };
+
+  app.get(RUNNER_ROUTES.agentsIndex.path, async (_request, reply) => {
+    try {
+      return await agentsIndex();
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
   app.get(RUNNER_ROUTES.agent.path, async (request, reply) => {
     try {
       const slug = slugParam(request);
-      if (!slug) {
-        throw badRequest(
-          'An agent id is required.',
-          'GET /api/agents/department/agent-slug — the folder path, not the display name.',
-        );
-      }
+      // `/api/agents/` — a trailing slash on the collection, not a request for an agent
+      // with no name. Fastify routes it here because the wildcard matches the empty
+      // remainder; answering with the list is the only reading that isn't a lie.
+      if (!slug) return await agentsIndex();
       return toAgentDetail(await loadAgent(config, slug));
     } catch (err) {
       return sendApiError(reply, err);

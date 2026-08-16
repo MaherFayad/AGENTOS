@@ -18,6 +18,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useT, type StringKey } from '@/i18n';
 import { PermissionCard } from './PermissionCard';
 import { Transcript } from './Transcript';
 import { KeyGate } from './KeyGate';
@@ -26,13 +27,15 @@ import { useTranscript } from '../data/useTranscript';
 import s from '../sessions.module.css';
 import type { ConnectionState } from '../types';
 
-const BANNER: Partial<Record<ConnectionState, string>> = {
-  connecting: 'Connecting to the session…',
-  reconnecting: 'Reconnecting — you’re seeing everything up to the drop.',
-  offline: 'Offline. This is the transcript as of the last connection.',
+/** Connection states that have something honest to say. `open` says nothing. */
+const BANNER: Partial<Record<ConnectionState, StringKey>> = {
+  connecting: 'sessions.connection.connecting',
+  reconnecting: 'sessions.connection.reconnecting',
+  offline: 'sessions.connection.offline',
 };
 
 export function SessionView({ sessionId }: { sessionId: string }): React.JSX.Element {
+  const t = useT();
   const { status, key, error: keyError, unlock } = useSessionKey();
   const transcript = useTranscript(sessionId, key);
   const router = useRouter();
@@ -41,7 +44,7 @@ export function SessionView({ sessionId }: { sessionId: string }): React.JSX.Ele
   if (status === 'checking') return <div className={s.view} aria-busy="true" />;
   if (status === 'locked') return <KeyGate onUnlock={unlock} error={keyError} />;
 
-  const banner = BANNER[transcript.connection];
+  const bannerKey = BANNER[transcript.connection];
 
   const send = async (): Promise<void> => {
     const text = draft.trim();
@@ -59,20 +62,22 @@ export function SessionView({ sessionId }: { sessionId: string }): React.JSX.Ele
   return (
     <div className={s.view}>
       <header className={s.viewHeader}>
-        <button type="button" className={s.back} onClick={() => router.push('/sessions')}>
-          Sessions
+        <button
+          type="button"
+          className={`u-tab ${s.back}`}
+          onClick={() => router.push('/sessions')}
+        >
+          {t('sessions.view.back')}
         </button>
         <div className={s.viewTitles}>
-          <h1 className={s.viewTitle}>Session</h1>
-          <p className={s.viewMeta}>
-            {sessionId} · billed to your Claude subscription
-          </p>
+          <h1 className={s.viewTitle}>{t('sessions.view.title')}</h1>
+          <p className={s.viewMeta}>{t('sessions.view.meta', { id: sessionId })}</p>
         </div>
       </header>
 
-      {banner ? (
+      {bannerKey ? (
         <p className={s.banner} data-tone={transcript.connection} role="status">
-          {banner}
+          {t(bannerKey)}
         </p>
       ) : null}
 
@@ -114,11 +119,11 @@ export function SessionView({ sessionId }: { sessionId: string }): React.JSX.Ele
             }
           }}
           rows={1}
-          placeholder="Steer this session…"
-          aria-label="Message this session"
+          placeholder={t('sessions.compose.placeholder')}
+          aria-label={t('sessions.compose.label')}
         />
         <button type="submit" className={s.send} disabled={transcript.busy || !draft.trim()}>
-          Send
+          {t('sessions.compose.send')}
         </button>
       </form>
     </div>
