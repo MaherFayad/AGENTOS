@@ -254,7 +254,23 @@ scan; **(b)** the string resolves to one instant for readers in all three zones;
 scan run now reads as minutes old, not hours, *from every reader zone* — not from a
 conveniently chosen one, since UTC digits read by a UTC reader are correct and the incident
 was a +03 reader. Any format satisfying (a)–(c) may be adopted without touching the tests.
-Verified by mutation: restoring the `toISOString()` line turns six of the ten tests red.
+
+**Verified by mutation, by the owner, 2026-08-16 23:5x at `4e0bbe6`.** Restoring the
+`toISOString()` stamp turns the suite red, and (c) — *a scan run now does not look old* — is
+the assertion that carries the incident:
+
+```
+✖ a scan run now does not look old to a reader in any zone
+  scanned under TZ=UTC, read from Asia/Riyadh: "2026-08-16 20:49" reads as
+  181 minutes old the moment it was produced.
+```
+
+Seven of the ten go red, not six as this line said until it was measured. The count is
+printed with its date and its commit because it is a measurement of a suite, and a suite
+drifts — §9.4's drafting note applies to this section too. **The property is the requirement;
+the count is an observation.** If a future run reports a different number and (a)–(c) are
+still red under the mutation, the property holds and this number is stale — re-measure it,
+do not weaken the test to match it.
 
 The helper is also hardened against the thing that happened to it — a dependency of four
 scripts, shipped the day it was written, wrong in a way only a human clock caught. `git` is
@@ -333,6 +349,21 @@ cases people talk themselves out of:
 misunderstands the screen, or believes a number that is not true, it is required reading and
 it is `--ink-2` at minimum. If they merely lose a decoration, `--ink-3` is fine.
 
+**A glyph that is a cell's entire content is not a separator.** Ruled 2026-08-16 with
+`dashboards-engineer`, whose reading is adopted verbatim: *"a separator sits between two
+things; here the `—` is the cell's entire content."* A lone `—` in a data cell carries the
+difference between *we measured zero* and *we have no measurement* — BOARD rule 9's distinction,
+in one character — so §9.3's separator home does not reach it. It ships `--ivory-2` at
+`apps/web/src/dashboards/components/widget-chrome.tsx` for two independent reasons, either
+sufficient: it stands in place of a value that would have been `--ivory` (§9.4a, one rung), and
+it renders inside `DataTable`'s `hover:bg-card-2` peek rows, where light `--ink-2` is 4.25:1
+(§9.5). **And colour was the smaller half.** `—` is announced as "dash", "em dash" or silence
+depending on the reader's punctuation setting, so the one cell whose job is to say *no reading*
+was the cell that said nothing: it is now an `aria-hidden` glyph plus an `sr-only` sentence, in
+one place, with `DataTable`'s null branch delegating rather than keeping a quieter second copy.
+Pinned by `dashboards-contrast.test.ts` ("gives the absent reading a colour AND an accessible
+name, in exactly one place").
+
 ### 9.4 The floor is a floor, not a target
 
 `--ink-2` is the **minimum**, not the answer. §9.2 says required prose may not go below it;
@@ -356,7 +387,11 @@ call sites drift and tokens do not.
 **Ratified 2026-08-16 — `KpiTile`'s unpriced caveat is `--ivory-2`, and my `--ink-2`
 instruction was wrong twice.** `dashboards-engineer` landed `--ivory-2`
 (`apps/web/src/dashboards/components/KpiTile.tsx:60`) against a standing instruction and filed
-a `decision-request` rather than smuggling it, which is the behaviour this protocol wants.
+a `decision-request` rather than smuggling it, which is the behaviour this protocol wants —
+`comms/inbox/design-system-guardian/20260816-2208-dashboards-engineer-s9-applied-two-calls-and-a-primitive-default.md`,
+answered and closed 2026-08-17. **The two earlier `--ink-2` instructions are withdrawn**, in
+writing and here rather than only in a reply, so that a reader who finds the old message later
+finds this line before acting on it.
 Their measurement is correct and mine was asserted without opening the file: the value being
 qualified is `KpiNumeral` at `tone="default"`
 (`apps/web/src/components/primitives/KpiNumeral.tsx:54`) → `text-ivory`, so one rung below is
@@ -481,6 +516,26 @@ self-check proved the deriver worked *by requiring the known defect to still be 
 for. It now mutates the real primitive back to its old default and requires the flag to
 appear — same coverage of the parsing shape, no dependency on anything being broken.
 
+**Its third assertion is dormant today, and that is the correct state rather than a hole.**
+With the known-offender list empty and no primitive defaulting sub-AA, the call-site sweep
+(*"lets no call site anywhere in `src/` inherit one of them in silence"*) iterates over an
+empty set of props and passes without examining a single tag. It is a trap, not a patrol: it
+arms itself the moment a sub-AA default appears anywhere in `components/primitives/`, and the
+deriver that arms it is the thing under mutation test above. Do not "fix" the dormancy by
+re-adding an entry to keep it busy — that is the defect corrected in the paragraph above,
+re-introduced.
+
+**Why this is adopted while a per-module allowlist mandate is still declined.** I have twice
+been asked to promote `drawer-contrast.test.ts`'s allowlist-with-a-written-reason into a
+required pattern for every module, and twice declined on the grounds that it wants an ADR with
+those owners in the room. That reasoning is unchanged, and this adoption does not quietly
+smuggle it in. The two differ on one axis that decides it: **this file imposes no obligation on
+anyone.** It derives its own targets, lives in one place, and a module owner who never opens it
+still gets the guard. A mandated per-module pattern imposes a new file, a maintained list and a
+review argument on eleven owners, which is a decision about their work and therefore theirs to
+weigh. *Adopt instruments that cost their beneficiaries nothing; negotiate the ones that bill
+them.*
+
 ### 9.7 Where §9 supersedes a token the spec names, and where it does not
 
 Two things forced this section on the same evening: a primitive whose default was the defect,
@@ -537,6 +592,41 @@ Known superseded values, and this list is the trace — extend it, do not re-arg
 | line 184 (§2.5.6) | DASHBOARDS edge rails | `--ink-3` | `--ink-2` | names the neighbouring dashboard; only signal the edges are navigation |
 | §2.2 | MAP department rails | *(unnamed)* | `--ink-2` | names the adjacent departments; appears nowhere else |
 | §2.3.9 | drawer ladder label | `--ink-3` | `--ink-3` | **not superseded** — redundant with its own position (§9.3) |
+| line 128 (§2.1) | MAP department sub-labels | `--ink-3` | `--ink-3` | **not superseded** — see below; the closest call of the four |
+
+**The ledger is closed against the spec, and that is checkable.** `grep -n 'ink-3'
+skilltree-clone-spec.md` returns exactly four hits: lines 23 and 41 are the token definitions
+themselves, and lines 128, 156 and 184 are the three elements. All three now have a row. That
+completeness is the point — a supersession ledger with an unlisted site is a ledger that says
+"we thought about this" while the unlisted site is exactly where nobody did. **Re-run that
+grep whenever §9 rules again; a new hit with no row is a gap, not a judgement call.**
+
+**Line 128 — the MAP department sub-labels stay `--ink-3`. Ruled 2026-08-16 by the owner,
+against the shipped code, not from memory.** Spec line 128: *"3 tiny sub-labels beneath (11px
+`--ink-3`, e.g. под MARKETING: 'content · brand · distribution')"*. Shipped at
+`apps/web/src/map/svg/BranchLabels.tsx:61` (`fill="var(--ink-3)"`), sized at
+`apps/web/src/map/lib/map-type.ts:25`.
+
+It is the closest call of the four, and it is decided by a fact rather than by taste: **the
+sub-labels are already outside the accessibility tree, by the shipped component's own design.**
+`BranchLabels.tsx:30-32` puts `role="button"` and `aria-label="<DEPT> department"` on the group
+that contains them, so an assistive-technology reader is given the department name and never
+the three words. A string the component deliberately withholds from one class of reader cannot
+simultaneously be a sentence every reader must read — if it were required reading, that
+`aria-label` would already be an a11y defect independent of any colour, and it is not: the
+department name is the operable thing, and the sub-labels elaborate it.
+
+§9.2's *"any hint that appears nowhere else on the screen"* is the clause that makes this
+close, and it is answered rather than dodged: these words appear nowhere else, but deleting
+them makes no sentence on the screen false and nothing unreachable. The department cap above
+carries the name, the branch's own nodes carry the specialisms, and §9.3's *"redundant with its
+own position"* home is entered by a label sitting under the heading it decomposes — the same
+home, and the same test, that kept §2.3.9's ladder label at `--ink-3`.
+
+**The trigger that flips this row, stated so it does not have to be re-derived:** if the
+sub-labels ever gain their own accessible name, become individually focusable, or are used to
+navigate to a cluster, they become required reading and move to `--ink-2` under §9.7b. That is
+a change to `BranchLabels.tsx`'s aria shape, so it is visible in a diff.
 
 **This is a contract note, not yet an ADR, and that is stated rather than hidden.** CLAUDE.md
 says the spec wins until an ADR says otherwise, and `fidelity-qa-reviewer` is right that a
@@ -559,3 +649,180 @@ contract is more expensive than a wrong component by exactly the number of agent
 and it is invisible to every checker in this repo, all of which read code. So: **when a rule
 here is ruled, grep the other contracts for the value it just outlawed.** That grep is one
 command and it is the only instrument that finds this class at all.
+
+**Adopted as standing, in `fidelity-qa-reviewer`'s words, because the sentence is better than
+the rule:** *"I checked the code against the contract and never checked the contract against
+the spec."* Every gate in this repo runs in that one direction. `check-tokens.mjs` reads code.
+`primitive-color-defaults.test.ts` reads code. The review reads code. `check-spec-coverage.mjs`
+comes closest and still does not reach it — it fails when a requirement cites a missing file or
+no section at all, which means it verifies that a row *points somewhere*, never that what the
+row *says* is true. A prose document is checked by exactly one instrument, a reader, and only
+if the reader is looking.
+
+The command, and it is deliberately three lines rather than one, because `comms/contracts/`
+is not the whole blast radius:
+
+```powershell
+Select-String -Path skilltree-clone-spec.md -Pattern 'ink-3'   # what the spec of record says
+Select-String -Path comms/contracts/*.md    -Pattern 'ink-3'   # contracts that prescribe it
+Select-String -Path comms/specs/*.md        -Pattern 'ink-3'   # coverage rows that repeat it
+```
+
+**Run 2026-08-16 23:5x at `4e0bbe6`, and it found a second instance immediately.**
+`comms/contracts/panel-schema.md` rule 2 was already corrected by its owner, but the value had
+been copied onward: `comms/specs/dashboards.md` REQ-DSH-33 still reads *"a one-line `--ink-3`
+empty state"*, while the code it points at ships `--ink-2`
+(`apps/web/src/dashboards/dashboards.module.css:384`, `.emptyLine`). So the requirement row now
+mis-describes its own implementation, and it is the row a future reader would trust to decide
+what the implementation *should* be. Filed to `dashboards-engineer`, whose file it is; not
+edited here, because a contract owner fixing another owner's document is the same
+boundary-crossing this protocol forbids in the other direction.
+
+**The generalisation worth keeping:** a wrong value in prose does not stay in one document. It
+propagates along the path people actually read — spec → contract → coverage row → component —
+and each hop makes it look more settled. Fixing the hop where it was noticed is not fixing it;
+`grep` the whole path.
+
+---
+
+## 10. Provenance — the badge, and why it is grey
+
+**Added 2026-08-17 by the owner.** Source: `Plan §10`, `Plan §23.6`, and
+[ADR-014](../decisions/ADR-014-agent-cascade-resolution.md) §4.3, whose decisions the badge
+renders and does not re-open. Implemented at
+`apps/web/src/components/primitives/ProvenanceBadge.tsx`, pinned by its own test.
+
+The question it answers is `Plan §10`'s: *"you must never have to wonder which one you just
+ran."* The reason it is hard is BOARD rule 1: **provenance is chrome, so it gets no colour**, and
+it has to stay legible beside status chips that have plenty.
+
+### 10.1 The grammar — three channels, five states, no hue
+
+| State | Mark | Modifier | Text token | Label |
+|---|---|---|---|---|
+| `global` | house | — | `--ivory-2` | GLOBAL |
+| `project` | square with a solid core | — | `--ivory-2` | PROJECT |
+| `fork` | fork, both arms intact | — | `--ivory-2` | FORK *a1b2c3* |
+| `drifted` | fork | parent arm ends in a **hollow ring** | `--ivory` | DRIFTED FORK *a1b2c3* |
+| `orphaned` | fork | parent arm **severed**, nothing terminates it | `--ivory` | ORPHANED FORK *a1b2c3* |
+
+Every state differs from every other on **at least two** channels, so no channel is load-bearing
+alone:
+
+1. **Mark — silhouette, not hue.** Survives greyscale, survives 12px, survives the label being
+   removed entirely at `size="sm"`, where the mark is the whole signal.
+2. **Modifier — hollow, never filled.** `Chip`'s dot is filled and `Chip`'s dot is data ink, so
+   **fill is itself a signal**: filled means status, hollow means provenance. That reading is
+   worth more than any one badge — extend it, do not re-decide it, if another chrome component
+   ever needs a mark.
+3. **Text weight — settled at `--ivory-2`, warning at `--ivory`.** The monochrome substitute for
+   severity colour, and it is §9.4b pointed at chrome: **open the gap from above.** Never by
+   pushing the settled state down into `--ink-3`, which §9.2 forbids outright.
+
+**A stroke rule, binding on any redraw:** no state's mark may be a *superset* of another's. Five
+distinct strings is too weak an assertion — a mark that is another mark plus one stroke is the
+same silhouette with a detail nobody sees at 12px. Measured rather than assumed: a mutation
+making `orphaned` draw the intact parent arm *as well as* the severed one passed a distinctness
+check and failed the containment one.
+
+### 10.2 The one departure from the plan, taken openly
+
+> `Plan §10`: *"A forked agent whose parent has moved on shows a staleness dot — the same honesty
+> rule as connector health."*
+
+**The honesty rule is adopted in full. The visual register is not.** Connector health is the
+status of a running thing and is data ink by §1.3. Drift is a property of provenance: a drifted
+fork is not unhealthy — it runs, it is a complete file, and ADR-014 §4.4 is explicit that even an
+*orphaned* fork keeps working. Rendering drift in amber would file *"your parent library moved
+on"* in the same drawer as *"approval pending"*, and the reader would then have to learn which
+greys and which colours belong to which question. Chrome-monochrome is 90% of why this product
+looks expensive (§1.3), and lineage is the cheapest possible thing to spend it on.
+
+**This is a departure from a plan, not from the spec of record**, so §9.7b does not govern it —
+but it is written here rather than lived in a component, and an ADR number has been requested.
+§9.7c applies to plans as well as contracts: *a value read out of a document and implemented
+differently, with no written trace, is how the document stops being authoritative.*
+
+### 10.3 Exclusions are not this primitive — ruled
+
+ADR-014 §1.2 excludes a whole `(department, slug)` when the winning file fails validation, with a
+named reason, and §7.4 is right that it must reach a human: *"a project maintainer never reads
+the coordinator's console."* Whether the badge carries it: **it does not, and there is no sixth
+state.**
+
+1. **An excluded key has no resolved agent**, so there is nothing for a badge to decorate. A
+   badge is an adjective; an exclusion is the absence of the noun.
+2. **An agent-shaped row carrying an "excluded" badge is a plausible presence where the truth is
+   absence** — a node on screen that cannot run. That is BOARD rule 9 in the one direction it
+   never permits, and it is worse than the console warning it replaces, because it looks like a
+   working feature.
+
+**The register is the other half of the ruling.** An exclusion *is* a status — something is wrong
+and a human must act — so it is **data ink, in a sibling surface owned by the view that lost the
+node** (`map-galaxy-engineer` for MAP, `shell-navigation-engineer` for the switcher). `Chip
+tone="warn"` plus an honest empty state is the existing vocabulary; it needs no new primitive.
+The split generalises:
+
+> **Provenance is chrome and is grey. Exclusion is a status and is coloured.** If you see colour,
+> something is wrong. If you see grey, something is merely *from* somewhere.
+
+### 10.4 Why it is the ninth primitive rather than a `Chip` variant
+
+`index.ts` says the set is closed and a new primitive is a decision-request. This is that
+decision, recorded rather than assumed. The obvious host was `Chip`, and that is exactly why it
+could not go there: `Chip` is the product's **status** vocabulary and carries the sanctioned
+data-ink exemption. Putting provenance inside it would teach every reader — and every future
+implementer copying the nearest example — that a coloured token and a grey one answer the same
+kind of question. **The reason it is a separate component is the reason it exists.**
+
+`size="sm"` (mark only, full accessible sentence retained) is the answer to "too big for a MAP
+node", and it is a prop rather than a second component.
+
+### 10.5 The marks are drawn, not typed — and that is measured
+
+`Plan §10` writes them as characters: `⌂` U+2302 · `▣` U+25A3 · `⑂` U+2442. Checked at `4e0bbe6`
+against the 79 CSS files `@fontsource/plus-jakarta-sans` actually ships: **all three fall outside
+every one of its 825 `unicode-range` declarations.** Typing them would not request our webfont at
+all — the browser falls back to whatever the host OS has, at a different weight and baseline, and
+U+2442 is absent on many systems, which renders the fork as tofu.
+
+BOARD constraint 7 forbids external font requests at runtime; a glyph that silently leaves our
+type system is the same defect one layer down, and it is invisible on the developer's machine. So
+the marks are inline SVG on `currentColor`: they inherit every rule in §10.1 and depend on no
+font. **Any redraw keeps that property** — the characters are the plan's notation, not the
+implementation.
+
+### 10.6 Why it is brighter than the chrome around it
+
+`--ivory-2` / `--ivory`, never `--ink-2`. Two independent reasons, either sufficient:
+
+1. **It carries the whole difference between two rows.** A project override and its global parent
+   share a slug and a name *by design* (ADR-014 §2). §9.2's delete-the-text test passes here in
+   its strongest form: delete the badge and the reader does not lose a decoration, they **believe
+   something untrue** — that they are looking at the global agent when they are looking at a fork
+   of it.
+2. **§9.5.** These rows are hoverable — MAP nodes, `JobCard`, drawer headers, switcher rows — and
+   light `--ink-2` on `--card-2` is 4.25:1. `--ivory-2` (7.14:1 worst case light) removes the trap
+   by construction rather than documenting it, and needs no "am I inside an interactive row?" prop
+   that call sites would get wrong.
+
+**`state` has no default, deliberately.** §9.6a's lesson generalised from colour to meaning: a
+default here would be a *provenance claim* spent by a call site that never made it. If you do not
+know where the agent came from, you may not render this.
+
+### 10.7 One question, one visual language
+
+Four surfaces render it — drawer header (`Plan §23.6`), `JobCard`, MAP node, project switcher.
+**The state→word mapping lives in the primitive and is not a prop**, for the same reason
+`Eyebrow` bakes in its tracking: a consumer who *can* choose the word will eventually choose a
+different one, and four surfaces answering one question in four vocabularies is worse than any
+single wrong answer. Strings are catalogue keys (`provenance.badge.*`, `a11y.provenance.*`) so
+`check-rtl` can see them; Arabic ships as admitted `todo()` gaps rather than a guess at five terms
+of art, per that catalogue's own rule.
+
+**The project switcher is the near-collision to watch.** It answers *"which project am I in"*;
+the badge answers *"which library did this agent come from"*. Different questions, adjacent
+answers — and if the switcher grows its own layer marks, the two become two dialects.
+Coordination with `shell-navigation-engineer` is in writing, not assumed.
+
+**No motion, ever.** A pulsing badge reads as *alive*, and alive is copper's single word (§1.3).
