@@ -112,7 +112,7 @@ export const NO_MODEL_FIELD =
   'A run row does not carry the model it used, so per-model spend has nothing to group on.';
 
 export const NO_STATUS_FILTER =
-  'This figure needs a status filter the metrics route does not apply yet, so it is not shown rather than shown unfiltered.';
+  'Filtering runs by status is not served yet, so this is withheld rather than shown unfiltered.';
 
 export const NO_WINDOW =
   'This figure needs a time window the metrics API recognises (24h, 7d, 14d, 28d, 30d, 90d).';

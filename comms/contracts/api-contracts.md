@@ -86,7 +86,7 @@ cleanly and records the note; the run ends `done{status:"denied", denialNote}`.
 | `GET /api/graph` | the **stored** layout artifact — see `contracts/graph-layout.md`. Never simulated (ADR-003) |
 | `GET /api/agents` | `{agents:[{slug, path, frontmatter}], skipped:[{slug, reason}]}` — the list projection CHART's matrix draws from (§2.6) |
 | `GET /api/agents/:slug` | `{slug, path, frontmatter, body, runnable:{tools[], missingConnectors[], approvalRequired, scheduled}}` |
-| `GET /api/runs?agent=&limit=5` | `{runs:[{runId, agent, status, startedAt, durationMs, costUsd, traceUrl}]}` |
+| `GET /api/runs?agent=&limit=5` | `{runs:[{runId, agent, status, startedAt, durationMs, costUsd, traceUrl}]}` — **this process only**, see below |
 | `GET /api/cost/today` | `{usd}` — **`observability-engineer`'s route**, not the runner's |
 | `GET /api/panels` / `GET /api/panels/:id` | panel definitions (`contracts/panel-schema.md`) |
 | `GET /api/status` | `{tailscale, queueDepth, activeRuns, pendingApprovals, runnerConfigured, budget, brain, graphBuilt, startedAt}` |
@@ -98,6 +98,33 @@ segment and join with `/`, so a folder name that ever grows a `%`, `?` or `#` st
 arrives intact (the runner decodes each segment, and a stray `%` would otherwise throw
 before any handler ran). Rows carry `startedAt` as ISO 8601, not a pre-rendered "3m ago",
 so relative time stays live without polling.
+
+### `GET /api/runs` is the queue, not the history
+
+`/api/runs` reads the runner's **in-memory** run store (`services.store.list()`). It holds
+what *this* runner process executed and nothing else, so it is empty after every restart —
+including every deploy, and including a restart that happens mid-demo. It is the right read
+for the live queue, for a run that has not been flushed to the ledger yet, and for anything
+whose question is "what is this process doing".
+
+It is **not** the right read for history. The durable ledger is `ops.agent_runs` in
+Postgres, served by **`GET /api/metrics/runs?agent=&limit=`** (owner:
+`observability-engineer`; shape in `comms/specs/observability.md`, not duplicated here —
+one contract, one owner). Same row shape plus `agentName`, `costSource` and `traceUrl`;
+`agent=` filters server-side; `limit` defaults to 5 and clamps to 50.
+
+Consumers that answer "what has this agent done lately" read the ledger:
+
+| consumer | reads |
+|---|---|
+| §2.3 / §2.6.5 drawer — `LAST RUNS` | `GET /api/metrics/runs` |
+| §2.5 dashboards — activity feed, data tables, KPI derivation | `GET /api/metrics/*` |
+
+This was written down after LAST RUNS shipped bound to `/api/runs` and could therefore
+never show a row: the two routes have nearly the same name and nearly the same payload, and
+nothing in this file said which one forgets. `done.status: "denied"` above is a row both
+routes are expected to carry — note that the ledger's own CHECK constraint does not yet
+accept it (`0001_ops_run_ledger.sql:31`), which is filed with `observability-engineer`.
 
 The list form omits `body` and `runnable` on purpose: a twelve-tile matrix does not need
 twelve system prompts, and the cheapest read in the app must not become the most

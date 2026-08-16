@@ -53,11 +53,14 @@ export const METRICS_NOT_BUILT =
 export const METRICS_OFFLINE =
   'Cannot reach the runner, so ledger-backed numbers are unavailable. This box may be off the tailnet.';
 
-const SQL_UNAVAILABLE: QueryResult = {
-  status: 'unavailable',
-  message:
-    'This number is a named Postgres query. It lights up when the agent that writes those rows has run — not before.',
-};
+/**
+ * Deliberately carries **no message**. A `sql` widget's `emptyState` is mandatory
+ * (`scripts/validate-panels.mjs`) and names the agent that will fill it — "the
+ * cost-tracker agent writes this table on its first run" — which is a better sentence
+ * than any generic one this module could write. A resolver message only wins where the
+ * panel could not have known the reason, i.e. a langfuse shape with no route behind it.
+ */
+const SQL_UNAVAILABLE: QueryResult = { status: 'unavailable' };
 
 const ok = (data: unknown, message?: string): ResolvedState => ({
   status: 'ok',
@@ -189,7 +192,7 @@ function unpricedNote(body: Record<string, unknown>): string | undefined {
   const unpriced = numOrNull(body.unpricedRuns) ?? 0;
   if (unpriced <= 0) return undefined;
   const runs = numOrNull(body.runs);
-  return runs === null ? `${unpriced} runs unpriced` : `${unpriced} of ${runs} runs unpriced`;
+  return runs === null ? `${unpriced} unpriced` : `${unpriced} of ${runs} unpriced`;
 }
 
 /* ------------------------------------------------------------------- series */
@@ -224,12 +227,8 @@ function resolveCostByAgent(plan: Extract<Plan, { kind: 'cost-by-agent' }>, read
       if (label === null || value === null) return null;
       const runs = numOrNull(row.runs);
       const unpriced = numOrNull(row.unpriced) ?? 0;
-      const sub =
-        runs === null
-          ? undefined
-          : unpriced > 0
-            ? `${runs} runs · ${unpriced} unpriced`
-            : `${runs} runs`;
+      const ran = runs === null ? null : `${runs} ${runs === 1 ? 'run' : 'runs'}`;
+      const sub = ran === null ? undefined : unpriced > 0 ? `${ran} · ${unpriced} unpriced` : ran;
       return { label: labelFromSlug(label), value, ...(sub ? { sub } : {}) };
     })
     .filter((r): r is { label: string; value: number; sub?: string } => r !== null);

@@ -42,6 +42,47 @@ Phase 1 ships `langfuse` + `static` only (§2.5 data source note). `sql` queries
 registered by name in the runner; the panel references the name. **A panel file can
 never contain raw SQL.**
 
+### Where a `langfuse` query actually goes (§3.5)
+
+`source: "langfuse"` means "an aggregate over the agent-run ledger". It is answered by
+`/api/metrics/*` — **never** by `GET /api/runs`, which is the runner's in-memory,
+process-local view and is empty after every restart. The mapping lives in
+`apps/web/src/dashboards/data/endpoints.ts`:
+
+| query | endpoint |
+|---|---|
+| `shape` absent / `scalar` (+ `compare`) | `GET /api/metrics/query?metric=&range=[&agent=&department=]` — `value`, `previous`, `delta` |
+| `shape: "list"` on an `activity-feed` | `GET /api/metrics/activity?limit=[&department=]` |
+| `shape: "list"`, no `groupBy` | `GET /api/metrics/runs?limit=[&agent=]` |
+| `metric: "runs", shape: "series", groupBy: "day"` | `GET /api/metrics/sql/runs_per_day?days=` |
+| `metric: "cost", shape: "list", groupBy: "agent"` | `GET /api/metrics/sql/cost_by_agent?days=` |
+| `metric: "runs", shape: "list", groupBy: "department"` | one `metrics/query` per ADR-001 department + the ungrouped total |
+
+`range` must be one of the runner's windows — `24h 7d 14d 28d 30d 90d`; `Nw` is mapped to
+days, anything else is refused rather than approximated.
+
+**Not served yet, and therefore `unavailable` rather than derived** (filed with
+`observability-engineer`): a series of any metric except `runs`, a `groupBy: "agent"` of
+any metric except `cost`, `groupBy: "model"` (a run row has no model), and any
+`filter: {status}`. The runner *computes* the first two — `metricSeries()` /
+`metricBreakdown()` in `db/queries.ts` — but `routes/metrics.ts` does not expose them.
+
+**The receipt rule.** `/api/metrics/query` echoes the `filter` it applied. A filter the
+route silently ignored would come back as a correct *unfiltered* aggregate under a
+filtered label, so the echo is checked and a missing one withholds the figure. Keep
+echoing `filter`; consumers treat it as the receipt.
+
+### Zero is a number; null is not
+
+`runs` returns `0` from a real `count(*)`; `cost`, `latency_p50` and `error_rate` return
+`null` over an empty window. **These render differently and must never be collapsed**:
+`0` is a numeral, `null` is "No figure yet." The median latency of zero runs is not a
+measurement (Part VII.3). `delta` is `null` whenever there is no honest comparison; the
+▲/▼ chip uses the server's `delta`, never a locally computed one.
+
+A `cost` figure standing over unpriced runs is a floor, not a total — `unpricedRuns` is
+appended to the KPI caption ("10 of 121 unpriced") rather than rounded to nothing.
+
 ## KPI tile (§2.5.3)
 
 ```jsonc
@@ -91,8 +132,8 @@ Grid: 2 columns, 16px gap. A widget declares `span: 1 | 2`.
 
 - `schemaVersion` — currently `1`. Bump in `packages/contracts/src/panels.ts` and the validator together.
 - `department[]` — ADR-001 slugs. An array because `pipeline` covers `sales` and `deals`.
-- `emptyState` — required on every `sql`-backed widget. One sentence naming the agent that will fill it.
-- `pending` — required on every signal that has a query. What the strip says before the figure exists.
+- `emptyState` — required on every `sql`-backed widget. One sentence naming the agent that will fill it. It is the copy for `empty` (the source answered and had nothing). On `unavailable` the resolver's own sentence wins where it has one, because "No spend in this window" is a claim about data we could not read; `sql` results deliberately carry no message so `emptyState` still speaks for them.
+- `pending` — required on every signal that has a query. What the strip says before the figure exists, and what `hideWhenZero` prints at zero. Same precedence as above: a resolver message wins on `unavailable`.
 - `note` — required on every `static` query. Provenance, in a sentence. An unsourced literal is a fabricated number.
 - `range: "$range"` — binds the query to the panel's time-range pills. Illegal without `filters.type: "range"`.
 - Query result state machine: `ok | empty | unavailable | error`. `unavailable` is not an error — it is a source that is correct but not wired in this phase (every `sql` query today).

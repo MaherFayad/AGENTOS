@@ -53,9 +53,14 @@ export function emptyCopy(status: QueryStatus, message?: string, emptyState?: st
     case 'ok':
       return null;
     case 'empty':
+      // The source answered and had nothing. That is what `emptyState` is written for.
       return emptyState ?? 'Nothing in this window.';
     case 'unavailable':
-      return emptyState ?? message ?? 'This number is not wired yet.';
+      // The source could not answer at all, so the *reason* beats the panel's sentence:
+      // "No spend in this window" is a claim about the data, and we do not have the data
+      // to make it. A `sql` query carries no message precisely so its `emptyState` — which
+      // names the agent that will fill it — still wins here.
+      return message ?? emptyState ?? 'This number is not wired yet.';
     case 'error':
       return message ?? emptyState ?? 'Could not read this widget.';
     default: {

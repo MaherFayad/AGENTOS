@@ -290,6 +290,12 @@
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-top: 16px;
+  /* Cards size to their content instead of stretching to the tallest in the row. With an
+     empty ledger every widget was the same short height and the difference never showed;
+     with real data a twelve-row cost table beside a 140px chart stretched the chart's card
+     to ~700px and left a void under the stroke. A ragged column bottom is the correct
+     reading of "these two widgets are different sizes". */
+  align-items: start;
 }
 
 .span2 {

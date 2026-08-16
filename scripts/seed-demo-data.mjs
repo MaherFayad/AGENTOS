@@ -134,16 +134,34 @@ function buildRuns(days) {
     // Weekends quieter than weekdays — a flat histogram reads as fake at a glance.
     const dayStart = new Date(now - d * 86_400_000);
     const dow = dayStart.getDay();
-    const volume = dow === 5 || dow === 6 ? int(3, 9) : int(11, 26);
+    const isToday = d === 0;
+
+    // Today is only partly over, so it gets a partial day's volume. Seeding a full
+    // day into a day that has not happened yet is what produced future-dated rows.
+    const nowHour = new Date(now).getHours();
+    const fullVolume = dow === 5 || dow === 6 ? int(3, 9) : int(11, 26);
+    const volume = isToday
+      ? Math.max(1, Math.round((fullVolume * Math.min(Math.max(nowHour - 7, 0), 12)) / 12))
+      : fullVolume;
 
     for (let i = 0; i < volume; i++) {
       const a = weightedAgent();
       const isError = rnd() < a.errRate;
       // Cluster inside the working day so the activity feed reads plausibly.
+      // On the current day the window closes at the current hour: a run that has
+      // not happened yet must never be in the ledger. Future-dated rows silently
+      // corrupt every rolling window ("runs today", 7d vs previous-7d deltas) and
+      // sort to the top of the activity feed as things that are yet to occur.
+      const latestHour = isToday ? Math.max(7, nowHour) : 19;
       const startedAt = new Date(dayStart);
-      startedAt.setHours(int(7, 19), int(0, 59), int(0, 59), 0);
+      startedAt.setHours(int(7, latestHour), int(0, 59), int(0, 59), 0);
 
       const durationMs = int(4_000, 95_000);
+      // A run cannot finish in the future either — clamp the whole span, not just
+      // its start, or the newest row ends after `now()` and duration maths goes odd.
+      if (startedAt.getTime() + durationMs > now) {
+        startedAt.setTime(now - durationMs - int(30_000, 900_000));
+      }
       const endedAt = new Date(startedAt.getTime() + durationMs);
       const model = pick(MODELS);
       const inTok = int(1_800, 42_000);

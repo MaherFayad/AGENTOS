@@ -133,17 +133,6 @@
       "emptyState": "No runs in this window."
     },
     {
-      "id": "spend-by-agent",
-      "type": "cost-table",
-      "title": "Spend by agent",
-      "format": "currency",
-      "showTotal": true,
-      "totalLabel": "Window total",
-      "span": 1,
-      "query": { "source": "langfuse", "metric": "cost", "shape": "list", "groupBy": "agent", "range": "$range" },
-      "emptyState": "No spend in this window."
-    },
-    {
       "id": "runs-by-department",
       "type": "bar-list",
       "title": "Runs by department",
@@ -158,6 +147,17 @@
         "range": "$range"
       },
       "emptyState": "No runs in this window."
+    },
+    {
+      "id": "spend-by-agent",
+      "type": "cost-table",
+      "title": "Spend by agent",
+      "format": "currency",
+      "showTotal": true,
+      "totalLabel": "Window total",
+      "span": 1,
+      "query": { "source": "langfuse", "metric": "cost", "shape": "list", "groupBy": "agent", "range": "$range" },
+      "emptyState": "No spend in this window."
     },
     {
       "id": "last-runs",

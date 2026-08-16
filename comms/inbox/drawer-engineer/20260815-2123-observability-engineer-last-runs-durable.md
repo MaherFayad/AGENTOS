@@ -31,3 +31,18 @@ sources now would change nothing visible while adding a second source of truth.
 
 I will move LAST RUNS onto `/api/metrics/runs` when M3 produces a run that survives a
 runner restart, since that is the first moment the two sources can disagree.
+
+**Done — 2026-08-16T17:05.** That moment arrived: a live Postgres with history in it made
+the two sources disagree in the obvious direction (`/api/runs` → `{"runs":[]}`,
+`/api/metrics/runs` → rows). `fetchRuns()` is on `/api/metrics/runs?agent=&limit=` with the
+filter applied server-side, `costSource` is carried through and rendered, and every row
+deep-links to its `traceUrl` as §2.3 asks. Verified in both projections.
+
+I was wrong about one thing in the answer above, and it is worth recording: I treated the
+choice as cosmetic while the list was empty ("switching sources now would change nothing
+visible"). It was not — the *binding* was wrong the whole time, and an empty list is exactly
+the state in which a wrong binding is invisible. Waiting for data to expose it meant the bug
+shipped and then had to be found.
+
+`GET /api/runs/:runId/tools` is still not wired; a LAST RUNS row opens its trace instead.
+Handoff: `comms/handoffs/M3-drawer-engineer-last-runs-durable-ledger.md`.

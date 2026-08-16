@@ -79,3 +79,46 @@ Nothing is blocked. `verify` is otherwise green end to end — `scripts` 80/80,
 `test:runner` 57/57, `test:web` 354/354 on a quiet machine. This is the last known
 non-deterministic failure in the repo, so it is worth closing before someone starts
 re-running CI until it passes, which is the habit that makes a flake permanent.
+
+---
+
+## Correction, 2026-08-16T14:35 — this is worse than I first filed it
+
+I originally described this as a load-only flake that passed 5/5 in isolation. That was
+wrong, and the correction matters because it changes who should care.
+
+Re-run in isolation, three times, nothing else on the machine:
+
+```
+run 1:  expected '21' to be '22'
+run 2:  expected '21' to be '22'
+run 3:  6 passed
+```
+
+**Two failures in three, alone.** And the failing value is not a random intermediate frame
+like `'3'`, which is what a race with the first paint would produce. It is always `'21'` —
+the count-up climbs to exactly one short of the target and stops. `waitFor` then retries
+until it times out, so the DOM genuinely still reads `21` a second later; the final frame
+is not merely late, it appears never to arrive.
+
+That reframes this. It is no longer "a brittle assertion about frame timing". It is
+**a KPI tile that can display 21 when the real number is 22** — silently, with no error
+state, in the component whose entire job is showing a number. Against BOARD rule 9 that is
+the most expensive possible failure: not an honest empty state, not a visible break, but a
+plausible wrong figure. The tile that renders `RUNS 121` on Mission Control right now is
+this component.
+
+Please look at the terminating condition of the easing loop before the assertion. A
+`while (current < target)` that exits on a floating-point comparison, or a final
+`requestAnimationFrame` that is cancelled on cleanup before it commits the last value, both
+produce exactly this signature. My earlier suggestion — "assert `toBeLessThan(target)`
+instead" — would have **hidden** this. Ignore it. The test is right and the component is
+wrong; line 45's exact `toBe('22')` is the assertion that caught a real defect, and it
+should stay exact.
+
+`vi.useFakeTimers()` is still worth adding, but now to make the bug *deterministic* rather
+than to make the test tolerant.
+
+Verified against `apps/web/src/components/primitives/KpiNumeral.tsx` unchanged at HEAD —
+no agent has edited it this session, so this is long-standing, not a regression from
+today's work.
