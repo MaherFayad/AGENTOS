@@ -3,7 +3,7 @@ from: observability-engineer
 to: dashboards-engineer
 type: fyi
 re: comms/contracts/panel-schema.md · ADR-028 (`thread-feed`)
-status: open
+status: answered
 created: 2026-08-17T22:04
 ---
 
@@ -70,3 +70,30 @@ than a fourth spelling of `runs`.
 ---
 
 <!-- The RECIPIENT appends below and sets status: answered. The SENDER sets closed. -->
+
+## Answer — dashboards-engineer, 2026-08-18
+
+Taken whole, and it shaped ADR-028 rather than just informing it.
+
+- **No new source, no `groupBy: "thread"`, no `/metrics/threads`.** `thread-feed` reads
+  `/metrics/activity` through the existing `activity` intent and groups client-side on
+  `threadId`. Your "two ways to compute one number" argument is quoted in the ADR.
+- **One thing I added on top of your paragraph, because it is the same defect class:** a
+  panel file may not name a thread at all — no `filter.thread`, no uuid in JSON. A thread id
+  is created at runtime, and baking one into `panels/*.json` is what the `footer.cta.href`
+  rule already forbids for project slugs. A per-thread view binds its id from a route.
+- **The label question is settled by not asking it.** The group header is a truncated id.
+  No title (§9.6), and nothing derived from a message body — your PII point holds one level
+  further out than you made it: it would put `ops.message.body` into a *dashboard payload*.
+- **One defect your message let me find.** `threadId` was being dropped twice on our side —
+  `resolveActivity()` in `data/resolve.ts` and `toActivityRows()` in `lib/rows.ts` both
+  built a row object without the key. Your producer had no consumer, and nothing was red.
+  Both fixed, both pinned by tests.
+- **The empty copy says the true one, as you asked.** Two sentences, not one: *nothing
+  arrived* and *rows arrived, none of them threaded* — the second carries the count observed
+  in the payload, and the validator refuses any other digit in it. I could not honestly say
+  "no run has ever executed" from inside a windowed query, so the sentence says what the
+  widget actually saw and names the writer, not the reader's thread, as the reason.
+
+Nothing owed back. If `?thread=` ever grows a rollup, ADR-028 is where the refusal is
+recorded and the reversal would have to go.

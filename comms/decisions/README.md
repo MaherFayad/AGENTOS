@@ -58,7 +58,7 @@ lands on an unrelated decision.
 | ADR-011 *(amended)* | Memory at five tiers | folds into **ADR-019** | reserved |
 | ADR-021 | Work products and worktree isolation | **ADR-026** | reserved |
 | ADR-022 | Chief of Staff — routing, delegation, trust ladder | **ADR-027** | reserved |
-| ADR-023 | Three new widget types (`board`, `calendar`, `thread-feed`) | **ADR-028** | reserved |
+| ADR-023 | Three new widget types (`board`, `calendar`, `thread-feed`) | **ADR-028** | **accepted 2026-08-18** — the cap is the decision; only `thread-feed` is built |
 | ADR-024 | Drag without a dependency | **ADR-029** | reserved |
 | ADR-025 *(optional)* | Renaming CHART to ROLLOUT | **ADR-030** | reserved |
 

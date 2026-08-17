@@ -945,7 +945,7 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 025 | Client strategy — Expo, Tauri, contentless push · *`Plan §18` "ADR-020"* | `client-platform-engineer` | **reserved** |
 | 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | — | **reserved** |
 | 027 | Chief of Staff — routing, delegation, trust ladder · *`Plan §18` "ADR-022"* | `chief-of-staff-architect` | **reserved** |
-| 028 | **Three new widget types** — `board`, `calendar`, `thread-feed` — and the rule that everything else composes from the existing seven (§23.7) · *`Plan §18` "ADR-023"* | `dashboards-engineer` | **claimed 2026-08-17, unwritten** — blocks P2 and P4. **M16 writes it once and builds only `thread-feed`;** `board` and `calendar` are named and reserved, schemas deferred to M17 and M18. See the M16 section. |
+| 028 | **Three new widget types** — `board`, `calendar`, `thread-feed` — and the rule that everything else composes from the existing seven (§23.7) · *`Plan §18` "ADR-023"* | `dashboards-engineer` | **accepted 2026-08-18** — `comms/decisions/ADR-028-widget-type-cap.md`. Unblocks P2 and P4. The cap has two enforcers (`typecheck` on `WIDGET_TYPE_EXTENSIONS_USED`, and the validator's parity gate reading `panels.ts`), both falsified. `thread-feed` is built and honestly empty; `board` and `calendar` are named, refused by the validator, and absent from `WidgetType`. |
 | 029 | Drag without a dependency · *`Plan §18` "ADR-024"* | `design-system-guardian` | **reserved** |
 | 030 | *(optional)* Rename CHART → ROLLOUT · *`Plan §18` "ADR-025"* | `chart-matrix-engineer` | **reserved** |
 

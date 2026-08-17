@@ -34,7 +34,20 @@ export function stubFullscreenSupport(enabled = true): () => void {
   const original = Object.getOwnPropertyDescriptor(Document.prototype, 'fullscreenEnabled');
   Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: enabled });
   return () => {
-    delete (document as Partial<Document>).fullscreenEnabled;
+    // `Reflect.deleteProperty` rather than `delete`, and rather than a cast that silences it.
+    //
+    // `fullscreenEnabled` is `readonly` on `Document`, so `delete` is TS2704 — the compiler
+    // is right about the *type* and beside the point about the *object*. The line above
+    // installs an **own** property on the `document` instance, shadowing the prototype
+    // accessor; removing that own property is the only undo there is, and `Reflect` says so
+    // without pretending the property is optional.
+    //
+    // Asked the question this error is worth asking (`design-system-guardian`'s finding, via
+    // the new `tsconfig.test.json`): does the undo leave a shape the real code cannot
+    // produce? **No.** It restores plain jsdom, where `fullscreenEnabled` is `undefined` and
+    // `FullscreenToggle` renders nothing — which is a state this suite deliberately tests.
+    // Nothing asserts against an impossible document.
+    Reflect.deleteProperty(document, 'fullscreenEnabled');
     if (original) Object.defineProperty(Document.prototype, 'fullscreenEnabled', original);
   };
 }

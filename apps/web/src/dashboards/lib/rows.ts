@@ -23,6 +23,7 @@ import type {
   SeriesPoint,
   TableCell,
   TableRow,
+  ThreadGroup,
 } from '@agnetos/contracts';
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -195,6 +196,12 @@ export function toActivityRows(payload: unknown): ActivityRow[] {
       const status = RUN_STATUSES.includes(row.status as never) ? (row.status as ActivityRow['status']) : undefined;
       const detail = str(row.detail);
       const traceUrl = str(row.traceUrl);
+      // `threadId` is `null` on every row the runner can produce today and the key is
+      // carried through rather than dropped, because dropping it is how a producer ends up
+      // with no consumer: `observability-engineer` put it on every activity item, and a
+      // normaliser that silently ate it would leave `thread-feed` grouping on nothing with
+      // nothing red anywhere.
+      const threadId = str(row.threadId);
       return {
         at,
         event,
@@ -202,11 +209,45 @@ export function toActivityRows(payload: unknown): ActivityRow[] {
         ...(detail ? { detail } : {}),
         ...(status ? { status } : {}),
         ...(traceUrl ? { traceUrl } : {}),
+        ...(threadId ? { threadId } : {}),
       };
     })
     .filter((r): r is ActivityRow => r !== null)
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
+
+/* ----------------------------------------------------------------- threads */
+
+/**
+ * `thread-feed` groups (ADR-028). One group per thread, newest thread first, rows newest
+ * first inside it.
+ *
+ * **A row carrying no `threadId` is dropped, not given a thread of its own.** Every row is
+ * in that state today — `ops.agent_runs.thread_id` is nullable and no writer sets it
+ * (`thread-model.md` §5.3) — so a fallback that grouped unthreaded runs under a synthetic
+ * id would draw a screen full of threads on a database with none. The widget reports the
+ * count it dropped instead; that number is observed, and the threads would have been
+ * invented.
+ */
+export function groupByThread(rows: readonly ActivityRow[]): ThreadGroup[] {
+  const groups = new Map<string, ActivityRow[]>();
+  for (const row of rows) {
+    if (!row.threadId) continue;
+    const bucket = groups.get(row.threadId);
+    if (bucket) bucket.push(row);
+    else groups.set(row.threadId, [row]);
+  }
+  return [...groups.entries()]
+    .map(([threadId, rowsInThread]) => {
+      const sorted = [...rowsInThread].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+      return { threadId, rows: sorted, latestAt: sorted[0].at };
+    })
+    .sort((a, b) => (a.latestAt < b.latestAt ? 1 : a.latestAt > b.latestAt ? -1 : 0));
+}
+
+/** How many of these rows belong to no thread — the number `unthreadedState` prints. */
+export const unthreadedCount = (rows: readonly ActivityRow[]): number =>
+  rows.reduce((n, row) => (row.threadId ? n : n + 1), 0);
 
 /* ------------------------------------------------------------------ scalar */
 

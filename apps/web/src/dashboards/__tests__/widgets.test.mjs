@@ -10,21 +10,51 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { areaPath, barWidths, linePath, progressWidth, sparklinePath } from '../lib/geometry.ts';
-import { toBarRows, toScalar, toSeries, toActivityRows } from '../lib/rows.ts';
+import { groupByThread, toBarRows, toScalar, toSeries, toActivityRows, unthreadedCount } from '../lib/rows.ts';
 import { bindRange } from '../data/bind.ts';
 import { normalizePanelPayload } from '../data/normalize.ts';
-import { buildPromptFor } from '../lib/prompt.ts';
+import { buildPromptFor, PROMPT_RESERVED_TYPES, PROMPT_WIDGET_TYPES } from '../lib/prompt.ts';
 import {
+  CANONICAL_WIDGET_TYPES,
+  EXTENSION_WIDGET_TYPES,
   isPhaseOneResolvable,
+  isReservedWidgetType,
   isWidgetType,
   neighbours,
+  RESERVED_WIDGET_TYPES,
   WIDGET_TYPES,
+  WIDGET_TYPE_EXTENSION_BUDGET,
+  WIDGET_TYPE_EXTENSIONS_USED,
 } from '../../../../../packages/contracts/src/panels.ts';
 
-test('there are exactly seven widget types and the guard knows each', () => {
-  assert.equal(WIDGET_TYPES.length, 7);
+test('seven canonical types plus at most three extensions, and the guard knows each', () => {
+  assert.equal(CANONICAL_WIDGET_TYPES.length, 7);
+  assert.ok(WIDGET_TYPE_EXTENSIONS_USED <= WIDGET_TYPE_EXTENSION_BUDGET);
+  assert.equal(WIDGET_TYPE_EXTENSIONS_USED, EXTENSION_WIDGET_TYPES.length);
   for (const t of WIDGET_TYPES) assert.equal(isWidgetType(t), true);
   assert.equal(isWidgetType('pie-chart'), false);
+});
+
+test('a reserved type is never renderable — that is what keeps the never fallthrough honest', () => {
+  // `board` and `calendar` are named by ADR-028 and absent from `WidgetType`, so they reach
+  // `WidgetView` through `isWidgetType` returning false and land on the placeholder. An arm
+  // for them would spend the compiler's exhaustiveness guarantee on something nothing can
+  // draw.
+  assert.deepEqual(RESERVED_WIDGET_TYPES, ['board', 'calendar']);
+  for (const t of RESERVED_WIDGET_TYPES) {
+    assert.equal(isReservedWidgetType(t), true);
+    assert.equal(isWidgetType(t), false);
+  }
+  assert.equal(isReservedWidgetType('thread-feed'), false);
+});
+
+test('the build prompt names the real vocabulary, not a stale copy of it', () => {
+  // The prompt rebuilds a panel. A vocabulary list that drifts from the enum tells the next
+  // session to write a file the validator will reject — which is why the mirror is pinned.
+  assert.equal(PROMPT_WIDGET_TYPES, WIDGET_TYPES.join(', '));
+  assert.equal(PROMPT_RESERVED_TYPES, RESERVED_WIDGET_TYPES.join(', '));
+  const text = buildPromptFor(envelope(1, 'mission-control').panel);
+  for (const t of WIDGET_TYPES) assert.ok(text.includes(t), `prompt does not name ${t}`);
 });
 
 test('barWidths scale against the max, never the total, and keep a visible floor', () => {
@@ -90,6 +120,40 @@ test('normalizePanelPayload accepts runner envelopes and sorts by order', () => 
 test('toActivityRows drops a row with no timestamp rather than stamping now', () => {
   const rows = toActivityRows([{ event: 'Ran', attribution: 'Ops' }]);
   assert.equal(rows.length, 0);
+});
+
+test('toActivityRows carries threadId through instead of eating it', () => {
+  // The field exists on every activity item the runner serves. A normaliser that dropped it
+  // would leave `thread-feed` grouping on nothing, permanently, with no gate red — a
+  // producer whose consumer never received it.
+  const [row] = toActivityRows([
+    { at: '2026-08-18T09:41:00Z', event: 'Ran', agent: 'ops', threadId: 't-1' },
+  ]);
+  assert.equal(row.threadId, 't-1');
+  const [none] = toActivityRows([{ at: '2026-08-18T09:41:00Z', event: 'Ran', agent: 'ops', threadId: null }]);
+  assert.equal(none.threadId, undefined);
+});
+
+test('groupByThread drops unthreaded rows rather than inventing a thread of one', () => {
+  // Every row is unthreaded today (thread-model.md §5.3). Bucketing them under a synthetic
+  // id would draw a screen full of threads over a database with none.
+  const rows = toActivityRows([
+    { at: '2026-08-18T09:00:00Z', event: 'A', agent: 'ops', threadId: 't-1' },
+    { at: '2026-08-18T10:00:00Z', event: 'B', agent: 'ops', threadId: 't-1' },
+    { at: '2026-08-18T11:00:00Z', event: 'C', agent: 'ops' },
+    { at: '2026-08-18T10:30:00Z', event: 'D', agent: 'ops', threadId: 't-2' },
+  ]);
+  const groups = groupByThread(rows);
+  assert.deepEqual(groups.map((g) => g.threadId), ['t-2', 't-1']); // newest thread first
+  assert.deepEqual(groups[1].rows.map((r) => r.event), ['B', 'A']); // newest row first
+  assert.equal(unthreadedCount(rows), 1);
+  assert.equal(groups.reduce((n, g) => n + g.rows.length, 0), 3);
+});
+
+test('groupByThread over a fully unthreaded feed reports nothing, not an empty thread', () => {
+  const rows = toActivityRows([{ at: '2026-08-18T09:00:00Z', event: 'A', agent: 'ops' }]);
+  assert.deepEqual(groupByThread(rows), []);
+  assert.equal(unthreadedCount(rows), 1);
 });
 
 test('neighbours wrap so the rail ring has no dead end', () => {

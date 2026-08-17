@@ -160,6 +160,17 @@
       "emptyState": "No spend in this window."
     },
     {
+      "id": "threads",
+      "type": "thread-feed",
+      "title": "Runs, by thread",
+      "subtitle": "A thread is the unit of work · a run is a thread with an agent on the other end",
+      "span": 1,
+      "limit": 12,
+      "query": { "source": "langfuse", "metric": "runs", "shape": "list", "limit": 24 },
+      "emptyState": "No runs yet, so no thread has anything to show — the mailbox writes threads as agents start answering.",
+      "unthreadedState": "Runs in this window that belong to no thread: {value}. A run only carries a thread once the runner records one, so this is the writer being unwired — not your threads being quiet."
+    },
+    {
       "id": "last-runs",
       "type": "data-table",
       "title": "Last runs",

@@ -309,6 +309,12 @@ function resolveActivity(plan: Extract<Plan, { kind: 'activity' }>, read: ReadEn
       const detail = typeof item.detail === 'string' ? stripAttribution(item.detail, attribution) : undefined;
       const status = item.status === 'error' || item.status === 'running' ? item.status : 'ok';
       const traceUrl = typeof item.traceUrl === 'string' ? item.traceUrl : undefined;
+      // `threadId` rides on every activity item and is `null` on all of them today
+      // (`thread-model.md` §5.3). It is carried, not dropped: `thread-feed` groups on it,
+      // and a resolver that ate the field would leave the widget permanently unthreaded
+      // for a reason no gate could see — a producer whose consumer never received it.
+      const threadId =
+        typeof item.threadId === 'string' && item.threadId.trim() !== '' ? item.threadId : undefined;
       return {
         at,
         event,
@@ -316,6 +322,7 @@ function resolveActivity(plan: Extract<Plan, { kind: 'activity' }>, read: ReadEn
         ...(detail ? { detail } : {}),
         status,
         ...(traceUrl ? { traceUrl } : {}),
+        ...(threadId ? { threadId } : {}),
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)

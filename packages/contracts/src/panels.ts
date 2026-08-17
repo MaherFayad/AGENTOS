@@ -19,9 +19,9 @@ export const PANEL_SCHEMA_VERSION = 1;
 
 /**
  * The seven canonical widget types (§2.5.5). They cover every widget observed in the
- * video. An eighth requires an ADR — see `.claude/skills/cc-panels`.
+ * video. **This array never grows** — ADR-028.
  */
-export const WIDGET_TYPES = [
+export const CANONICAL_WIDGET_TYPES = [
   'bar-list',
   'source-bar-list',
   'area-chart',
@@ -30,7 +30,52 @@ export const WIDGET_TYPES = [
   'progress-table',
   'activity-feed',
 ] as const;
+
+/**
+ * ADR-028 — **exactly three new widget types, ever.** This is the whole allowance, and it
+ * is a closed list of *names*, not a budget of slots: a fourth need does not spend a spare,
+ * because there is none. Everything else composes from the seven above (`Plan §23.7`) —
+ * an agent roster is a `data-table`, budget burn is a `progress-table`, a question queue is
+ * an `activity-feed`.
+ *
+ * Widening this list is a reversal of ADR-028, not an application of it, and two gates say
+ * so: `WIDGET_TYPE_EXTENSIONS_USED` below stops compiling, and `checkContractParity()` in
+ * `scripts/validate-panels.mjs` rejects both a fourth entry and a name that is not one of
+ * these three.
+ */
+export const EXTENSION_WIDGET_TYPES = ['thread-feed', 'board', 'calendar'] as const;
+
+/**
+ * The extensions that have a schema and a renderer. The rest are **named and reserved**:
+ * `board` needs ADR-029's drag primitive, `calendar` reads `ops.schedule`, and neither
+ * exists. A schema written for a table that does not exist is a plausible spec, and a
+ * `WidgetView` arm for a type nothing can render spends the `never` fallthrough — the
+ * compiler naming every render site — on nothing. See ADR-028.
+ */
+export const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed'] as const;
+
+/**
+ * ADR-028's cap, enforced by the compiler rather than by a comment. A fourth entry in
+ * `EXTENSION_WIDGET_TYPES` makes this `4`, which is not assignable, and `npm run typecheck`
+ * goes red in this file. Falsified before it was claimed.
+ */
+export const WIDGET_TYPE_EXTENSION_BUDGET = 3;
+export const WIDGET_TYPE_EXTENSIONS_USED: 0 | 1 | 2 | 3 = EXTENSION_WIDGET_TYPES.length;
+
+/**
+ * What a panel may declare and `WidgetView` renders: the canonical seven plus the built
+ * extensions. A reserved-but-unbuilt type is deliberately **not** here, so it never enters
+ * `WidgetType` and the exhaustive switch stays exhaustive over things that can be drawn.
+ */
+export const WIDGET_TYPES = [...CANONICAL_WIDGET_TYPES, ...BUILT_EXTENSION_WIDGET_TYPES] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
+
+/** Named by ADR-028, no schema yet. A panel declaring one is refused with that sentence. */
+export const RESERVED_WIDGET_TYPES = EXTENSION_WIDGET_TYPES.filter(
+  (t): t is Exclude<(typeof EXTENSION_WIDGET_TYPES)[number], WidgetType> =>
+    !(WIDGET_TYPES as readonly string[]).includes(t),
+);
+export type ReservedWidgetType = (typeof RESERVED_WIDGET_TYPES)[number];
 
 /** Where a value comes from. Phase 1 *resolves* `langfuse` and `static` only (§2.5). */
 export const QUERY_SOURCES = ['langfuse', 'sql', 'static'] as const;
@@ -246,6 +291,28 @@ export interface ActivityRow {
   attribution: string;
   status?: 'ok' | 'error' | 'running';
   traceUrl?: string;
+  /**
+   * The thread this run belongs to, when it belongs to one. **Attribution, not a row
+   * source** — the feed is still agent runs, and a thread with no run has nothing to
+   * report (`observability-engineer`, 2026-08-17).
+   *
+   * Absent on every row today: `ops.agent_runs.thread_id` is nullable, nothing writes it,
+   * and the table is empty (`thread-model.md` §5.3). `thread-feed` groups on it and says
+   * so out loud rather than inventing a thread for a run that names none.
+   */
+  threadId?: string;
+}
+
+/**
+ * One thread's rows, as `thread-feed` renders them. Built by `groupByThread`, which drops
+ * rows carrying no `threadId` — a run that names no thread is not a thread of one.
+ */
+export interface ThreadGroup {
+  threadId: string;
+  /** Newest first, same row shape the activity feed renders. */
+  rows: ActivityRow[];
+  /** The newest `at` in the group; the group ordering key. */
+  latestAt: string;
 }
 
 /* ------------------------------------------------------------------- panel */
@@ -361,6 +428,35 @@ export interface ActivityFeedWidget extends WidgetBase {
   limit?: number;
 }
 
+/**
+ * ADR-028 · `Plan §23.7` — *"thread stream on a dashboard"*. The activity feed's row is a
+ * run; this widget's unit is a **thread**, and it groups the run rows it receives by
+ * `threadId`. That grouping is why it is a type rather than a composition — no arrangement
+ * of the seven can group.
+ *
+ * It reads the **existing** activity plane (`/metrics/activity`, `intent: 'activity'`).
+ * There is no thread source and no `filter.thread`: a thread is a filter on the run plane,
+ * not a plane of its own, and a panel file cannot honestly name a thread id that is created
+ * at runtime. See ADR-028 for both refusals.
+ *
+ * Both sentences are **required** because the widget can render neither today
+ * (`thread-model.md` §5.3 — `thread_id` is nullable and no writer sets it) and the two
+ * emptinesses are different claims.
+ */
+export interface ThreadFeedWidget extends WidgetBase {
+  type: 'thread-feed';
+  /** Rows read before grouping, 1..50. The group cap follows from the rows. */
+  limit?: number;
+  /** Required: nothing at all arrived. */
+  emptyState: string;
+  /**
+   * Required: events arrived, **none of them belongs to a thread**. Carries `{value}`, the
+   * count observed in the payload — the same substitution grammar a signal's `lead` uses.
+   * A digit outside that token is a fabricated number and the validator refuses it.
+   */
+  unthreadedState: string;
+}
+
 export type Widget =
   | BarListWidget
   | SourceBarListWidget
@@ -368,7 +464,8 @@ export type Widget =
   | CostTableWidget
   | DataTableWidget
   | ProgressTableWidget
-  | ActivityFeedWidget;
+  | ActivityFeedWidget
+  | ThreadFeedWidget;
 
 export interface PanelFilters {
   type: FilterType;
@@ -447,6 +544,16 @@ export type PanelSummary = Pick<
 
 export function isWidgetType(value: unknown): value is WidgetType {
   return typeof value === 'string' && (WIDGET_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * Named by ADR-028, not built. Separate from `isWidgetType` on purpose: a reserved type
+ * must **not** widen `WidgetType`, or `WidgetView`'s `never` fallthrough would demand an
+ * arm for something nothing can render. It renders the unsupported placeholder — the same
+ * path as a typo — and the validator refuses it with a sentence naming the ADR.
+ */
+export function isReservedWidgetType(value: unknown): value is ReservedWidgetType {
+  return typeof value === 'string' && (RESERVED_WIDGET_TYPES as readonly string[]).includes(value);
 }
 
 export function isQuerySource(value: unknown): value is QuerySource {

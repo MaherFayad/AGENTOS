@@ -35,17 +35,36 @@ const CONTRACT_TS = join(ROOT, 'packages', 'contracts', 'src', 'panels.ts');
  * Mirrors of packages/contracts/src/panels.ts. checkContractParity() proves they match.
  */
 
+/** §2.5.5. Closed — ADR-028. */
+const CANONICAL_WIDGET_TYPES = [
+  'bar-list',
+  'source-bar-list',
+  'area-chart',
+  'cost-table',
+  'data-table',
+  'progress-table',
+  'activity-feed',
+];
+
+/** ADR-028's whole allowance: three names, ever. Not a budget of slots. */
+const EXTENSION_WIDGET_TYPES = ['thread-feed', 'board', 'calendar'];
+
+/** The extensions with a schema and a renderer. The rest are named and reserved. */
+const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed'];
+
+/** ADR-028's cap. A fourth extension is a reversal of that ADR, not an application of it. */
+const EXTENSION_CAP = 3;
+
 export const ENUMS = {
   SCHEMA_VERSION: 1,
-  WIDGET_TYPES: [
-    'bar-list',
-    'source-bar-list',
-    'area-chart',
-    'cost-table',
-    'data-table',
-    'progress-table',
-    'activity-feed',
-  ],
+  CANONICAL_WIDGET_TYPES,
+  EXTENSION_WIDGET_TYPES,
+  BUILT_EXTENSION_WIDGET_TYPES,
+  EXTENSION_CAP,
+  /** What a panel may declare: the seven plus the extensions that are actually built. */
+  WIDGET_TYPES: [...CANONICAL_WIDGET_TYPES, ...BUILT_EXTENSION_WIDGET_TYPES],
+  /** Named, unbuilt — refused with a sentence rather than with "not one of". */
+  RESERVED_WIDGET_TYPES: EXTENSION_WIDGET_TYPES.filter((t) => !BUILT_EXTENSION_WIDGET_TYPES.includes(t)),
   QUERY_SOURCES: ['langfuse', 'sql', 'static'],
   LANGFUSE_METRICS: ['runs', 'cost', 'latency_p50', 'error_rate'],
   LANGFUSE_GROUPINGS: ['agent', 'department', 'model', 'day'],
@@ -249,6 +268,18 @@ function validateWidget(widget, at, out, seenIds) {
     seenIds.add(id);
   }
   requireString(out, widget, 'title', at, { max: 80 });
+
+  // A reserved type is a different mistake from a typo and gets a different sentence: the
+  // name is real and ADR-028 reserved it, but nothing can render it and no schema exists
+  // to check this widget against. "gauge" is wrong; "board" is early.
+  if (ENUMS.RESERVED_WIDGET_TYPES.includes(widget.type)) {
+    err(
+      out,
+      `${at}.type "${widget.type}" is reserved by ADR-028 and has no schema yet — it is named so nobody invents a fourth type, not so a panel can use it. It renders as the unsupported placeholder.`,
+    );
+    return;
+  }
+
   const type = requireEnum(out, widget, 'type', ENUMS.WIDGET_TYPES, at);
 
   if (widget.span !== undefined && widget.span !== 1 && widget.span !== 2)
@@ -315,6 +346,35 @@ function validateWidget(widget, at, out, seenIds) {
       if (widget.limit !== undefined && (!Number.isInteger(widget.limit) || widget.limit < 1 || widget.limit > 50))
         err(out, `${at}.limit must be an integer 1..50`);
       break;
+    case 'thread-feed': {
+      if (widget.limit !== undefined && (!Number.isInteger(widget.limit) || widget.limit < 1 || widget.limit > 50))
+        err(out, `${at}.limit must be an integer 1..50`);
+
+      // Two emptinesses, two sentences. `ops.agent_runs.thread_id` is nullable and no
+      // writer sets it (thread-model.md §5.3), so this widget renders one of these today
+      // and the reader deserves to know which: nothing happened, or things happened and
+      // none of them belongs to a thread. Collapsing them would let "your thread is quiet"
+      // stand for "threads are not wired yet".
+      if (!widget.emptyState)
+        err(
+          out,
+          `${at}.emptyState is required on a thread-feed — nothing writes ops.agent_runs.thread_id yet, so this is the sentence it actually renders`,
+        );
+      const unthreaded = requireString(out, widget, 'unthreadedState', at);
+      if (unthreaded) {
+        if (!unthreaded.includes('{value}'))
+          err(
+            out,
+            `${at}.unthreadedState must carry {value} — it reports the number of events that arrived carrying no thread, and a sentence that cannot show that count is claiming something it did not count`,
+          );
+        if (/\d/.test(unthreaded.split('{value}').join('')))
+          err(
+            out,
+            `${at}.unthreadedState contains a digit outside {value} — the only number in it is the one observed in the payload (standing rule 9)`,
+          );
+      }
+      break;
+    }
     default:
       break;
   }
@@ -519,7 +579,9 @@ export function checkContractParity(tsSource) {
     err(out, `schema version drift: panels.ts says ${version[1]}, validate-panels.mjs says ${ENUMS.SCHEMA_VERSION}`);
 
   const pairs = [
-    ['WIDGET_TYPES', ENUMS.WIDGET_TYPES],
+    ['CANONICAL_WIDGET_TYPES', ENUMS.CANONICAL_WIDGET_TYPES],
+    ['EXTENSION_WIDGET_TYPES', ENUMS.EXTENSION_WIDGET_TYPES],
+    ['BUILT_EXTENSION_WIDGET_TYPES', ENUMS.BUILT_EXTENSION_WIDGET_TYPES],
     ['QUERY_SOURCES', ENUMS.QUERY_SOURCES],
     ['LANGFUSE_METRICS', ENUMS.LANGFUSE_METRICS],
     ['LANGFUSE_GROUPINGS', ENUMS.LANGFUSE_GROUPINGS],
@@ -542,8 +604,37 @@ export function checkContractParity(tsSource) {
     if (theirs.join('|') !== mine.join('|'))
       err(out, `${name} drift — panels.ts [${theirs.join(', ')}] vs validator [${mine.join(', ')}]`);
   }
-  if (ENUMS.WIDGET_TYPES.length !== 7)
-    err(out, `there are exactly seven widget types (§2.5.5); found ${ENUMS.WIDGET_TYPES.length}`);
+  /* ---------------------------------------------------------------- ADR-028
+   * The cap, enforced. It grades the *TypeScript source*, not this file's mirror, so
+   * editing one copy to satisfy the other does not get a fourth type through: widening
+   * panels.ts trips the cap here, and widening only this file trips the drift check above.
+   * `WIDGET_TYPE_EXTENSIONS_USED: 0 | 1 | 2 | 3` in panels.ts is the second, independent
+   * enforcer — it stops compiling, with no script involved.
+   */
+  if (ENUMS.CANONICAL_WIDGET_TYPES.length !== 7)
+    err(out, `there are exactly seven canonical widget types (§2.5.5); found ${ENUMS.CANONICAL_WIDGET_TYPES.length}`);
+
+  const extensions = parseTsArray(tsSource, 'EXTENSION_WIDGET_TYPES') ?? [];
+  if (extensions.length > ENUMS.EXTENSION_CAP)
+    err(
+      out,
+      `ADR-028 caps the panel vocabulary at ${ENUMS.EXTENSION_CAP} new widget types, ever — ` +
+        `packages/contracts/src/panels.ts declares ${extensions.length} (${extensions.join(', ')}). ` +
+        `A fourth type is a reversal of ADR-028, not an application of it: supersede the ADR, then widen both lists. ` +
+        `Everything else composes from the seven (Plan §23.7).`,
+    );
+  for (const name of extensions)
+    if (!ENUMS.EXTENSION_WIDGET_TYPES.includes(name))
+      err(
+        out,
+        `widget type "${name}" is not one of ADR-028's three reserved extensions (${ENUMS.EXTENSION_WIDGET_TYPES.join(', ')}) — the cap is a closed list of names, not three spare slots`,
+      );
+
+  const built = parseTsArray(tsSource, 'BUILT_EXTENSION_WIDGET_TYPES') ?? [];
+  for (const name of built)
+    if (!extensions.includes(name))
+      err(out, `"${name}" is built but was never reserved by ADR-028 — it cannot be rendered into existence`);
+
   return out;
 }
 

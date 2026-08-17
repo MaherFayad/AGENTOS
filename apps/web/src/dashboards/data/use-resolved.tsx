@@ -95,7 +95,11 @@ export function collectQueries(panel: Panel): { query: PanelQuery; intent: Query
   }
   for (const signal of panel.signals) add(signal.query);
   for (const widget of panel.widgets) {
-    add(widget.query, widget.type === 'activity-feed' ? 'activity' : 'default');
+    // `thread-feed` reads the same activity plane and then groups by `threadId` — a thread
+    // is a filter on the run plane, not a plane of its own (ADR-028), so there is no third
+    // intent and no fourth spelling of "runs".
+    const wantsSentences = widget.type === 'activity-feed' || widget.type === 'thread-feed';
+    add(widget.query, wantsSentences ? 'activity' : 'default');
   }
   return out;
 }

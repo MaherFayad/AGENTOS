@@ -3,8 +3,9 @@
 **Owner:** `dashboards-engineer` · **Source:** spec §2.4–2.5 · **Status:** draft
 
 Dashboards are **data, not code**. One JSON file per Command Center. Adding a dashboard
-must never mean writing a component. The seven widget types below cover every widget
-observed in their video — build exactly these, no more.
+must never mean writing a component. The seven canonical widget types below cover every
+widget observed in their video; **ADR-028** adds exactly three named extensions and closes
+the list — see *The cap* below before reaching for an eleventh.
 
 ## Envelope
 
@@ -124,7 +125,35 @@ Renders: 11px `--ink-2` icon+label → 30px/600 tabular numeral → delta chip
 ```
 Icon ⚠ amber / ✓ teal / ⏰ ivory + bold lead + `--ink-2` continuation. 2–4 per dashboard.
 
-## The seven widget types
+## The cap, and the three extensions (ADR-028)
+
+**Seven canonical types, plus exactly three named extensions, ever.** The three are
+`thread-feed`, `board`, `calendar` — a closed list of *names*, not a budget of three spare
+slots. Everything else composes (`Plan §23.7`): an agent roster is a `data-table`, budget
+burn is a `progress-table`, a question queue is an `activity-feed`. A fourth type is a
+**reversal** of ADR-028, not an application of it.
+
+The rule names its enforcers, because one that names none enforces nothing:
+
+| Enforcer | Fails on | Gate |
+|---|---|---|
+| `WIDGET_TYPE_EXTENSIONS_USED: 0 \| 1 \| 2 \| 3` in `packages/contracts/src/panels.ts` | a fourth entry — `4` is unassignable | `npm run typecheck` |
+| `checkContractParity()` in `scripts/validate-panels.mjs` | a fourth entry, **or** a name outside the three | `npm run validate:panels` · `npm run test` |
+
+The second reads the TypeScript source rather than its own mirror, so editing one copy to
+satisfy the other does not get a type through. Both were falsified before being claimed:
+the fourth type was planted, `tsc` reported `Type '4' is not assignable to type
+'0 | 1 | 2 | 3'` and the validator printed three FAILs; removing it returned both to green.
+
+**Built vs reserved.** Only `thread-feed` has a schema and a renderer. `board` needs
+ADR-029's drag primitive and `calendar` reads `ops.schedule`; neither exists, and a schema
+written against an absent table is a plausible spec. So `board` and `calendar` are **named
+and refused**: the validator rejects a panel declaring one with a sentence naming ADR-028,
+and they stay out of `WidgetType`, so `WidgetView`'s exhaustive `switch` is never asked for
+an arm that nothing can render — the compiler naming every render site is the safety
+property, and two unrenderable arms spend it early.
+
+## The seven widget types, plus `thread-feed`
 
 | `type` | Shape | Notes |
 |---|---|---|
@@ -135,12 +164,55 @@ Icon ⚠ amber / ✓ teal / ⏰ ivory + bold lead + `--ink-2` continuation. 2–
 | `data-table` | `{columns:[{key,label,type:"text"\|"chip"\|"number"}], rows:[…], sortable:true, rowAction:"peek"}` | chip column: ✓ teal outline, `! Stalled` coral, `⏱` neutral |
 | `progress-table` | `{rows:[{label, phase, progress:0..1, status:"on-track"\|"at-risk"}]}` | teal track, status chip |
 | `activity-feed` | `{query:{source:"langfuse"}, limit:12}` | `09:41 Meeting transcript processed · 4 action items assigned — Follow-Up Coordinator` — bold event + `--ink-2` attribution |
+| `thread-feed` | `{query:{source:"langfuse", metric:"runs", shape:"list"}, limit:12, emptyState, unthreadedState}` | ADR-028. The activity feed's rows **grouped by `threadId`**, newest thread first; group header is a truncated id |
 
 Grid: 2 columns, 16px gap. A widget declares `span: 1 | 2`.
 
+### `thread-feed` — what it reads, and the three things it refuses to do
+
+*"A thread is the unit. A run is a thread with an agent on the other end"* (`Plan §12`).
+The grouping is the widget: no arrangement of the canonical seven can group, which is why
+this is a type rather than a composition.
+
+1. **No new `query.source`, no `/metrics/threads`.** A thread is a *filter on the run
+   plane*, not a plane — ADR-023 kept one run, one trace. `thread-feed` uses the existing
+   `activity` intent (`GET /metrics/activity`) and groups the rows it receives.
+   `threadId` rides on every activity item already (`observability-engineer`, 2026-08-17); a
+   rollup route would be a second way to compute `runs` and `cost`.
+2. **No `filter.thread`, and no thread id in a panel file.** A thread id is created at
+   runtime; baking a uuid into `panels/*.json` is the defect class the `footer.cta.href`
+   rule already forbids — a second copy of a runtime identity, and the copy goes stale. A
+   per-thread view binds its id from a route, and that is the THREADS surface (`Plan §23.8`).
+3. **No derived title.** A thread carries none (`thread-model.md` §9.6 — *no, not in M16*),
+   and composing one from a message body would put `ops.message.body`, the highest-PII value
+   in the database (§7.1), into a dashboard payload. The header is `shortThreadId()`, with
+   the whole id in `title`.
+
+**Both empty sentences are required, and they are different claims.**
+`ops.agent_runs.thread_id` is nullable, nothing writes it, and the table is empty
+(`thread-model.md` §5.3), so this widget renders one of these today and the reader is
+entitled to know which:
+
+| State | Sentence |
+|---|---|
+| The source answered with nothing | `emptyState` |
+| Rows arrived, **none carrying a thread** | `unthreadedState`, with the count observed in the payload |
+
+`unthreadedState` must contain `{value}` — the same substitution grammar a signal's `lead`
+uses — and a digit anywhere outside that token is refused as a fabricated number. Phrase it
+so any count reads correctly (`… belong to no thread: {value}.`): a panel file has no
+plural mechanism, and `1 runs` makes a real reading look like a placeholder.
+
+A row with no `threadId` is **dropped, never bucketed into a synthetic thread of one**.
+Every row is in that state today, so a fallback would draw a screen full of threads over a
+database with none.
+
 ## Rules
 
-1. Unknown `type` → render a bordered "unsupported widget" placeholder, never crash.
+1. Unknown `type` → render a bordered "unsupported widget" placeholder, never crash. A
+   **reserved** type (`board`, `calendar`) takes the same path at runtime and a *different*
+   sentence at validation: the name is real and ADR-028 reserved it, but no schema exists to
+   check the widget against. "gauge" is wrong; "board" is early.
 2. Missing data → skeleton at correct height, then empty state (**`--ink-2`**, one line).
    Never a spinner that shifts layout.
 
@@ -252,6 +324,7 @@ project staffs, so a fallen-through panel could not even be checked for relevanc
 - `schemaVersion` — currently `1`. Bump in `packages/contracts/src/panels.ts` and the validator together.
 - `department[]` — ADR-001 slugs. An array because `pipeline` covers `sales` and `deals`.
 - `emptyState` — required on every `sql`-backed widget. One sentence naming the agent that will fill it. It is the copy for `empty` (the source answered and had nothing). On `unavailable` the resolver's own sentence wins where it has one, because "No spend in this window" is a claim about data we could not read; `sql` results deliberately carry no message so `emptyState` still speaks for them.
+- `unthreadedState` — required on every `thread-feed`. Carries `{value}`. See above: it is the sentence for *rows arrived, none of them threaded*, which is a different fact from *nothing arrived* and is the true one today.
 - `pending` — required on every signal that has a query. What the strip says before the figure exists, and what `hideWhenZero` prints at zero. Same precedence as above: a resolver message wins on `unavailable`.
 - `note` — required on every `static` query. Provenance, in a sentence. An unsourced literal is a fabricated number.
 - `range: "$range"` — binds the query to the panel's time-range pills. Illegal without `filters.type: "range"`.

@@ -53,8 +53,51 @@ test('the baseline fixture is valid', () => {
   assert.deepEqual(errors(validatePanel(base(), { fileName: 'sample-center.json' })), []);
 });
 
-test('there are exactly seven widget types', () => {
-  assert.equal(ENUMS.WIDGET_TYPES.length, 7);
+/* ------------------------------------------------------- ADR-028: the cap */
+
+test('seven canonical types, and at most three extensions, ever', () => {
+  assert.equal(ENUMS.CANONICAL_WIDGET_TYPES.length, 7);
+  assert.equal(ENUMS.EXTENSION_CAP, 3);
+  assert.ok(ENUMS.EXTENSION_WIDGET_TYPES.length <= ENUMS.EXTENSION_CAP);
+  // The three names are the whole allowance. A fourth need does not spend a spare.
+  assert.deepEqual(ENUMS.EXTENSION_WIDGET_TYPES, ['thread-feed', 'board', 'calendar']);
+  // Only the built ones are usable in a panel; the rest are named and refused.
+  assert.deepEqual(ENUMS.WIDGET_TYPES.length, 8);
+  assert.deepEqual(ENUMS.RESERVED_WIDGET_TYPES, ['board', 'calendar']);
+});
+
+test('a fourth widget type fails the parity gate — the enforcer, falsified', () => {
+  // Plant the defect: panels.ts declares a fourth extension. This is what an implementer
+  // adding `gantt` would actually write, and it must be red before anything renders it.
+  const planted = `
+export const PANEL_SCHEMA_VERSION = 1;
+export const CANONICAL_WIDGET_TYPES = ${JSON.stringify(ENUMS.CANONICAL_WIDGET_TYPES).replace(/"/g, "'")} as const;
+export const EXTENSION_WIDGET_TYPES = ['thread-feed', 'board', 'calendar', 'gantt'] as const;
+export const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed'] as const;
+`;
+  const found = errors(checkContractParity(planted));
+  assert.ok(found.some((m) => m.includes('ADR-028 caps')), found.join('\n'));
+  assert.ok(found.some((m) => m.includes('"gantt" is not one of')), found.join('\n'));
+});
+
+test('a renamed extension fails even at three — the cap is a list of names', () => {
+  const planted = `
+export const PANEL_SCHEMA_VERSION = 1;
+export const CANONICAL_WIDGET_TYPES = ${JSON.stringify(ENUMS.CANONICAL_WIDGET_TYPES).replace(/"/g, "'")} as const;
+export const EXTENSION_WIDGET_TYPES = ['thread-feed', 'board', 'kanban'] as const;
+export const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed'] as const;
+`;
+  const found = errors(checkContractParity(planted));
+  assert.ok(found.some((m) => m.includes('"kanban" is not one of')), found.join('\n'));
+});
+
+test('a reserved type is refused with its own sentence, not as a typo', () => {
+  for (const type of ENUMS.RESERVED_WIDGET_TYPES) {
+    const panel = base();
+    panel.widgets[0].type = type;
+    const found = errors(validatePanel(panel, { fileName: 'sample-center.json' }));
+    assert.ok(found.some((m) => m.includes('reserved by ADR-028')), `${type}: ${found.join('\n')}`);
+  }
 });
 
 /* ------------------------------------------------------------ SQL safety */
@@ -152,6 +195,47 @@ test('a sql-backed widget must declare an honest empty state', () => {
   });
   const found = errors(validatePanel(panel, { fileName: 'sample-center.json' }));
   assert.ok(found.some((m) => m.includes('emptyState is required')), found.join('\n'));
+});
+
+/* ------------------------------------------------ thread-feed (ADR-028) */
+
+const threadFeed = (over = {}) => {
+  const panel = base();
+  panel.widgets.push({
+    id: 'threads',
+    type: 'thread-feed',
+    title: 'Runs, by thread',
+    query: { source: 'langfuse', metric: 'runs', shape: 'list', limit: 24 },
+    emptyState: 'No runs yet, so no thread has anything to show.',
+    unthreadedState: '{value} runs in this window belong to no thread.',
+    ...over,
+  });
+  return errors(validatePanel(panel, { fileName: 'sample-center.json' }));
+};
+
+test('a thread-feed is valid with both of its sentences', () => {
+  assert.deepEqual(threadFeed(), []);
+});
+
+test('a thread-feed must carry both emptinesses, separately', () => {
+  // "nothing happened" and "things happened, none of them threaded" are different claims,
+  // and only the second is true today. One sentence for both would let the widget tell a
+  // reader their thread is quiet when the truth is that nothing writes thread_id.
+  assert.ok(threadFeed({ emptyState: undefined }).some((m) => m.includes('emptyState is required')));
+  assert.ok(threadFeed({ unthreadedState: undefined }).some((m) => m.includes('unthreadedState')));
+});
+
+test('unthreadedState must show the count it claims, and invent no other number', () => {
+  assert.ok(
+    threadFeed({ unthreadedState: 'Some runs belong to no thread.' }).some((m) => m.includes('{value}')),
+    'a sentence that cannot print the count was accepted',
+  );
+  assert.ok(
+    threadFeed({ unthreadedState: '{value} of 40 runs belong to no thread.' }).some((m) =>
+      m.includes('standing rule 9'),
+    ),
+    'a hardcoded figure beside the observed one was accepted',
+  );
 });
 
 /* ------------------------------------------------------------- structure */
