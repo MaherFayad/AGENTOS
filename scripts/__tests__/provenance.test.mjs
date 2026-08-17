@@ -203,6 +203,59 @@ test('a dirty scope is reported as uncommitted, which is the stale-result warnin
   }
 });
 
+test('a modified checker is reported even though it is outside the scanned scope', async () => {
+  // M15's re-gate: `check-tokens.mjs` scopes to `apps/web`, so a run made with
+  // `scripts/check-rtl.mjs` modified printed `· clean`. §8b exists so a number can be
+  // RE-DERIVED, and the two inputs to that are the scanned tree and the checker that
+  // scanned it — a modified checker changes the number without touching a scanned file.
+  // So the banner's `clean` was precisely wrong in the one case §8b was written for.
+  //
+  // Falsified rather than reasoned, in a repo built for it: the clause must be ABSENT
+  // when only the scanned scope is dirty, and PRESENT when only the instrument is. A
+  // clause that is always on is a clause nobody reads.
+  const dir = await mkdtemp(join(tmpdir(), 'prov-instrument-'));
+  try {
+    const g = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8', windowsHide: true });
+    g('init', '-q');
+    g('config', 'user.email', 't@t.t');
+    g('config', 'user.name', 't');
+    await mkdir(join(dir, 'src'), { recursive: true });
+    await mkdir(join(dir, 'scripts'), { recursive: true });
+    await writeFile(join(dir, 'src', 'a.txt'), 'one', 'utf8');
+    await writeFile(join(dir, 'scripts', 'check.mjs'), 'export const v = 1;\n', 'utf8');
+    g('add', '-A');
+    g('commit', '-qm', 'init');
+
+    const clean = provenance(dir, 'src');
+    assert.equal(clean.instrumentDirty, 0);
+    assert.ok(
+      !clean.line.includes('checker modified'),
+      `a clean checker must say nothing: ${clean.line}`,
+    );
+
+    // The exact shape of the incident: the SCANNED SCOPE IS UNTOUCHED and the instrument
+    // is not. This is the case that printed a confident `clean`.
+    await writeFile(join(dir, 'scripts', 'check.mjs'), 'export const v = 2;\n', 'utf8');
+    const p = provenance(dir, 'src');
+    assert.equal(p.dirty, 0, 'the scanned scope really is clean — that half was never wrong');
+    assert.equal(p.instrumentDirty, 1);
+    assert.match(p.line, /clean · checker modified under scripts$/);
+
+    // And the two figures stay independent: a dirty scope keeps its own sentence intact.
+    await writeFile(join(dir, 'src', 'a.txt'), 'two', 'utf8');
+    assert.match(provenance(dir, 'src').line, /1 uncommitted under src · checker modified/);
+
+    // An UNSCOPED run already counts scripts/ in `dirty`. Saying it twice would be noise
+    // dressed as rigour, and the widening that would have produced it was rejected because
+    // a banner that is always dirty trains readers to skip the field.
+    const whole = provenance(dir);
+    assert.equal(whole.instrumentDirty, null);
+    assert.ok(!whole.line.includes('checker modified'), whole.line);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 for (const [name, script, scope] of [
   ['check-tokens', 'scripts/check-tokens.mjs', 'apps/web'],
   ['check-comms', 'scripts/check-comms.mjs', 'comms'],

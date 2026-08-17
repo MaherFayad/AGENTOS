@@ -1,45 +1,42 @@
 # status — commandcenter-orchestrator
 
-**Updated:** 2026-08-17T21:15
-**Milestone:** **M15 done** (PASS, `eaca677`) · **M16 open**, lead dispatched alone ·
+**Updated:** 2026-08-17T23:59
+**Milestone:** **M16 open** — foundation `8a9bdf5` + runner slice awaiting review · M15 done ·
 M6 FAIL open · M3/M4/M8 unchanged
 **State:** review
 
 ## Now
-**M15 is closed on a PASS and M16 is open.** Verdict filed as
-`comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md` — transcribed by me because
-`fidelity-qa-reviewer`'s `Write` was disabled for the second time. The file marks its own seams:
-the framing and every number are theirs verbatim from the preserved fact capture; the connective
-prose and *Deliberately not done* are mine and labelled. **Their verdict prose did not survive
-the session and is not reconstructed.**
+**The shared coverage gate was red and is green, and the interesting half was the direction
+nobody was checking.** `runner-engineer` filed a blocker: `check-spec-coverage.mjs:258` matched
+the `Spec §` column by *prefix*, so `` `Plan §12` `` — the form ADR-013 rule 2 **requires** — FAILed
+on its backtick, while `§99.9` passed. Fixed as **ADR-034** (accepted). Not committed.
 
 ## Ruled / done this tick
-- **M15 → done.** All three blocking items cleared, each proven by planting the defect. The
-  earlier FAIL at `8e77a23` is kept unedited — it is what was true two commits before.
-- **M16 → open**, both release conditions met and recorded as met rather than waived.
-  `thread-model-engineer` dispatched **alone** (ADR-023 · `contracts/thread-model.md` · `0008_`);
-  ten slices held behind the contract. Announcement to `inbox/_all/` because the lead **cannot be
-  messaged until its own first status file exists.**
-- **Four verdict follow-ups routed with owners**, each re-verified against the tree first:
-  `observability.md:242` false → `observability-engineer` · `ProjectSwitcher.tsx:243` untranslated
-  enum → `shell-navigation-engineer` · provenance dirty-scope excludes the instrument →
-  `design-system-guardian` · two NUL bytes in `check-rtl.mjs` → `rtl-arabic-pdpl-specialist`.
-- **The general defect named once, mine:** *`check-spec-coverage.mjs` verifies that a row points
-  somewhere, never that what it says is true.* Four instances, one fixed, three open.
-- **Backlog: four answered on merit, none back-filled.** Two correct the asker — light
-  `ink-2/bg` is **4.60, not 5.05**, and `primitive-color-defaults.test.ts:190-191` is vacuous.
-  Both routed. **The four `## Answer` blocks are still owed** and the files honestly still read
-  `status: open`.
+- **ADR-034 — `Plan §n` is a first-class citation, and citations are now *resolved*.** Fixing only
+  the prefix would have shipped a gate that accepts `Plan §99.9`. **BOARD blind-spot row A is
+  closed**, on both documents. ADR-013 rule 1 is untouched: the *denominator* is still the spec of
+  record alone — **claiming and citing are two columns and two promises.**
+- **Falsified in both directions against the real spec and the real plan**, not a fixture: 7 valid
+  forms → 0 FAILs exit 0; 7 invalid → 7 FAILs exit 1, control row green. The near-miss avoided:
+  resolving against headings only would have FAILed **44 correct rows** (`§2.5.1`, `PART VII.4` are
+  ordered-list items). *A gate whose first output is a false FAIL is worse than the gap.*
+- **New standing line on the board, and it is not the general defect:** *a gate narrower than the
+  vocabulary its authors are required to use will silently edit them.* Found by an agent noticing
+  why they had picked a section number — **no instrument here would have shown it.**
+- **`thread-model.md` §4.1's second argument is inert on this stack** — RLS is bypassed under
+  compose's superuser, `scopeEnforcement: "bypassed"`. Verified against `0008_threads.sql:454` and
+  `db/thread-reads.ts:23`. Conclusion holds; route unchanged. Routed to `thread-model-engineer`.
+- **M16 ships two interrupt levels and a refusal, not three.** `steer` is *refused*, with the
+  reason on the board; `drawer-engineer`'s slice row edited so the composer is not built against
+  the old promise.
 
 ## Blocked on
-Nothing of mine. M16's ten held slices are blocked on `contracts/thread-model.md`, deliberately.
+Nothing of mine.
 
 ## Next
-1. **Wire `thread-model-engineer` into the roster** the moment
-   `comms/status/thread-model-engineer.md` appears — the row, the contract cell, nothing else.
-2. **Dispatch M16's remaining slices only after the contract exists.** Do not sequence them off
-   `Plan §12`.
-3. **Fix my own three open coverage instances** — `§99.9`, the impl near-miss, and the
-   REQ-DSH-33 class the gate has no mechanism for at all.
-4. `fidelity-qa-reviewer`'s next dispatch re-answers the four backlog messages **in writing**,
-   and every future dispatch of theirs ends with me transcribing until the tool restriction lifts.
+1. **My two remaining coverage instances** — the impl-column near-miss (row E) and the REQ-DSH-33
+   class the gate has no mechanism for at all. Rows B, C, D, F, H also mine.
+2. **`fidelity-qa-reviewer` has three unanswered `review-request`s** (M16 foundation, runner
+   thread route, observability thread axis) plus **four owed `## Answer` blocks**. Nothing in M16
+   advances until that queue moves — its dispatch ends with me transcribing.
+3. Dispatch M16's held slices only after the foundation review answers.

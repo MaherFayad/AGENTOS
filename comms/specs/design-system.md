@@ -44,8 +44,14 @@ Citing is not claiming. These stay with the agent BOARD.md names:
   block collapses every `--dur-*` to `1ms`, so any component using `duration-*` inherits
   the guard without knowing about it. JS-driven motion additionally calls
   `useReducedMotion()`.
-- **Eight primitives, and a ninth needs a decision-request.** Part V bans a component
-  library; a home-grown library that grows without review is the same failure, slower.
+- **Eleven primitives, and a twelfth needs a decision-request.** Part V bans a component
+  library; a home-grown library that grows without review is the same failure, slower. The
+  count has moved three times and each move is written down before the code, not after:
+  `ProvenanceBadge` (tokens contract §10.4), then `AddressBadge` and `InterruptBadge`
+  (§11.5). All three were offered `Chip` as a host and refused it for one reason — `Chip`
+  is the *status* vocabulary and the only component allowed to spend data ink, and none of
+  the three reports a status. **That refusal is why they exist, so it is the test of whether
+  a twelfth should.**
 - **`darkMode` is pointed at `body:not(.light)`** so a stray `dark:` produces truthful
   CSS — but `check-tokens.mjs` still fails on it. §1.2: tokens branch, components do not.
 
@@ -186,7 +192,19 @@ Citing is not claiming. These stay with the agent BOARD.md names:
 | REQ-DS-99 | PART I | `KpiNumeral` — tabular, tone from the number's meaning, accessible final value | `apps/web/src/components/primitives/KpiNumeral.tsx` | `apps/web/src/components/primitives/KpiNumeral.test.tsx` |
 | REQ-DS-100 | §2.0 | `SegmentedControl` — active ivory pill with `--copper-ink` text, inactive `--ink-2`, 11px/+0.25em, arrow-key roving tabindex | `apps/web/src/components/primitives/SegmentedControl.tsx` | `apps/web/src/components/primitives/SegmentedControl.test.tsx` |
 | REQ-DS-101 | PART I | `GlassPanel` — `--glass` + blur(14px) + the one dark-mode shadow | `apps/web/src/components/primitives/GlassPanel.tsx` | `apps/web/src/components/primitives/GlassPanel.test.tsx` |
-| REQ-DS-102 | PART I | No component library: the whole kit is Tailwind + CSS vars + eight primitives + a 12-line `cx` | `apps/web/src/components/primitives/index.ts` | review — `fidelity-qa-reviewer` |
+| REQ-DS-102 | PART I | No component library: the whole kit is Tailwind + CSS vars + **eleven** primitives + a 12-line `cx`. The count moves only on a written decision in the tokens contract, never on convenience | `apps/web/src/components/primitives/index.ts` | review — `fidelity-qa-reviewer` |
+| REQ-DS-103 | PART I · `Plan §10` | `ProvenanceBadge` — five states on silhouette, hollow modifier and text weight, **no hue**; no default `state`; marks drawn, never typed (tokens contract §10) | `apps/web/src/components/primitives/ProvenanceBadge.tsx` | `apps/web/src/components/primitives/ProvenanceBadge.test.tsx` |
+| REQ-DS-104 | PART I · `Plan §12` | `AddressBadge` — four forms on four channels (mark · silhouette · sigil · weight), every pair differing on at least two; the sigil is confirming, never load-bearing (tokens contract §11.2) | `apps/web/src/components/primitives/AddressBadge.tsx` | `apps/web/src/components/primitives/AddressBadge.test.tsx` |
+| REQ-DS-105 | §1.3 · `Plan §12` | **`@@` is visually discontinuous from `#`, not one weight step away** — fan-out alone carries a stacked silhouette, because one costs a run and the other costs N | `apps/web/src/components/primitives/AddressBadge.tsx` | `apps/web/src/components/primitives/AddressBadge.test.tsx` |
+| REQ-DS-106 | PART I · `Plan §23.8` | The mark draws a free, uncapped end **iff** `addressCost()` reports the count inexact — `#department` and a bare address are lower bounds, and the register says so in copy and in silhouette | `apps/web/src/components/primitives/AddressBadge.tsx` | `apps/web/src/components/primitives/AddressBadge.test.tsx` |
+| REQ-DS-107 | PART I · `Plan §23.8` · BOARD rule 9 | The cost slot **cannot render a money figure** — no prop can carry one, no `threads.` catalogue string may hold one, and widening `TurnCost.estimatedUsd` fails `tsc` | `apps/web/src/components/primitives/AddressBadge.tsx` · `apps/web/src/i18n/strings.en.ts` | `apps/web/src/components/primitives/AddressBadge.test.tsx` |
+| REQ-DS-108 | PART I · BOARD rule 9 | A count that came back empty and a count nobody took render **differently**; the unresolved state carries no numeral at all and is a first-class state, not a degraded one | `apps/web/src/components/primitives/AddressBadge.tsx` | `apps/web/src/components/primitives/AddressBadge.test.tsx` |
+| REQ-DS-109 | PART I · `Plan §12` | `InterruptBadge` — mark, enclosure and weight all answer `interruptsWorkInProgress()` the same way, so "this will interrupt work in progress" is readable before committing (tokens contract §11.4) | `apps/web/src/components/primitives/InterruptBadge.tsx` | `apps/web/src/components/primitives/InterruptBadge.test.tsx` |
+| REQ-DS-110 | §1.3 · `Plan §12` | The interrupt enclosure is a **monotone ramp** — nothing · a leading rule · a full box — because `note → steer → halt` is an escalation, where addressing is a discontinuity | `apps/web/src/components/primitives/InterruptBadge.tsx` | `apps/web/src/components/primitives/InterruptBadge.test.tsx` |
+| REQ-DS-111 | PART I · `Plan §12` · thread-model §4.2 | `deliverable` is **required on `steer` and forbidden on `note`/`halt`**; a refused steer is dashed and stays at `--ink-2`, because §9.2 makes the refusal required reading | `apps/web/src/components/primitives/InterruptBadge.tsx` | `apps/web/src/components/primitives/InterruptBadge.test.tsx` |
+| REQ-DS-112 | §1.4 · `Plan §12` | Both registers declare their direction in `MIRRORS` / `DOES_NOT_MIRROR` rather than deciding locally, and the `@` `#` `@@` sigil run is bidi-isolated because those characters are direction-neutral | `apps/web/src/i18n/direction.ts` · `apps/web/src/components/primitives/AddressBadge.tsx` | `apps/web/src/components/primitives/AddressBadge.test.tsx` |
+| REQ-DS-113 | PART I | The token banner reports **two** dirtiness figures — the scanned scope and the instrument — so a modified checker cannot print `clean` (tokens contract §8b) | `scripts/lib/provenance.mjs` | `scripts/__tests__/provenance.test.mjs` |
+| REQ-DS-114 | PART I | The primitive-defaults guard **states its own vacuity** while dormant and proves it patrols when armed, in both directions (tokens contract §9.6a) | `apps/web/src/test/primitive-color-defaults.test.ts` | `apps/web/src/test/primitive-color-defaults.test.ts` |
 
 ## Interfaces we expose
 

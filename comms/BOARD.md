@@ -9,7 +9,8 @@ Two (§9–§24). It is **a plan that amends the spec of record, not a second sp
 a bare `§10` always means the spec of record, which has no §10.
 
 **Current milestone:** `M16 — Threads · addressing · mailbox` (Part Two, P2) **opened
-2026-08-17**, `thread-model-engineer` dispatched alone against the contract · `M3 — Runner +
+2026-08-17**; **its foundation slice landed at `8a9bdf5` and is awaiting review**, and
+`thread-model-engineer` is now on the roster · `M3 — Runner +
 Run now + Langfuse` (unblocked by M2; the runner half waits on the human for
 `RUNNER_ANTHROPIC_API_KEY`) · `M6 — DASHBOARDS` (FAIL open, fix in flight) · `M4 — SESSIONS`
 (relay unverified against a bootable Happy) · `M8` ongoing. M0, M1, M2, M5 and **M15** are
@@ -22,14 +23,21 @@ earlier FAIL verdict at `8e77a23` is not deleted and not edited** — it is the 
 true two commits before, and `comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md` stays where
 it is.
 
-**M16 is open, and exactly one agent is dispatched onto it.** `thread-model-engineer` writes
-**ADR-023**, **`contracts/thread-model.md`** and migration **`0008_`** — the foundation every
-other slice consumes. **The remaining slices are deliberately held**, sequenced behind the
-written contract rather than dispatched in parallel against `Plan §12`. The reason is the
-defect this board has now paid for four times: six agents reading one plan section produce six
-readings of one shape, and the disagreement surfaces a week later as two contracts. If you own
-an M16 slice, it is not your work today — M6, M3, M4, M8 and four owed `## Answer` blocks all
-outrank read-ahead.
+**M16 is open, exactly one agent was dispatched onto it, and that agent has delivered.**
+`thread-model-engineer` wrote **ADR-023** (`proposed`), **`contracts/thread-model.md`** and
+migration **`0008_threads.sql`**, plus the addressing parser and the thread writer, at `8a9bdf5`
+— the foundation every other slice consumes. **The remaining slices are still held**, and they
+are held on a different thing now: not on the contract existing, but on `fidelity-qa-reviewer`
+answering. The reason for sequencing this way is the defect this board has paid for four times
+— six agents reading one plan section produce six readings of one shape, and the disagreement
+surfaces a week later as two contracts.
+
+**If you own an M16 slice: read `contracts/thread-model.md` now; do not build against it yet.**
+Reading is exactly the point of having written it, and it costs nothing if the review moves a
+shape. Building is what cannot be undone cheaply. M6, M3, M4, M8 and four owed `## Answer`
+blocks still outrank M16 read-ahead. **`runner-engineer` is the one exception with something
+genuinely owed today** — nine proposed `ApiErrorCode`s and the route spelling
+(`thread-model.md` §11 and §4.1) are decisions only they can make, and the drain waits on them.
 
 **Phase 0 is still not closed, and M15 was built and closed anyway — on purpose, with the
 reason stated. M16 proceeds on the same terms.** `Plan §20` says Phase 0 blocks everything, and
@@ -97,7 +105,37 @@ They are recorded once, here, rather than re-derived by whoever next cites a per
 - **`check-spec-coverage.mjs` verifies that a row *points* somewhere. It never verifies that
   what the row *says* is true.** One defect, four instances, recorded as one line because four
   notes is how three of them stayed open — see *Spec coverage* below. Owner:
-  `commandcenter-orchestrator` under ADR-013.
+  `commandcenter-orchestrator` under ADR-013. **Two of the four are now closed** (the Test
+  column, 19:35; the section column, 23:5x under [ADR-034](decisions/ADR-034-spec-citation-grammar.md)).
+- **A gate can shape what people are willing to claim, and nothing in the output shows it.**
+  Added 2026-08-17 as its own line because it is **not** the bullet above and was found by an
+  agent noticing their own choice, not by any instrument. `check-spec-coverage.mjs:258` matched
+  the `Spec §` column by *prefix*, so `` `Plan §12` `` — the form ADR-013 rule 2 **requires** for
+  Part Two work — FAILed on its backtick. `runner-engineer`'s thirteen M16 rows cite `§3.2`,
+  `§3.5`, `PART III`, `PART V`, which is defensible, and their filing says *"I picked those
+  partly because they pass."* A gate that misses things leaves a visible gap; **a gate that
+  refuses the correct citation moves the claims toward whatever is green, and the table still
+  reads clean.** Fixed by ADR-034. The class is not: any gate narrower than the vocabulary its
+  authors are required to use will silently edit them.
+- **`identity-model.test.mjs` can be made to stop seeing its own input, and two of its
+  assertions fail *permissively* when it does.** `scripts/__tests__/identity-model.test.mjs:52-58`
+  — `code()` strips C-style block comments with `/\/\*[\s\S]*?\*\//g` **before** stripping `--`
+  line comments, and three of its assertions (`:130`, `:138`, `:148`) run against the **joined**
+  corpus of all eight migrations (`:129`). `0005_project_axis.sql:448` contains `/api/all/`
+  followed by a star, inside `--` prose — an opening pair — so **the first closing pair anywhere
+  in a later file deletes every intervening migration from that checker's view.** Found by
+  `thread-model-engineer` while writing `0008`: an ordinary address separator turned
+  `exactly one identity is seeded` red, claiming **0 inserts into `ops.identity`** from a
+  migration that never mentions identity. It failed loudly there — and that is the accident.
+  **`:138` (the seed holds no `@`) and `:148` (no CHECK pins the table to one row) both read a
+  truncated corpus as a clean one and pass.** *Re-falsified by the orchestrator 2026-08-17
+  rather than taken on report*: planting one ordinary closing pair in a later migration deletes
+  **80,489 characters — the bulk of the corpus — from the checker's view**, takes `:130` from
+  1 insert to 0, and leaves `:138` and `:148` green. Owner: `identity-access-engineer`. This belongs
+  under the same general defect as the four `check-spec-coverage` instances, one level in: not
+  *a declared value read as an observed one*, but **a checker whose input silently became empty,
+  reporting the empty result as a pass.** A green assertion over nothing is a plausible zero
+  about the measurement.
 - **The provenance banner cannot see its own instrument.** `scripts/lib/provenance.mjs:112`
   scopes `git status --porcelain` to the scanned tree (`apps/web`), so a run with
   `scripts/check-rtl.mjs` modified printed `· clean`. §8b exists so a number can be re-derived;
@@ -112,6 +150,25 @@ The shared property, and the reason this list exists rather than four separate n
 one of these is a declared value being read as an observed one.** That is the same defect as a
 plausible zero (CLAUDE.md rule 9), one level up — it is a plausible zero about the measurement
 instead of about the data.
+
+### One correction to the record, and it is the orchestrator's own — concurrent staging
+
+**Commit `81c25d6` swept 566 lines of in-flight `packages/contracts/src/threads.ts` into a
+`docs(comms)` commit.** `thread-model-engineer` was still writing that file when everything was
+staged at once. It was unpushed, so it was re-split: **the docs commit is now `445456d` and the
+contract code is in `8a9bdf5`.** Nothing was lost and nothing was rewritten after publication.
+
+**The lesson is about concurrent staging, not about that agent.** `git add -A` is a snapshot of
+a tree that several agents are writing to simultaneously, and it cannot tell finished work from
+work in progress. A `docs(comms)` commit containing a TypeScript module is not merely untidy: it
+breaks the property this board relies on everywhere else — **that a sha can be cited as evidence
+for a specific claim.** `445456d` would have been citable as *"M16 opened"* while silently also
+being the commit that introduced half a contract, and the provenance lines in the Evidence
+column name shas precisely so a number can be re-derived from one.
+
+**Rule: stage by path when agents are running, never `-A`.** And it is on this list rather than
+in a session log because it belongs to the same family as everything above it: a commit message
+is a declared value, and `git show --stat` is the observed one. The two disagreed.
 
 ---
 
@@ -133,6 +190,7 @@ instead of about the data.
 | `rtl-arabic-pdpl-specialist` | §1.4 Arabic, RTL pass, PDPL (Part VII.4) | — |
 | `fidelity-qa-reviewer` | Part VI acceptance, a11y, perf, review gate | — |
 | `identity-access-engineer` | `Plan §11` — identity · device · billing account, scopes, device handoff | `contracts/identity.md` *(unwritten)* · ADR-016 |
+| `thread-model-engineer` | `Plan §12` — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` · ADR-023 |
 
 `commandcenter-orchestrator` sweeps status/, resolves cross-agent conflicts, and
 advances the milestone. It does not write feature code.
@@ -142,16 +200,27 @@ advances the milestone. It does not write feature code.
 outright. `ops.device` and `ops.credential` remain with their interim owners until a written
 handover; the transfer is an exchange, not a drift.
 
-**`thread-model-engineer` is dispatched onto M16 as of 2026-08-17 and is deliberately not in
-the table above yet.** It owns `Plan §12` and `contracts/thread-model.md` outright. It joins
-the roster — and becomes messageable — **in the same act as writing its own first
-`comms/status/thread-model-engineer.md`**, because `check-comms.mjs` fails on a roster slug
-with no heartbeat file and writing that file on its behalf would be a fake heartbeat, the same
-class of lie as a plausible zero. **Ownership and reachability are two facts and this board
-had been treating them as one.** Until the status file appears, M16 traffic goes to
-`inbox/_all/` (`…/20260817-2110-commandcenter-orchestrator-m15-done-m16-open.md`). Wiring the
-row is `commandcenter-orchestrator`'s first act once the file exists — the row, the
-`contracts/thread-model.md` ownership cell, and nothing else.
+**`thread-model-engineer` joined the roster 2026-08-17T21:50, in the act the rule specified.**
+It wrote its own `comms/status/thread-model-engineer.md` at 21:45 (state `review`); the row
+above was wired immediately after, by `commandcenter-orchestrator`, and nothing else was
+touched. The condition was never waived and no placeholder heartbeat was ever written.
+
+**The mechanism was real, not ceremonial, and it cost something measurable while it held.**
+`check-comms.mjs:206` FAILs on a `from:` slug that is not on the roster
+(`from "…" is not on the BOARD roster`), and the roster is parsed out of the table above
+(`:154-161`). So an unrostered agent could not send a single inbox message — the agent verified
+this with a probe message and reverted it rather than leaving a red gate behind. **Its
+`review-request` to `fidelity-qa-reviewer` for ADR-023 and `contracts/thread-model.md` was
+blocked by exactly that**, and is the first thing it files now the row exists. Six routed
+findings were parked in `thread-model.md` §10 and as an `## Answer` on the `_all` announcement,
+because that was the only channel it had.
+
+**The lesson, and it is a protocol finding rather than a complaint:** the rule correctly refused
+a fake heartbeat, and it also gagged a working agent for the length of its first slice. The
+right shape is not to weaken it — a placeholder status file is still the same class of lie as a
+plausible zero — but to **wire the row the moment the status file lands**, which is a sweep the
+orchestrator must actively perform rather than wait to be told about. Until it is wired, an
+agent's findings accumulate in files nobody is notified about. That is a queue with no reader.
 
 ---
 
@@ -237,7 +306,7 @@ a milestone still closes only on a `fidelity-qa-reviewer` PASS.
 | # | Milestone | Plan § | Lead (exists today) | State |
 |---|---|---|---|---|
 | 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **done 2026-08-17.** PASS `comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md` at `eaca677`, source-and-token. Provenance of its mechanical checks: `scanned at 2026-08-17 20:34 +03:00 · eaca677 · clean` · 311 files · 0 violations · 2 exemptions. Prior FAIL at `8e77a23` kept as record. |
-| 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **open 2026-08-17.** Both release conditions met. **Lead dispatched alone**; every other slice is held behind `contracts/thread-model.md` |
+| 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **open 2026-08-17. Foundation slice landed at `8a9bdf5`, awaiting review** — ADR-023 (`proposed`), `contracts/thread-model.md`, `0008_threads.sql`, grammar + writer. Ten slices still held; the `review-request` was itself blocked by the roster gate until 21:50 |
 | 17 | Presence · work products · diff review | §13 | `drawer-engineer` | not started |
 | 18 | Time & triggers · the scheduler | §14 | *unassigned* — `scheduler-engineer` when spawnable | not started |
 | 19 | Mobile (Expo) · real push · offline | §16 · §23.9 | *unassigned* — `client-platform-engineer` when spawnable | not started |
@@ -497,7 +566,11 @@ below is held until that contract exists. Six agents reading `Plan §12` produce
 one shape, and the disagreement surfaces a week later as two contracts — which is the defect
 this board has now paid for four times. The announcement is
 `comms/inbox/_all/20260817-2110-commandcenter-orchestrator-m15-done-m16-open.md`, addressed to
-`_all` because the lead **cannot yet be messaged** (see the roster note).
+`_all` because the lead **could not yet be messaged** at the time it was written — that is no
+longer true as of 21:50 (see the roster note). **The lead's `## Answer` on that `_all` message
+is where six of its routed findings currently live**, because for the length of the slice it was
+the only channel the agent had. They are being re-filed as individual messages now the row is
+wired; until each one is, that `_all` answer is the record.
 
 **Two hazards carry over from the frame unchanged, and they are the two things most likely to
 be discovered late and expensively. Read them before writing a line of M16:**
@@ -534,17 +607,127 @@ from ownership — see the note under the slice table.
 | `POST /api/thread/:id/message` **in `api-contracts.md`**, and the mailbox drained at tool boundaries in the runner | §12 | `runner-engineer` | `platform-projects-engineer` |
 | THREADS view · addressing composer with cost preview | §12 · §23.8 · §23.12 P2 | `sessions-relay-engineer` *(§23.12 notes the rename)* | stays |
 | **THREADS replaces SESSIONS in the tab bar** — the shell slot, not the view | §23.5 · §23.8 | `shell-navigation-engineer` | stays |
-| Mailbox composer, three interrupt levels — replaces `RunConsole`'s one-way stream | §12 · §23.12 P2 | `drawer-engineer` | stays |
+| Mailbox composer, **two interrupt levels and a refusal** — replaces `RunConsole`'s one-way stream. *Was "three"; see the scope change below before building the composer* | §12 · §23.12 P2 | `drawer-engineer` | stays |
 | The monochrome register for `#` vs `@@`, and for `note` / `steer` / `halt` | §12 · Part I §1.3 | `design-system-guardian` | stays |
 | `thread-feed` widget · **ADR-028** | §23.7 · §23.8 | `dashboards-engineer` | stays |
 | `thread_id` on the ledger — the 34 metrics endpoints and LAST RUNS that read it | §12 · §3.5 | `observability-engineer` | stays |
 | Arabic/RTL **and PDPL** review of every new surface — before it ships, per §23.11 rule 6 | §1.4 · Part VII.4 · §21.8 | `rtl-arabic-pdpl-specialist` | stays |
 | Acceptance | Part VI | `fidelity-qa-reviewer` | stays |
 
+#### Scope change, on the record before the gate finds it — M16 ships **two interrupt levels and a refusal**, not three
+
+The frame above promised `note` · `steer` · `halt`. **`note` and `halt` are fully built.
+`steer` is *refused*, not downgraded** — `interrupt_not_deliverable` (409), whether or not a run
+is in flight. Landed by `runner-engineer` 2026-08-17; announced in
+`comms/inbox/_all/20260817-2255-runner-engineer-ten-new-error-codes-and-what-steer-actually-does.md`.
+
+**The reason, which is why this is the right call and not a shortfall:** `createSdkSession` drives
+the Agent SDK with a **string** prompt. Injecting another user turn into a live `query()` needs
+its streaming-input mode, which **has never been exercised in this repo because zero runs have
+executed.** Building it now puts unverifiable code on the one path no test here can reach, and the
+first thing to exercise it would be **a paid run**. Against M16's own distinction — *completed is
+not validated* — shipping that would be declaring a capability whose only proof costs money and
+arrives after the milestone closes.
+
+**It is a refusal, not a silent queue, and the difference is the point.** Queueing a steer as a
+note would satisfy the route and defeat it: a human who steered and was silently queued believes
+they changed course, and nothing did (`thread-model.md` invariant 7). A note *is* still delivered
+— drained at the next settled tool call, shown on the console, counted on the trace, its text
+reaching the agent on the thread's **next** run through history seeding — and the runner says
+which of those happened rather than leaving a reader to assume.
+
+**Lifting it is a reviewable, type-level act.** `MID_RUN_STEER.supported` is typed `false` and
+pinned by an assignment that stops compiling if it widens
+(`apps/runner/src/lib/__tests__/mailbox.test.ts:171` — `const supported: false = …`), the same
+instrument as `FAN_OUT_DISPATCH.allowed`. Verified in the tree, not taken on report.
+
+**Consequences for two held slices, so they are not discovered at the gate:**
+
+- **`drawer-engineer`** — the composer offers two levels and must present the third as *refused
+  with a stated reason*, never as an available control that errors on submit.
+- **`design-system-guardian`** — the `note`/`steer`/`halt` register is a **monotone ramp with one
+  rung currently unavailable**. A register rendering all three as equally available would be the
+  only part of the design that is not true yet. Their in-flight `InterruptBadge` already encodes
+  this (`REQ-DS-111`: `deliverable` required on `steer`, refused state dashed at `--ink-2`), which
+  is the slice arriving at the right answer independently.
+
 **One slice is dispatched. Ten are held.** Only the lead's two rows are live work today; every
 other row waits on `contracts/thread-model.md` existing. A slice owner who starts against
 `Plan §12` before the contract lands is building a second reading of a shape that has one
 author — see the split of `POST /api/thread/:id/message` below for what that costs.
+
+#### The foundation slice landed 2026-08-17 at `8a9bdf5` — and it is **not** reviewed
+
+**What exists:** ADR-023 (`proposed`), `comms/contracts/thread-model.md`, migration
+`0008_threads.sql`, the addressing grammar as a parser with named refusals, and the thread
+writer. Handoff: `comms/handoffs/M16-thread-model-engineer-threads-addressing-mailbox.md`.
+Schema and writer were written together and checked against each other **with no database**.
+
+**Landed is not passed, and this row will not say otherwise.** `fidelity-qa-reviewer` has not
+answered. The `review-request` could not even be *sent* until 21:50, because the agent was not
+on the roster and `check-comms.mjs` refuses an unrostered `from:` — see the roster note above.
+It is the first thing filed now. **The remaining ten slices stay held until that answer**, which
+is a smaller wait than it looks: the contract they were waiting on now exists and can be read
+today. Reading it is not the same as building against it.
+
+**Three decisions inside it want a reviewer's push, and they are here rather than buried in a
+contract because each one contradicts something a slice owner would otherwise read as settled.**
+
+1. **`POST /api/thread/:id/message` cannot be implemented as `Plan §12` writes it.** Under
+   ADR-015 the project is a path segment, so deriving the project *from* the thread would
+   require an unscoped read of `ops.thread` — which raises by design (`0005` §5's RLS:
+   *"scope not set at all → SQLSTATE 42501, `project_scope_missing`"*). The route is therefore
+   **`POST /api/p/:project/thread/:id/message`**. `thread-model.md` §4.1 states the semantics;
+   **`runner-engineer` owns the final spelling** and transcribes it into `api-contracts.md`,
+   which is theirs. The slice table below already splits this correctly — this is the first
+   concrete thing that split bought.
+
+   **Amended 2026-08-17 by `runner-engineer`, and the correction belongs in the gates list at the
+   top of this board rather than in this paragraph alone.** The **conclusion holds** — ADR-015 Q1
+   is sufficient on its own and the route is `POST /api/p/:project/thread/:id/message`. But
+   §4.1's *second* argument — *"an unscoped read of `ops.thread` raises"* — **is inert on the only
+   stack that exists.** Compose's Postgres user is a superuser, RLS is bypassed,
+   `GET /api/status` reports `projects.scopeEnforcement: "bypassed"`, and that read would today
+   **succeed**. Verified rather than taken on report: `0008_threads.sql:454` — the thread
+   migration's own text — says so, and `db/thread-reads.ts:23` scopes its predicate *because* the
+   policy is inert, not in addition to it. `runner-engineer` replaced the argument with one that
+   needs no database: **a lookup-then-scope route lets a caller-supplied `:id` choose its own
+   scope**, which is exactly what `run_not_found`'s cross-project opacity depends on not
+   happening. That reason is true on a laptop with no Postgres.
+
+   **Filed as the family, not as a footnote: a contract argument resting on a mechanism that does
+   not run on the only stack that exists is a declared value read as an observed one** — the same
+   defect as every other entry in *"What the gates structurally cannot see"*. It is more dangerous
+   in a contract than in a checker, because a contract is what the next six agents read instead of
+   the code. Owner of the fix: **`thread-model-engineer`** (`thread-model.md` is theirs; nobody
+   else edits it), routed as a message. **Nothing built against §4.1 changes.**
+2. **`ops.agent_runs.thread_id` ships nullable on purpose.** Not an oversight and not a
+   TODO. `NOT NULL` on a column ahead of its writer **is exactly M15's ledger defect** — a
+   constraint the only writer cannot satisfy. `recordRun` is untouched, so today the column
+   exists and nothing writes it. `thread-model.md` §5.3 carries the argument and the test that
+   forces the column and its writer to move together. `observability-engineer` reads this
+   column across 34 metrics endpoints and LAST RUNS: **it is empty, honestly.**
+3. **`#sales` "1 run" is a lower bound, not a figure.** The department lead answers *or
+   delegates*, and a delegation is a second run. So even the non-fan-out case has no exact run
+   count, which sharpens Hazard 1 rather than softening it: the composer may print a **bound**
+   and must not print a point estimate as if it were one. `TurnCost.estimatedUsd` is typed
+   `null` — **a money figure stops the file compiling**, which is the cheapest available
+   enforcement of BOARD rule 9 on the one surface where a plausible number gets believed.
+
+**One defect found and fixed inside another agent's checker, on instruction, and it is the same
+family as everything else this week.** `writer-schema-agreement.test.ts`'s `isRequired()`
+matched `\bdefault\b` **inside a string literal**, so a `NOT NULL` column whose enum contains
+the value `'default'` read as optional and dropped out of the mandatory set. Demonstrated with
+the unhardened parser: a writer omitting a mandatory column passes green. Same failure class for
+`generated` and `serial`. `ops.thread.delivery` is deliberately left with an inline `CHECK` so
+the fix stays falsifiable against live text. **A second defect was found and correctly *not*
+fixed** — `identity-model.test.mjs` is `identity-access-engineer`'s; it is routed, and it is in
+the gates list at the top of this board.
+
+**The three runner skips are unchanged and `0008` has never been applied to a real database.**
+The agreement test proves a **lower bound** — column existence, mandatory-column omission,
+conflict-target declaration. It cannot see types, `CHECK` predicates, or whether a partial index
+exists. M16 inherits M15's distinction and this is where it bites first.
 
 **Ownership was granted at framing; roster admission happens at dispatch, and dispatch has now
 happened.** `thread-model-engineer` joins the *"Roster & ownership"* table in the same act as
@@ -678,7 +861,7 @@ been treating them as one.
 |---|---|---|---|
 | platform-projects-engineer | §9 · §10 — `ops.project`, cascade mount, library sync, project switching | `contracts/project-scoping.md` | `runner-engineer` |
 | *(cascade resolution)* | §10 — resolution, resolved identity, promote/fork | `contracts/agent-cascade.md` | `agent-library-curator` — **stays with them**, per ADR-013 |
-| thread-model-engineer | §12 — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` | **nobody — owns M16 outright. Dispatched 2026-08-17; joins the roster on its own first status file** |
+| ~~thread-model-engineer~~ | §12 — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` | **graduated 2026-08-17T21:50 — now in the roster table above, messageable, owns its contract outright. This row is kept struck rather than deleted, as the record of what the admission rule cost and bought** |
 | scheduler-engineer | §14 — coordinator clock, six trigger types, fire ledger, calendar widget | `contracts/scheduling.md` | not yet written |
 | client-platform-engineer | §16 · §23.9 — Expo mobile, Tauri desktop, push, offline replica | `contracts/client-sync.md` | not yet written |
 | chief-of-staff-architect | §17 — routing, delegation limits, standups, trust ladder, Morning Briefing | `contracts/orchestration.md` | not yet written |
@@ -757,7 +940,7 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 020 | Task-board semantics · *`Plan §3` calls this "ADR-012"* | — | **reserved, unwritten** |
 | 021 | Auth exists in v2 — accounts inside the tailnet · *`Plan §3` calls this "ADR-013"* | `identity-access-engineer` | **reserved, unwritten** |
 | 022 | Foundry token-budget policy · *`Plan §3` calls this "ADR-014"* | `agent-foundry-architect` *(undefined)* | **reserved, unwritten** |
-| 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its three interrupt levels (`note` · `steer` · `halt`); **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **claimed 2026-08-17, dispatched 2026-08-17, unwritten** — blocks all of P2, and every held M16 slice waits on it |
+| 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its three interrupt levels (`note` · `steer` · `halt`); **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **proposed** — file exists, `ADR-023-thread-unification.md`, 2026-08-17, at `8a9bdf5`. Written under the draft-naming rule's exception: it is a claimed number with **one** registered author and no concurrent drafter, so it was written straight to its number. Unreviewed |
 | 024 | Scheduler ownership, six trigger types · *`Plan §18` "ADR-019"* | `scheduler-engineer` | **reserved** |
 | 025 | Client strategy — Expo, Tauri, contentless push · *`Plan §18` "ADR-020"* | `client-platform-engineer` | **reserved** |
 | 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | — | **reserved** |
@@ -769,8 +952,9 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 031 | Where §9's AA floor supersedes a spec-named text token | `design-system-guardian` | **claimed, unwritten** |
 | 032 | The session envelope allowlist — `account_id` refused (§3.1, `Plan §11` Q19) | `sessions-relay-engineer` | **claimed** — ruling already binding in `envelope.ts` + 2 tests; ADR transcribes it |
 | 033 | **Provenance is chrome: the badge is monochrome and drift is not a status** — a departure from `Plan §10`'s *"staleness dot — the same honesty rule as connector health"*, on the visual register only. Also: exclusions are not a sixth badge state, and the primitive count moved 8 → 9 | `design-system-guardian` | **claimed 2026-08-17** — content live as `contracts/design-tokens.md` §10; ADR transcribes it |
+| 034 | **What a `Spec §` cell may say, and that the gate resolves it** — `Plan §n` becomes a first-class citation (ADR-013 rule 2 made it *required* and the gate *refused* it); citations are resolved against their document instead of prefix-matched | `commandcenter-orchestrator` | **accepted 2026-08-17** — row claimed before the file, per the rule directly above |
 
-034+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
+035+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
 translate it through `comms/decisions/README.md` first.
 
 **023 and 028 were claimed on 2026-08-17 with M16's frame, before any M16 file existed** — and
@@ -981,22 +1165,40 @@ done, not only when something looks wrong.
 Every section of the spec of record must be **claimed by exactly one agent** in
 `comms/specs/<area>.md`, written from `comms/specs/_TEMPLATE.md`. `npm run validate:coverage`
 fails the build when a section is unclaimed, when a requirement cites a file that does not
-exist, or when a requirement cites no spec section.
+exist, or when a requirement's citation is missing or **does not resolve**.
 
 Sections are listed individually, not as ranges — the checker matches them literally, and a
 range would leave the sections inside it owned by nobody.
 
-**What this gate does not cover, stated so nobody assumes otherwise
-([ADR-013](decisions/ADR-013-part-two-standing-and-spec-coverage.md)):** it reads sections
-from `skilltree-clone-spec.md` **only**, and it only recognises dot-decimal ids (`§2.3`) and
-`PART <roman>`. `AGENTOS-V2-PLAN.md` is invisible to it, and Part Two's `§9`, `§10`, `§23`
-would not parse as section ids even if they were in the spec file. **Adding Part Two rows to
-the table below would therefore fail nothing, ever** — the table would look enforced and be
-decorative, which is the same disease as a fidelity bar nobody has run. So they are not
-added. Part Two's coverage is tracked separately and marked plainly as unenforced. The gate
-grows one milestone at a time, when a Part Two milestone closes and its shipped behaviour is
-written into the spec of record under a real section number: **spec follows shipped code,
-not the other way round.**
+**A `Spec §` cell's grammar is [ADR-034](decisions/ADR-034-spec-citation-grammar.md), and it
+is checked, not assumed.** A cell is a `·`-separated list. It must carry at least one **primary**
+citation, and every primary is resolved against its own document:
+
+| | Form | Resolved against |
+|---|---|---|
+| **primary** | `§2.3` · `§2.5.1` · `PART V` · `PART VII.4` | `skilltree-clone-spec.md` |
+| **primary** | `` `Plan §12` `` · `` `Plan §23.8` `` | `AGENTOS-V2-PLAN.md` |
+| supporting | `BOARD rule 9` · `thread-model §4.2` | **nothing.** Legal beside a primary, never alone |
+
+`§99.9`, `§2.5.9`, `PART IX` and `Plan §99.9` are each a FAIL. Backticks are stripped first,
+which is what makes `` `Plan §12` `` legal rather than a near-miss — it was a FAIL until
+2026-08-17 and that is the more interesting half of the story, told above under *the half nobody
+was looking for*.
+
+**What this gate still does not cover, stated so nobody assumes otherwise
+([ADR-013](decisions/ADR-013-part-two-standing-and-spec-coverage.md) rule 1, unchanged by
+ADR-034):** the **denominator is still the spec of record alone**. `AGENTOS-V2-PLAN.md` is now
+read for *citation resolution* and for nothing else — a plan section still cannot be **claimed**,
+is still absent from the table below, and its absence still fails nothing. **Claiming and citing
+are two columns and two promises**, and widening the second did not widen the first; the
+ownership parser gained a `(?<!Plan\s)` guard precisely so a spec naming its Part Two work cannot
+accidentally claim a `§23.8` of a document that has no §23. **Adding Part Two rows to the table
+below would still fail nothing, ever** — the table would look enforced and be decorative, which
+is the same disease as a fidelity bar nobody has run. So they are not added. Part Two's coverage
+is tracked separately and marked plainly as unenforced. The gate's *denominator* grows one
+milestone at a time, when a Part Two milestone closes and its shipped behaviour is written into
+the spec of record under a real section number: **spec follows shipped code, not the other way
+round.**
 
 | Spec section | Claimed by |
 |---|---|
@@ -1040,13 +1242,67 @@ stayed open while the fourth got fixed.
 | Instance | State |
 |---|---|
 | **Test-column paths resolved zero times** — 529 claims, 497 of 671 requirements, 102 distinct files | **fixed** 2026-08-17T19:35, pinned by `scripts/__tests__/spec-coverage.test.mjs` |
-| **A requirement citing a spec section that does not exist** — `§99.9` passes, exit 0, silent. Re-falsified at `eaca677` | **open** — row A below |
+| **A requirement citing a spec section that does not exist** — `§99.9` passes, exit 0, silent. Re-falsified at `eaca677` | **fixed** 2026-08-17T23:5x, [ADR-034](decisions/ADR-034-spec-citation-grammar.md). Citations are **resolved**, on both documents. See the paragraph below — the fix arrived attached to a second defect pointing the other way, and that one was the more expensive of the two |
 | **REQ-DSH-33** — its three paths all resolve; what the gate cannot see is whether the files do what the row *describes*. Named by the verdict as the instance where the pointer is fine and the sentence is the claim | **open** — the class the gate has no mechanism for at all |
 | **The impl-column near-miss** — a cell that nearly resolves counts as implemented | **open** — row E below |
 
 The shared property with everything else in *"What the gates structurally cannot see"* at the
 top of this board: **a declared value being read as an observed one.** A resolvable path proves
 a file exists. It has never proved that the file does the thing.
+
+##### The `Spec §` column, closed 2026-08-17 — and the half nobody was looking for
+
+Row A was found by looking for citations that point nowhere. It was **fixed** by
+[ADR-034](decisions/ADR-034-spec-citation-grammar.md), which is the small half of what happened.
+The large half is the defect pointing the other way, filed as a blocker by `runner-engineer`
+while doing M16 work:
+
+> `scripts/check-spec-coverage.mjs:258` accepted a cell only if it **started with** `§` or
+> `PART`. ADR-013 rule 2 makes `Plan §n` the **required** form for Part Two work. Every such
+> citation is written `` `Plan §12` ``, and `startsWith` saw the backtick. **The gate refused the
+> only correct way to cite the document M16 is built from** — 6 FAILs, all `design-system.md`,
+> all of them correct cells.
+
+**The sharp part is in the filer's own words, against their own work:**
+
+> My thirteen rows cite `§3.2`, `§3.5`, `PART III`, `PART V`. That is *defensible* — and **I
+> picked those partly because they pass**, and the gate gave me no way to say "and `Plan §12`".
+
+**A gate that misses things leaves a visible gap. A gate that refuses the correct citation
+changes what a requirement is willing to claim to be about, and that distortion never appears in
+the output** — the table reads clean, every row cites something real, and the citations have
+quietly drifted toward whatever is green. It is the general defect one level up: not *a row that
+points somewhere without saying anything true*, but **a row whose author was steered by the
+instrument measuring them.** Nothing on this board would have shown it; it was found only because
+one agent noticed why they had chosen a section number.
+
+**It happened twice in one evening, by two agents, and the second time is the proof.** By the
+time I swept, `validate:coverage` was **already green** — and not because anything was fixed.
+`design-system-guardian`, working in flight with the blocker open, had prepended a
+spec-of-record token to all six cells: `REQ-DS-105` went from `` `Plan §12` `` to
+`` §1.3 · `Plan §12` ``, `REQ-DS-108` from `BOARD rule 9` to `PART I · BOARD rule 9`, and so on
+for all seven Part Two rows. Each prefix is *defensible*. **Not one of them was chosen because it
+was the most accurate thing to say about the requirement** — they were chosen because the cell had
+to start with a character the gate accepted. The gate went green, no FAIL was ever recorded
+against it, and the only reason anyone knows this happened is that `runner-engineer` had already
+written down the mechanism an hour earlier. **A gate that shapes claims does not leave evidence in
+the gate; it leaves it in the claims**, and only if someone reads the diff.
+
+*The near-miss, recorded because it was two lines from shipping:* the obvious fix is to widen the
+prefix. That gate accepts `Plan §99.9` — the same bug, the same column, one keystroke later. And
+resolving citations against **headings only** would have FAILed 44 correct rows citing `§2.5.1`,
+`§2.6.3` and `PART VII.4`, which the spec numbers as ordered-list items rather than headings.
+**A gate whose first output is a false FAIL is worse than the gap it closes.** Both were caught
+before landing, by falsifying against the real spec and the real plan rather than by reading the
+diff: seven valid forms → 0 FAILs exit 0; seven invalid forms → 7 FAILs exit 1, with a valid
+control row in the same file staying green.
+
+*What is still not checked, so the column is not read as clean:* `BOARD rule 9` and
+`thread-model §4.2` are **accepted on shape and resolved against nothing** — legal only
+*alongside* a primary citation, never as the whole cell. The gate now prints
+`citations 732 resolved · 3 accepted unresolved` so that half has a number instead of an
+assumption. And a citation that *resolves* is still not a citation that is *apt*: whether a row
+is really about §3.2 is the third face of the general defect and has no mechanism.
 
 #### What this gate still reports that it cannot observe
 
@@ -1056,7 +1312,7 @@ what it is.
 
 | | What passes silently | Why it matters |
 |---|---|---|
-| **A** | A requirement citing a **spec section that does not exist** — `§9.9`, `§2.5.9`. Only the `§`/`PART` prefix is checked, never the id. | The exact parallel of the path bug, on the section column. A citation pointing nowhere is the same lie. |
+| **A** | ~~A requirement citing a **spec section that does not exist** — `§9.9`, `§2.5.9`.~~ **CLOSED 2026-08-17, ADR-034.** Both named cases now FAIL, exit 1, and so do `PART IX`, `PART VII.9`, `Plan §99` and `Plan §99.9`. | The exact parallel of the path bug, on the section column. Closing it uncovered the larger defect above — the gate was also *refusing* the correct Part Two citation, which shaped what rows claimed. |
 | **B** | A spec with a `## Coverage` heading and **zero requirement rows**. | An agent can claim every section it owns and owe nothing. Section claims are checked; whether a claim has any requirements behind it is not. |
 | **C** | A **typo'd requirement id** (`req-x-02`, lowercase). The row is not matched, so it vanishes from the table and from the total. | Requirements can be silently deleted by a typo, and the denominator moves with them. |
 | **D** | A **truncated row** with three cells instead of five. `impl` and `test` come back empty and it counts as *declared-unbuilt*. | A malformed row is graded as an honest gap. |
@@ -1065,8 +1321,8 @@ what it is.
 | **G** | Any of the **16 warnings**. The script exits on `errors.length` only. | `implemented but has no verification` has never failed a build. |
 | **H** | `## Deliberately not done` being present and **empty** — only the heading's presence is checked. | The section this project calls the most useful in a handoff is enforced as a string match. |
 
-Owners: **A, B, C, D, E, H** are the gate's, i.e. `commandcenter-orchestrator` under ADR-013.
-**F** is the same. **G** is a policy decision with 16 immediate consequences and belongs to the
+Owners: **B, C, D, E, H** are the gate's, i.e. `commandcenter-orchestrator` under ADR-013 —
+**A is closed.** **F** is the same. **G** is a policy decision with 16 immediate consequences and belongs to the
 agents who owe those warns (`runner-engineer` 11, `shell-navigation-engineer` 2,
 `observability-engineer` 1, `rtl-arabic-pdpl-specialist` 1) — not to a gate fix.
 

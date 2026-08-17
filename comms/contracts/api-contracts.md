@@ -123,7 +123,8 @@ route does not carry budgets*.
 ```jsonc
 // request
 { "agent": "sales/account-enrichment", "inputs": { "account_url": "https://…" },
-  "dryRun": false }
+  "dryRun": false,
+  "threadId": null }   // supplied ⇒ continue that thread, seeded with its history (Plan §12)
 ```
 
 **Step 0, before anything in the list below: the agent is resolved through the cascade for
@@ -221,6 +222,146 @@ migrate today (no run has ever executed, so no artefact exists), and the rule ou
 fact: **a directory in the old layout is refused, never adopted, never deleted.** Adopting
 one files a client's output under whichever project happens to be mounted — the act
 `run_unattributed` refuses one layer up in the ledger.
+
+## Threads, addressing and the mailbox (`Plan §12`, ADR-023)
+
+**The semantics are [`thread-model.md`](thread-model.md)'s and are not restated here.** That
+contract has one owner — `thread-model-engineer` — and two agents editing one shape is how a
+shape acquires two readings. What this file owns is the **wire**: the spelling, the bodies,
+the statuses. Where the two disagree about meaning, theirs wins; where they disagree about a
+path or a status code, this one does.
+
+### The route spelling, and the one correction to the plan
+
+| route | purpose |
+|---|---|
+| `POST /api/p/:project/thread` | open a thread from a typed line (`@sales/x …`, `#sales …`, `@@sales …`, or no sigil) |
+| `POST /api/p/:project/thread/:id/message` | **the one pipe** — a turn, with its interrupt level |
+| `GET /api/p/:project/thread/:id` | the thread and its turns. **Built and tested; no caller yet** |
+
+`Plan §12` writes the middle one as `POST /api/thread/:id/message`. **That route cannot be
+implemented, and `thread-model.md` §4.1 is right that the difference is load-bearing rather
+than cosmetic.** Confirmed here as this file's owner, with their second argument corrected
+rather than inherited:
+
+1. **The reason that holds.** ADR-015 Q1 puts the project in the path of every route that
+   reads or writes one project's data — no default, no header, no session state. A thread
+   *is* one project's data; `ops.thread.project_id` is `NOT NULL` with an RLS policy from the
+   migration that creates it. The plan's path is missing a required part of itself.
+2. **The reason that does not hold today, and is not what this rests on.** §4.1 adds that
+   deriving the project *from the thread row* is impossible because an unscoped read of
+   `ops.thread` **raises** (0005 §5). True of the schema and **inert on this stack**:
+   compose's Postgres user is a superuser, RLS is bypassed, and `GET /api/status` reports it
+   as `projects.scopeEnforcement: "bypassed"`. The unscoped read would currently *succeed*.
+   A correction resting on that reason is one the first person to check would find hollow.
+3. **A third reason, which needs no database at all.** A lookup-then-scope route is a route
+   whose scope is chosen by its own caller-supplied `:id`. Every other route here resolves
+   the project **first**, from the path, and only then touches a row — which is exactly what
+   lets `run_not_found` be *opaque* across projects rather than merely quiet.
+
+`thread-routes.test.ts` asserts all three thread paths carry `/api/p/:project/`, and that the
+plan's spelling is neither mounted nor in `LEGACY_UNSCOPED_PATHS` — it is not a legacy path,
+because there is no stale client to inform: these routes were born scoped.
+
+```jsonc
+// POST /api/p/:project/thread
+{ "line": "@sales/account-enrichment enrich the ACME account", "interrupt": "note" }
+// → { thread, message, cost, dispatchable }
+
+// POST /api/p/:project/thread/:id/message
+{ "body": "use the Q3 numbers instead", "interrupt": "note" }
+// → { message, disposition: "queued" | "delivered-to-run", threadState }
+```
+
+### The three interrupt levels — what each one actually does in M16
+
+Declared by the sender, never inferred. An absent level is a **refusal**, not a defaulted
+`note`: a defaulted note on a message somebody meant as a halt is a run that keeps spending
+after a human told it to stop.
+
+| level | what happens | state in M16 |
+|---|---|---|
+| `note` | queued; the run's drain consumes it at the next settled tool call, shows it on the console and counts it on the trace. Its **text** reaches the agent on the thread's *next* run, through history seeding | **built** |
+| `steer` | **refused, never downgraded** — `interrupt_not_deliverable` (409) | **refused, with the reason stated.** See below |
+| `halt` | the drain stops at it, the session aborts, the work so far is extracted as the run's artifact, a `question` with a mandatory `expires_at` is appended, and the thread moves `running → waiting` | **built** |
+
+**`steer` does not work, and the runner says so rather than pretending.** Two refusals with
+different hints, because they send a person to two different actions: with no run in flight,
+*"send it as a note, or start a run first"*; with a run in flight, *"this runner cannot inject
+a turn into a session that is already running."* The second is the honest one. The Agent SDK
+is driven here with a **string** prompt; pushing another user turn into a live `query()` needs
+its streaming-input mode, which has never been exercised in this repo because **zero runs have
+executed**. Writing that plumbing now would put unverifiable code on the one path no test can
+reach, and the first thing to exercise it would be a paid run. `MID_RUN_STEER.supported` is
+typed `false`, so lifting it is a reviewable, type-level act — the same instrument as
+`FAN_OUT_DISPATCH.allowed`.
+
+*Queueing a steer as a note instead would satisfy the route and defeat the point*: a human who
+steered and was silently queued believes they changed course, and nothing did
+(`thread-model.md` invariant 7).
+
+### The mailbox drain
+
+`ops.message WHERE delivered_at IS NULL`, ordered by `seq` — a predicate, not a table.
+Drained at **settled** tool calls (`ok`/`error`), never at `start`: a tool that is still
+running is the one moment where stopping leaves work half-done, which is what a checkpoint
+exists to avoid. Three rules, each of which fails silently when it is wrong:
+
+- **Marked delivered once.** `AND delivered_at IS NULL` is in the `UPDATE`, so a re-drain does
+  not move the clock and *"when did the agent first see this"* stays answerable.
+- **A halt stops the drain at that message, inclusive.** The agent read it; that is why it
+  stopped. Everything behind it stays in the mailbox for the run that resumes the thread.
+- **A steer is never consumed.** Refused at the route, so one in the mailbox means something
+  bypassed the route — the drain leaves it undelivered and wedges, visibly, in `mailboxDepth`.
+  A wedged mailbox can be seen; a downgraded steer cannot.
+
+### Continuing a thread — and the fork that is not built
+
+**`POST /api/p/:project/run` takes an optional `threadId`.** Supplied, the run is the thread's
+next turn and its prompt is seeded with the thread's history (capped, oldest dropped first, in
+the **user** turn — a conversation in the system prompt arrives with the authority of the
+agent's own instructions). Omitted, the runner opens a fresh `agent` thread, so every run
+belongs to one.
+
+There is **no resume-the-SDK-session path**, and that is ADR-023 deleting a fork rather than
+this file skipping one: continuing is a new run with the history in front of it, which is what
+Part One recommended anyway.
+
+One run per thread at a time — a second run against a running thread is
+`thread_not_addressable` (409). Without that, two runs drain one mailbox and each consumes
+messages the other will never see.
+
+### Where an address stops being free, and the point that has never fired
+
+**Creating a thread and messaging it are free. Starting a run is what costs money**, so the
+enforcement point is on `POST /run` and there is exactly one branch (`assertRunnable`). Three
+of the four address forms cannot be run today, each for a reason that is somebody's named open
+question rather than an omission:
+
+| address | runs | refusal | unblocked by |
+|---|---|---|---|
+| `@department/agent` | 1, exactly | — | — |
+| `#department` | ≥1 | `address_unresolved` (422) | nothing marks an agent as a lead (`thread-model.md` §9.2, `agent-library-curator`) |
+| `@@department` | N, exactly | `fanout_dispatch_refused` (503) | `RUNNER_ANTHROPIC_API_KEY` **plus one proven cap refusal** |
+| *(bare)* | ≥1 | `address_unresolved` (422) | M22 — the Chief of Staff router (`Plan §17`) |
+
+**The `@@` refusal is not caution, it is an unproven control.** `ops.project.budget_monthly`
+is declared and unenforced; Part V's workspace cap is the only enforced ceiling and **it has
+never refused anything, because zero runs have ever executed.** Fan-out would be the first
+feature whose first validation run costs N× money against an enforcement point that has never
+fired. 503 rather than 403 because the caller did nothing wrong and the refusal is temporary.
+
+The cost preview on thread creation prints the **resolved member count** and **`estimatedUsd:
+null`** — typed `null`, not commented. There are no completed runs to average, and a cost
+preview is precisely the surface where a plausible number gets believed. `#department` and the
+bare address carry `runsAreExact: false`, because a lead that delegates costs a second run.
+
+### `POST /api/p/:project/run/:runId/input` — never built
+
+ADR-023 supersedes it; steering is the message route above. `superseded-run-input.test.ts`
+asserts its absence across both contracts directories and both apps' sources, and permits the
+string only on a line that says it is superseded or never built — which is the sentence a
+reader grepping for the route needs to find.
 
 ## `POST /api/schedule`
 
@@ -491,6 +632,16 @@ a stack trace. Codes and their statuses (`ApiErrorCode` / `API_ERROR_STATUS` in
 | `run_not_found` | 404 | unknown `runId`, or its buffer expired |
 | `run_not_pending_approval` | 409 | decided a run that isn't at its gate |
 | `approval_already_decided` | 409 | second decision on the same run |
+| `thread_not_found` | 404 | no such thread **in this project's scope**. Deliberately opaque across projects, like `run_not_found` |
+| `thread_not_addressable` | 409 | the thread is `closed`, already has a run in flight, is addressed to a different agent, or moved underneath the caller |
+| `thread_transition_refused` | 409 | an illegal thread state transition (`thread-model.md` §4.5) |
+| `address_malformed` | 400 | the addressing grammar refused the line. The parser's own code and its sentence go in `hint`, because this is the one refusal a human reads while typing |
+| `address_unresolved` | 422 | parsed, but no agent or department of that name in **this project's resolved roster** — or an address form that cannot be dispatched yet (`#`, bare). The hint names what would unblock it |
+| `address_ambiguous` | 422 | `@slug` matched more than one department. The hint **lists the matches**; resolution never picks, because picking runs an agent the human did not mean, which is `Plan §21.9`'s bug class with no error message |
+| `interrupt_not_deliverable` | 409 | a `steer` — with no run in flight, or with one this runner cannot inject into. **Never a silent downgrade to a note** |
+| `fanout_dispatch_refused` | 503 | `@@` would spawn N runs against a cap that has never fired. 503, not 403: the caller did nothing wrong and the refusal lifts the day the cap proves it can refuse |
+| `question_unanswered` | 409 | answering a question past its `expires_at`. Also the run-failure reason when a question expires with a run waiting — **and nothing sweeps expiries in M16**, so this code is reachable only by the first path today |
+| `thread_store_unavailable` | 503 | threads live in Postgres and this runner has none (`--profile dev`, by design). A refusal, not a fallback: an in-memory thread is a conversation that vanishes on the next deploy while looking exactly like one that persisted |
 | `artifact_unattributed` | 500 | the saved bytes are not under the serving project's artefacts directory — a pre-project-axis `artifactsRoot/<runId>/` directory, or a future writer that escaped the derivation. **Refused, never adopted, nothing deleted**; the hint names the path. Not `run_not_found`: that code is the cross-project refusal and is deliberately opaque, whereas this is a fault in the runner's own state and there is nothing for the caller to have done differently |
 | `invalid_cron` | 400 | not a 5-field cron |
 | `git_write_refused` | 403 | write target outside `agents/**` (ADR-002) |

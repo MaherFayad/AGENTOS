@@ -280,6 +280,90 @@ git-less failures are now told apart: **no `.git` at all** prints `no git`, **a 
 commit yet** prints `no commit`, because they send a reader to different places and the file
 whose job is telling results apart may not blur its own.
 
+**The banner reports two dirtiness figures, and the second one is the instrument. Added
+2026-08-17 by the owner** on `commandcenter-orchestrator`'s decision-request, from M15's
+re-gate. `check-tokens.mjs` scopes to `apps/web`, so a run made with `scripts/check-rtl.mjs`
+modified printed:
+
+```
+scanned at        2026-08-17 20:34 +03:00 · eaca677 · clean
+```
+
+The scoping decision is right and stays — dirtiness is reported for the scanned scope, since
+that is what can invalidate the result. **The exception is the one file the scope cannot
+contain.** §8b exists so a number can be *re-derived*, and re-derivation has two inputs: the
+scanned tree, and the checker that scanned it. A modified checker changes the number without
+changing a single scanned file, so `clean` was precisely wrong in the one case this section was
+written for — a declared value read as an observed one, on the instrument that exists to stop
+exactly that. It now reads:
+
+```
+scanned at        2026-08-17 22:00 +03:00 · 8a9bdf5 · clean · checker modified under scripts
+```
+
+**Two figures, not one wider figure, and the reason is about readers rather than correctness.**
+Widening `scope` to the whole repo was the obvious fix and was rejected: every banner would then
+read dirty on an unrelated `comms/` edit, which trains people to skip the field — worse than the
+bug, because a field nobody reads fails silently. The instrument clause keeps the existing
+sentence meaning exactly what it already meant and adds the one thing it could not say. An
+**unscoped** run (`check-metrics`) already counts `scripts/` in its own figure and prints no
+clause; saying it twice would be noise dressed as rigour.
+
+**Falsified, not reasoned.** `provenance.test.mjs` builds a repo with `src/` and `scripts/`,
+commits it, and asserts both directions: a clean checker says nothing, and a checker modified
+while *the scanned scope is untouched* produces `clean · checker modified under scripts` — the
+exact shape of the incident. Deleting the clause turns that test red. A clause that is always
+on is a clause nobody reads, so the silent direction is asserted as hard as the loud one.
+
+### 8b.1 What `check-tokens` can and cannot see about **rule 1** — measured, not assumed
+
+**Ruled 2026-08-17 by the owner**, on `commandcenter-orchestrator`'s question, which came out of
+M15's verdict. The question was *"should §1.3 become mechanical, and is it your gate or a new
+one?"* — and answering it required correcting the premise, because **the premise was wrong in the
+safe direction, which is the direction that goes uncorrected.**
+
+BOARD says `check-tokens` *"does not catch a data-ink token applied to chrome
+(`border-ink-teal`, `focus-visible:ring-ink-copper`)."* **It does.** The `chrome-is-monochrome`
+rule has existed since the checker was written. Falsified today rather than read:
+
+```
+FAIL  apps/web/src/components/primitives/AddressBadge.tsx:142
+      [chrome-is-monochrome] data ink on chrome: "border-ink-teal"
+FAIL  apps/web/src/components/primitives/AddressBadge.tsx:142
+      [chrome-is-monochrome] data ink on chrome: "ring-ink-copper"
+```
+
+Both of BOARD's own examples, planted and caught. **The real gap is narrower, and it is a
+different shape:**
+
+> **The rule runs only inside `CHROME_DIRS`** — `app/`, `components/primitives|shell|chrome/`.
+> Planted in `drawer/sections/Header.tsx` as real code rather than a comment,
+> `border-ink-teal bg-ink-coral-fill` produced **0 violations**.
+
+**And widening it is refused, with the reason.** `map/`, `drawer/`, `dashboards/`, `chart/` and
+`sessions/` each contain **both** chrome and data ink, legitimately and in the same file — a
+status chip beside a panel border, a series stroke beside a tab. A static scan cannot tell which
+element a class lands on, and a rule that fires on the legitimate half would be turned off or
+exempted into meaninglessness within a week. That is `Chip.tsx`'s exemption generalised to five
+directories, which is not an exemption any more; it is a repeal.
+
+So the honest statement, and it is written here rather than inferred from a green exit code —
+`check-rtl`'s `assembled-template` blind spot was **declared**, and the declaration is what let
+three sentences ship untranslated, so a declared blind spot is only worth anything if it is
+declared *loudly*:
+
+| | Status |
+|---|---|
+| Data ink on a fill/border/ring **inside `CHROME_DIRS`** | **mechanical.** Falsified in both directions today. |
+| Data ink on a fill/border **anywhere else** | **not checked, and deliberately not going to be.** Those directories mix chrome and data by design. |
+| *"Is this particular element chrome or is it data?"* | **not statically answerable at all.** This is `fidelity-qa-reviewer`'s hand inspection and mine, and there is no version of `check-tokens` that replaces it. |
+
+**Therefore: `0 violations` means BOARD rule 8 holds. It does not mean rule 1 holds**, and the
+gap is five directories wide. The tree is clean on §1.3 today by inspection, not by any gate, and
+the only sanctioned data-ink-on-chrome anywhere is `Chip.tsx`, whose exemption is printed on
+every run. **A reviewer citing a token result must cite this row with it**, the same way they
+cite the `scanned at` line: a count with no stated width is a sentence, not evidence.
+
 ### 8c. Motion and theme in JavaScript
 
 - `apps/web/src/components/primitives/motion.ts` — `DURATION`, `SECONDS`, `EASE`,
@@ -516,14 +600,33 @@ self-check proved the deriver worked *by requiring the known defect to still be 
 for. It now mutates the real primitive back to its old default and requires the flag to
 appear — same coverage of the parsing shape, no dependency on anything being broken.
 
-**Its third assertion is dormant today, and that is the correct state rather than a hole.**
-With the known-offender list empty and no primitive defaulting sub-AA, the call-site sweep
-(*"lets no call site anywhere in `src/` inherit one of them in silence"*) iterates over an
-empty set of props and passes without examining a single tag. It is a trap, not a patrol: it
-arms itself the moment a sub-AA default appears anywhere in `components/primitives/`, and the
-deriver that arms it is the thing under mutation test above. Do not "fix" the dormancy by
-re-adding an entry to keep it busy — that is the defect corrected in the paragraph above,
-re-introduced.
+**Its call-site sweep is dormant today, and that is the correct state rather than a hole — but
+it used to be dormant *silently*, which was not. Corrected 2026-08-17 by the owner** on
+`commandcenter-orchestrator`'s finding. The assertion was named *"lets no call site anywhere in
+`src/` inherit one of them in silence"* — a promise of an active, repo-wide guarantee — while
+its body opened with `if (props.length === 0) continue`. With the known-offender list empty and
+no primitive defaulting sub-AA, it iterated an empty armed set and passed **without examining a
+single tag**: green, fast, checking nothing, under a name a reader would cite.
+
+The dormancy itself is right and is kept: this is a **trap, not a patrol**, and it arms itself
+the moment a sub-AA default appears in `components/primitives/`. "Fixing" it by re-adding an
+entry to keep it busy would re-introduce the defect corrected one paragraph above — a guard that
+needs something to still be broken. **So the dormancy stayed and the silence went**, as two
+assertions instead of one:
+
+1. *"is dormant today, examines nothing, and does not pretend otherwise"* — asserts the armed
+   set is empty **and that the tag count is zero**. The vacuity is now stated out loud, so a
+   reader who cites this file gets the width of what it checked.
+2. *"patrols every call site in `src/` the moment a sub-AA default appears"* — arms the sweep
+   synthetically and proves **both directions**, because one is not a proof: armed on a prop no
+   call site can possibly state, it must name every `<Chip>` in the tree; armed on
+   `RailLabel.tone`, which every shipped call site does state, it must name none. A sweep that
+   always fires and a sweep that never fires are equally useless, and only the second looks
+   green. Falsified by blinding `callSites()` to return nothing — the patrol goes red, where the
+   old single assertion would have stayed green.
+
+Same shape as the deriver's own self-check: prove the mechanism by mutation, never by leaving a
+real defect in place to lean on.
 
 **Why this is adopted while a per-module allowlist mandate is still declined.** I have twice
 been asked to promote `drawer-contrast.test.ts`'s allowlist-with-a-written-reason into a
@@ -607,26 +710,45 @@ against the shipped code, not from memory.** Spec line 128: *"3 tiny sub-labels 
 `apps/web/src/map/svg/BranchLabels.tsx:61` (`fill="var(--ink-3)"`), sized at
 `apps/web/src/map/lib/map-type.ts:25`.
 
-It is the closest call of the four, and it is decided by a fact rather than by taste: **the
-sub-labels are already outside the accessibility tree, by the shipped component's own design.**
-`BranchLabels.tsx:30-32` puts `role="button"` and `aria-label="<DEPT> department"` on the group
-that contains them, so an assistive-technology reader is given the department name and never
-the three words. A string the component deliberately withholds from one class of reader cannot
-simultaneously be a sentence every reader must read — if it were required reading, that
-`aria-label` would already be an a11y defect independent of any colour, and it is not: the
-department name is the operable thing, and the sub-labels elaborate it.
+It is the closest call of the four. **The reason below was rewritten on 2026-08-17 after
+`fidelity-qa-reviewer` pressed it and landed on the same conclusion by a different route. The
+conclusion did not move; the reason did, and the reason is the half that matters** — it is what
+the next reader reuses, and the original would have licensed `--ink-3` on any `aria-hidden`
+text in the product.
 
-§9.2's *"any hint that appears nowhere else on the screen"* is the clause that makes this
-close, and it is answered rather than dodged: these words appear nowhere else, but deleting
-them makes no sentence on the screen false and nothing unreachable. The department cap above
-carries the name, the branch's own nodes carry the specialisms, and §9.3's *"redundant with its
-own position"* home is entered by a label sitting under the heading it decomposes — the same
-home, and the same test, that kept §2.3.9's ladder label at `--ink-3`.
+**What the row used to say, and why it was the weaker half.** It rested on the fact that
+`BranchLabels.tsx:30-32` puts `role="button"` and `aria-label="<DEPT> department"` on the group,
+so name-from-author wins and the three words are outside the accessibility tree — from which it
+argued that a string withheld from one class of reader cannot be required reading. That fact is
+true and it is verified. It is also **not an argument about contrast**, in the reviewer's words:
 
-**The trigger that flips this row, stated so it does not have to be re-derived:** if the
-sub-labels ever gain their own accessible name, become individually focusable, or are used to
-navigate to a cluster, they become required reading and move to `--ink-2` under §9.7b. That is
-a change to `BranchLabels.tsx`'s aria shape, so it is visible in a diff.
+> *"The a11y tree says nothing about a low-vision **sighted** reader, who is exactly the person
+> §9.1's ratios exist for."*
+
+Which is decisive. §9 is a legibility floor for people who are *looking at the screen*. Whether
+a screen reader is given a string is a different question with a different owner, and answering
+a contrast question with an accessibility-tree fact is a category error — one that generalises
+badly, because "it is `aria-hidden`, so it may be faint" would wave through the next ten cases
+without any of them being examined.
+
+**The reason that actually decides it: the sub-labels are cluster names, and a cluster is fully
+recoverable one click in.** `'lead sourcing'`, `'enrichment'`, `'content · brand · distribution'`
+— each names a cluster the reader reaches by opening the department, where it appears at full
+weight with its nodes around it. So §9.2's *"any hint that appears nowhere else on the screen"*
+is answered rather than dodged: these words appear nowhere else **on this screen**, and they are
+one click from appearing at `--ivory` on the next. Delete them and the reader loses a preview,
+not a fact — nothing on screen becomes false, and nothing becomes unreachable. That is §9.3's
+*"redundant with its own position"* home entered honestly, and it is the same test that kept
+§2.3.9's ladder label at `--ink-3`.
+
+**The trigger that flips this row, stated so it does not have to be re-derived — and now stated
+in terms of the new reason.** If the sub-labels ever become **the only place a cluster name
+appears** — a cluster that no longer has its own view, a MAP that stops drilling into
+departments, or a sub-label naming something the department view does not — they become required
+reading and move to `--ink-2` under §9.7b. The old aria-shape trigger is kept as a **second,
+independent** trigger rather than deleted: if they gain their own accessible name or become
+individually focusable, they have been promoted to operable content, and operable content is
+required reading whatever else is true of it.
 
 **This is a contract note, not yet an ADR, and that is stated rather than hidden.** CLAUDE.md
 says the spec wins until an ADR says otherwise, and `fidelity-qa-reviewer` is right that a
@@ -826,3 +948,233 @@ answers — and if the switcher grows its own layer marks, the two become two di
 Coordination with `shell-navigation-engineer` is in writing, not assumed.
 
 **No motion, ever.** A pulsing badge reads as *alive*, and alive is copper's single word (§1.3).
+
+---
+
+## 11. Threads — the addressing register and the interrupt register
+
+**Added 2026-08-17 by the owner.** Source: `Plan §12`, `Plan §23.8`,
+[ADR-023](../decisions/ADR-023-thread-unification.md) and
+[`thread-model.md`](thread-model.md) §3, §4.2 and §6, whose decisions these two primitives
+render and do not re-open. Implemented at
+`apps/web/src/components/primitives/AddressBadge.tsx` and `InterruptBadge.tsx`, each pinned by
+its own test.
+
+**This section is a spend control written as typography.** `Plan §12`, quoted rather than
+paraphrased because paraphrase loses the reason:
+
+> *"`#sales` and `@@sales` must be different characters and must **look** different, because
+> one costs one run and the other costs six. A UI that makes broadcast easy to trigger
+> accidentally will cost real money on the first day."*
+
+The composer cannot invent these locally, for the same reason `ProvenanceBadge` came here: four
+surfaces will render an address (the composer, the THREADS view, a thread-list row, the drawer's
+mailbox) and four vocabularies for one question is worse than any single wrong answer (§10.7).
+
+### 11.1 Why the two registers deliberately do not look alike
+
+> **Addressing is a DISCONTINUITY. Interrupts are a RAMP.**
+
+This is the load-bearing sentence of the section and it is the answer to *"why isn't `@@` just a
+brighter `#`?"*
+
+`#` and `@@` are **not two points on a scale.** One costs one run; the other costs N. A reader
+who perceives them as adjacent has already made the expensive mistake, and *one weight step
+apart* is exactly the treatment that produces it. So the fan-out badge is given a **silhouette
+nothing else in this product has** — it is physically two plates, a second hairline lip peeking
+above the frame. "There is more than one of these" arrives before the characters do.
+
+`note → steer → halt` genuinely **is** a scale: queued, injected now, stop-and-ask. So it gets a
+monotone ramp, and drawing an ordering as a discontinuity would be as wrong as the reverse.
+
+Everything else is shared vocabulary with §10, on purpose, so the three badges are one dialect:
+marks are drawn SVG on `currentColor` and never typed glyphs; **fill is a signal in itself**
+(filled means status and belongs to `Chip`, hollow means chrome); severity opens the gap **from
+above** (`--ivory-2` → `--ivory`), never by pushing the quiet state down into `--ink-3`, which
+§9.2 forbids outright.
+
+### 11.2 The addressing register — four forms, four channels
+
+| Form | Typed | Mark | Silhouette | Text | Frame | Runs |
+|---|---|---|---|---|---|---|
+| `direct` | `@sales/account-enrichment` | stem + crossbar, closed | one plate | `--ivory-2` | `--line` | 1, exactly |
+| `dispatch` | `#sales` | stem + crossbar + **free dash above** | one plate | `--ivory-2` | `--line` | **at least** 1 |
+| `fan-out` | `@@sales` | **trident** — three arms, three ends | **two plates** | `--ivory` | `--line-2` | N, exactly |
+| `default` | *(nothing)* | **broken stem** — a gap, no cap | one plate | `--ivory-2` | `--line` | at least 1 |
+
+Every pair differs on at least two channels, so no channel is load-bearing alone. The sigil
+itself is a **confirming** channel and never the load-bearing one: `#` and `@@` at 11px are
+precisely the confusion the register exists to prevent, so they may not be the thing that
+prevents it.
+
+**One drawing rule spans all four marks, and it is `runsAreExact` drawn rather than described:**
+
+> **A mark whose topmost stroke terminates in a cap is an exact count. A mark whose topmost
+> stroke is a free-standing dash continues past what we can count.**
+
+This is the register's answer to the second thing `Plan §23.8` gets wrong. The plan says
+`#sales` *"says 1 run"*. It does not — the lead answers **or delegates**, and a delegation is a
+second run (`thread-model.md` §6). A flat "1 run" beside a mechanism that routinely costs two is
+a plausible number one decimal place up, which is the same defect as a plausible zero. So the
+copy says *"at least"*, the mark says it too, and `AddressBadge.test.tsx` binds them: a form
+draws the open end **iff** `addressCost()` reports its count inexact. **The limit of that binding
+is stated in the test rather than implied** — it binds the *label* on a stroke to the contract,
+not the pixels to the label, and a redraw that moves `data-open-end` onto the wrong stroke is a
+review question.
+
+**`default`'s broken stem is the honest drawing of an M16 fact**, not a decoration: the bare
+address means Chief of Staff *as an address*, and the router that would answer it is M22's
+(`thread-model.md` invariant 11). The message leaves and the far end is not ours to draw yet.
+
+### 11.3 The cost slot — count without money is the full state, not a degraded one
+
+`Plan §23.8` asks the composer to say `@@sales · 4 runs · ~$0.40`.
+
+**The `4` is real** — it is the resolved member count. **The `$0.40` has no source**: zero runs
+have ever completed, so there is nothing to average, and a cost preview is exactly the surface
+where a plausible number gets believed (BOARD rule 9). `TurnCost.estimatedUsd` is typed `null`
+by its owner precisely so a figure stops the file compiling.
+
+The primitive encodes that rather than trusting the composer with it:
+
+| | How it is prevented |
+|---|---|
+| A money prop | There is none. No `label`, no `children`, no `suffix`. The only cost input is `TurnCost \| 'unresolved'`, and `TurnCost` has no money field to fill. |
+| Money through a **translated string** | `AddressBadge.test.tsx` sweeps every form × both locales × both exactness values against a currency pattern. Falsified: adding `~$0.40` to one English plural turns it red. |
+| Money hardcoded in a **future composer** | Two gates compose into one property: `check-rtl` fails an uncatalogued user-visible string, and the catalogue test fails a currency symbol under `threads.`. A composer cannot print money without breaking one of them. Stated as a composition, not claimed as airtight — a composer could still render an interpolated value, and that is a review question. |
+| `estimatedUsd` **widening** | A `@ts-expect-error` on a priced `TurnCost`. The day the type widens, the suppression becomes unused and `tsc` fails — so the diff that adds a figure is the diff that has to say where it came from. |
+
+**Three cost states, and the third is designed at the same time as the first two** (the standard
+`ChartEmptyState` and `EmptyCell` set):
+
+| State | Renders | Why |
+|---|---|---|
+| exact | `· 4 runs` | tabular figures |
+| lower bound | `· at least 1 run` | `runsAreExact: false` |
+| **unresolved** | `· Runs not counted yet`, at `--ink-2`, **with no numeral at all** | the roster has not resolved, so N is genuinely unknown |
+
+**`runs: 0` and "unresolved" are two different facts and the badge draws them differently.** "This
+department has no members" is an answer; "nobody has looked" is the absence of one, and collapsing
+them is BOARD rule 9 in miniature. The unresolved state carries **no digit**, asserted by test —
+the absence of a figure *is* the signal.
+
+**It does not borrow the chart's hatch, and the reason is worth keeping.** `EmptyCell`'s hatching
+fills an *area* that would otherwise hold data. A text slot has no area to hatch, and importing
+`chart/model/hatch.ts` into a primitive inverts the dependency §9.6a already refused when it kept
+a repo-wide guard out of a feature directory. The honest empty state here is a complete sentence
+at the required-reading floor, which §9.2 requires of every honest empty state anyway.
+
+**BOARD's `@@` confirm is not this primitive**, and the badge is built so it can be one: it
+renders no focusable node and sets no `tabindex`, so a composer may legally wrap it in a
+`<button>` — a button containing a button is not reachable, which is the trap this avoids. The
+badge contributes the count the confirm has to name; reachability and dismissal are
+`sessions-relay-engineer`'s and `drawer-engineer`'s.
+
+### 11.4 The interrupt register — three levels, one question answered three times
+
+The question a reader must resolve **before they commit**:
+
+> **Will this interrupt work in progress, or will it wait?**
+
+| Level | Mark | Enclosure | Text | Consequence |
+|---|---|---|---|---|
+| `note` | unbroken stem, full height | **none** | `--ivory-2` | queued; read at the next tool boundary |
+| `steer` | stem **steps sideways** and continues | **leading rule** (`border-s`) | `--ivory` | injected into the live session now |
+| `halt` | stem stops at a bar; **top of the box empty** | **full box** | `--ivory` | stop, checkpoint, ask |
+
+All three channels answer `interruptsWorkInProgress()` identically, and the test asserts that
+agreement rather than restating it: a reader who scans the shape and a reader who scans the
+brightness must reach the same conclusion, or one of them is being misled. The enclosure ramp is
+asserted **monotone** — nothing, a rule, a box — because that ordering is the escalation.
+
+**What separates `halt` from `steer` at 12px without reading either label is an absence**: steer's
+line reaches the top of the box; halt's stops against a bar with nothing above it. An absence
+survives greyscale, RTL and 12px, which is why it is the third silhouette rather than a heavier
+stroke.
+
+**`deliverable` is required on `steer` and forbidden on the other two.** `thread-model.md` §4.2
+and invariant 7: a `steer` with no run in flight is **refused**, never silently downgraded —
+*"a human who steered and was silently queued believes they changed course, and nothing did."*
+`note` and `halt` are always deliverable, so there is nothing to ask. The props are therefore a
+discriminated union: a caller offering `steer` **must** answer *"is a run in flight?"*, and a
+caller offering `note` **cannot**. A boolean defaulting to `true` would have been a
+deliverability claim spent by a call site that never made it — §9.6a's lesson, which was about a
+colour, applied to a semantic prop exactly as `ProvenanceBadge.state` applies it.
+
+A refused steer renders with a **dashed** enclosure and stays at `--ink-2`. §9.3 homes `--ink-3`
+at disabled controls and this looks like one; **§9.2's delete-the-text test overrules that** —
+delete the sentence and the reader believes their steer will land. Required reading is `--ink-2`
+at minimum, and it is asserted, because this is the one place in the two registers where the
+faint token was genuinely tempting.
+
+### 11.5 Why these are the tenth and eleventh primitives
+
+`index.ts` says the set is closed and a new primitive is a decision-request. This is that
+decision, recorded rather than assumed — the same act §10.4 performed for the ninth.
+
+Both were offered `Chip` as a host and both refused it, **for the reason that makes them exist**:
+`Chip` is the product's *status* vocabulary and the one component allowed to spend data ink.
+
+- **An address is not a status.** Nothing is wrong, nothing is running, nothing needs a human. It
+  is a **price**, and a price rendered in a status hue would put money in the same visual drawer
+  as *"at risk"* — the reader would then have to learn which colours are conditions and which are
+  costs.
+- **An interrupt level is not a status either.** It is a *choice the sender is about to make*.
+  And the enclosure ramp is not a `Chip` shape at all: `Chip` is always a bordered box, and two
+  of these three deliberately are not.
+
+Neither is a variant of the other. They answer different questions — *to whom* and *how
+disruptively* — and they compose side by side in the composer.
+
+### 11.6 RTL — declared in the table, not decided in the component
+
+Both entries live in `apps/web/src/i18n/direction.ts`, which is where a control declares which
+way it goes. That table existing and **not** naming the carousel is exactly why three components
+each decided locally and one shipped backwards; these were added in the same act as the
+primitives rather than after them.
+
+- **`MIRRORS['threads.addressBadge']`** — a badge is a label in a sentence: mark, sigil, count,
+  joined by `·`. Reading order, so the whole run mirrors, and it does so for free because the
+  spacing is `gap` and the one enclosure edge is `border-s`.
+- **`DOES_NOT_MIRROR['threads.registerMarks']`** — the marks are counts and states drawn on the
+  **block axis**. A message rises into the runs it becomes; work runs upward until something
+  interrupts it. That was a drawing decision taken to make this question cheap, not a discovery
+  afterwards. One exception is named in the table: `steer`'s lateral step is a change of course,
+  not a direction of travel, so mirroring it would assert the work was heading somewhere.
+
+**The decision that actually needed making, and would have been missed:** `@`, `#` and `@@` are
+direction-**neutral** characters (BiDi class ON). An address sitting against Arabic text takes its
+side from whatever runs beside it, so `@@sales` can render with the sigils on the wrong end of the
+name with nothing in the component being wrong — and the sigil is the character that distinguishes
+one run from N. The typed address is therefore wrapped in `<bdi>`, so the run resolves by its own
+first strong character. Same answer §10 gives `{commit}`; not optional here.
+
+**The stacked lip is inset symmetrically on the inline axis and offset only on the block axis**, so
+it is the same stack in both directions rather than a physical property needing an `rtl-exempt`.
+
+### 11.7 What ships as an admitted gap, and why the split is where it is
+
+Fifteen catalogue keys, and **exactly one** ships as `todo()`.
+
+The first draft filed five, on §10.7's precedent, and it was **wrong on four of them — caught by
+a gate rather than by taste.** `i18n.test.ts` caps the whole repo's admitted gaps at five, and
+five new ones took it to eight. That ceiling is `rtl-arabic-pdpl-specialist`'s and raising it
+would have been a silent re-baseline of somebody else's instrument, so the gap was closed the only
+honest way available: **write less copy, and translate what is genuinely translatable.**
+
+| | State | Why |
+|---|---|---|
+| run counts (five plural classes), unresolved sentence, six behaviour sentences | **written** | «عملية تشغيل» is already this catalogue's word for a run (`shell.status.queue`), so reuse is consistency rather than a guess, and the plural classes are grammar rather than taste. The behaviour sentences describe what each form and each level *does* and **never name it**. |
+| `note` · `steer` · `halt` | **written** | §10.7's precedent is about **metaphors** with no Arabic technical idiom — «fork» is a garden fork, and importing it is the textual equivalent of a faux italic. These are three *actions*, and MSA has a direct verbal noun for each. **Guessing a metaphor and writing an ordinary verbal noun are different acts, and only the first is what the catalogue's header warns against.** `rtl-arabic-pdpl-specialist` owns the register and may overwrite all three with no decision-request; a message says so. |
+| *Chief of Staff* | **`todo()`** | A role title, not a UI verb, with at least three defensible renderings — رئيس الأركان is military, رئيس الديوان is administrative, مدير المكتب is corporate — whose choice says something about what this product thinks that agent **is**. That is a company decision, not a translation one. |
+
+**And one English string was reworded to make that possible**, which is the part worth keeping:
+`a11y.threads.address.default` used to say *"goes to the Chief of Staff"* and was therefore
+untranslatable-by-consequence. It now says *"the project's default recipient"* — describing the
+role instead of naming it — so choosing the title later forces no rewrite of the sentence around
+it. **The gate did not just refuse a number; it found a copy defect**, which is the argument for
+a ceiling over an equality.
+
+**No motion, ever**, in either register — a pulsing badge reads as *alive*, and alive is copper's
+single word (§1.3). Reduced motion is therefore a still with no layout change by construction
+rather than by a guard, and both tests assert the absence.

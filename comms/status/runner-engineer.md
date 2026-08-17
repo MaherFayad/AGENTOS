@@ -1,40 +1,32 @@
 # status — runner-engineer
 
-**Updated:** 2026-08-17T20:23
-**Milestone:** M15 (lead) · M3 still blocked on the human
+**Updated:** 2026-08-17T23:10
+**Milestone:** M16
 **State:** review
 
 ## Now
-Swept the isolation sign-off's *Deliberately not done* section — **eight entries, each now
-fixed / filed with an owner / deliberately not done**, and a BOARD table so none of them is
-"in an artifact but not on the board" again. The live one is fixed: **artefacts are
-`<artifactsRoot>/<project>/<runId>/`**, derived from `MountedProject`, and `artifacts.ts`
-cannot import `RunnerConfig` — a filesystem has no constraint that can refuse a write, so
-derivation is the only instrument. Download refuses bytes outside the project's directory:
-new code `artifact_unattributed` (500), **nothing deleted**, path named. *Migration decided:
-nothing to move (zero runs), and an old-layout directory is refused, never adopted.*
-Also: `ProjectSummary`'s four unread fields typed shut, so ADR-015 Q6 cannot leak silently;
-`writer-schema-agreement` raised to catch **NOT NULL by omission** and an undeclared
-`ON CONFLICT` target; and the `plan`/`approval-requested` spans now carry `inputKeys`, not
-`buildPlanSummary`'s prose — flattening defeated the redactor's key pass
-(`observability-engineer`'s finding, answered same session). All falsified. Runner
-179 / 176 / 0 fail / 3 skip; root 162 / 161 / 0; typecheck clean ×3; `validate:coverage`
-0 FAILs, runner warns 10 → **8**. Nothing committed.
+M16 slice landed: `POST /api/p/:project/thread/:id/message`, the mailbox drain at tool
+boundaries, thread-per-run, history-seeded continuation. `steer` is **refused** with a stated
+reason — the Agent SDK's streaming-input mode has never been exercised here.
 
 ## Blocked on
-**`RUNNER_ANTHROPIC_API_KEY` — the human, and still the only thing.** M15 stays *complete*
-and *unvalidated*; `project-scoping.md` §6 unchanged. No figure written into `spend.json`.
+nothing. One open handshake, not a block:
+`comms/inbox/observability-engineer/20260817-2250-runner-engineer-recordrun-names-thread-id-and-the-not-null-is-yours-to-arm.md`
+— `recordRun` names `thread_id` and `SET NOT NULL` is now satisfiable from both sides; the
+migration is one change and it touches three of their files, so it is theirs to arm or hand back.
 
 ## Last handoff
-`comms/handoffs/M15-runner-engineer-artefacts-carry-the-project.md` (continues
-`M15-runner-engineer-cross-project-payload.md`) · ADR: `ADR-015-project-scoping.md` (proposed)
+`comms/handoffs/M16-runner-engineer-thread-route-and-mailbox.md`
 
 ## Next
-1. **Apply migrations 0005–0007 to a real Postgres.** Unchanged as the top unblocked item.
-   The DB-free test now buys the *column*, *required-column* and *conflict-target* classes —
-   not types, not `CHECK`, not an index made by hand. The three skipped tests stay owed.
-2. `ProjectSummary` narrowing — waiting on `shell-navigation-engineer` (their harness, their
-   `ProjectSwitcher` is mid-review). Filed with a BOARD line; the type holds meanwhile.
-3. `connector_uncredentialed`'s test — credential seeded for A, dispatched in B. Needs (1).
-4. `ledgerConnection.test.ts` wall-clock flake under the parallel suite. My file.
-5. M7 schedule/audit — ADR-014 §3.2's "refuse a write to a layer that is not the winner".
+1. Answer `thread-model-engineer` on `db/thread-reads.ts` ownership and the §4.3 amendment;
+   move the file into `db/threads.ts` if they want it.
+2. Land `0009_… SET NOT NULL` + the three edits, **if** `observability-engineer` hands it back.
+3. Sweep the eight `runner.md` requirements that are implemented with no verification —
+   unchanged tonight, and not given back.
+
+<!-- Gates at handoff: typecheck 0 · tsc runner 0 · test:runner 230/227/0/3 ·
+     npm test 163/162/0/1 · validate:comms 0. Three defects planted and confirmed red.
+     validate:coverage measured exit 0 / 0 FAILs on this slice; the tree went to 6 FAILs
+     later in the session, all in design-system.md (Plan §n citations the checker cannot
+     express). Not mine, filed as a blocker to commandcenter-orchestrator + design-system-guardian. -->

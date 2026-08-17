@@ -312,6 +312,10 @@ async function harvestWrites(): Promise<Statement[]> {
       projectId: projectIdForSlug('agentos'), agentRef: 'agentos/sales/probe',
       sourceRef: 'project:agents/sales/probe/SKILL.md@sha256:probe',
       accountId: null, accountSource: 'unattributed',
+      // The column `0008` §3 left for this writer. It is supplied here because `startRun`
+      // now opens a thread for every run — a probe that omitted it would be testing a
+      // caller that no longer exists.
+      threadId: '00000000-0000-4000-8000-00000000dead',
     } as never,
     [
       {
@@ -535,6 +539,51 @@ test('the parser knows which columns are mandatory and which conflict targets ar
       'repeated on purpose — and the assertion below is what stops it.',
   );
   assert.equal(runs.columns.has('thread_id'), true, 'but the column does exist (0008 §3)');
+});
+
+/**
+ * **The other side of `0008` §3's judgement: the writer.**
+ *
+ * `0008` asked for a constraint to be graded *from both sides* — a `NOT NULL` nobody can
+ * satisfy and one that holds are identical in a schema dump. The schema side was checked
+ * above the day the column landed. This is the writer side, and it can only be asserted now
+ * that a writer exists: `recordRun` names `thread_id`, so the day
+ * `ALTER COLUMN thread_id SET NOT NULL` lands, the mandatory-column assertion in the main
+ * test finds it already named and stays green — which is what makes that migration a
+ * one-line change rather than a defect.
+ *
+ * Falsifiable in the direction that matters: delete `thread_id` from `recordRun`'s column
+ * list and this goes red **with no database**, naming it. That is the check `0008` could not
+ * write, because at the time there was nothing to check.
+ */
+test('recordRun names ops.agent_runs.thread_id, so the NOT NULL that follows is satisfiable', async () => {
+  const statements = await harvestWrites();
+  const insert = statements.find((s) => /INSERT\s+INTO\s+ops\.agent_runs/i.test(s.sql));
+  assert.ok(insert, 'the ledger insert is in the harvest — otherwise this test checks nothing');
+
+  const columns = IDENTIFIERS(insert.sql.match(/INSERT\s+INTO\s+ops\.agent_runs\s*\(([^)]*)\)/i)![1]);
+  assert.equal(
+    columns.includes('thread_id'),
+    true,
+    'recordRun must name thread_id. A run that cannot say which conversation it belongs to is ' +
+      'a row `observability-engineer`\'s 34 metrics endpoints can only render as "no thread", ' +
+      'and it is the column ADR-023 exists to add.',
+  );
+
+  // The placeholder count has to move with the column list. A 32-column insert with 31
+  // placeholders is a runtime error on the first real run and invisible to `tsc`, because
+  // the whole statement is one template literal.
+  const values = insert.sql.match(/VALUES\s*\(([\s\S]*?)\)\s*ON\s+CONFLICT/i);
+  assert.ok(values, 'the VALUES list is readable');
+  const placeholders = new Set(values[1].match(/\$\d+/g) ?? []);
+  assert.equal(
+    placeholders.size,
+    columns.length,
+    `ops.agent_runs is written with ${columns.length} columns and ${placeholders.size} distinct ` +
+      'placeholders. Postgres refuses the mismatch at execution time, which on this repo means ' +
+      'the first paid run — not a test run, because the three tests that would execute it skip ' +
+      'on DATABASE_URL.',
+  );
 });
 
 /* -------------------------------------------------------------------------- *

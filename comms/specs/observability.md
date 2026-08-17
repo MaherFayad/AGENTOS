@@ -101,6 +101,47 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
     traces and Postgres. What §3.5 has after this change is the handle to select on, at
     **project** granularity, and no delete verb anywhere in the repo for the trace store.
     See *Erasure* below; it is written as an open item on purpose.
+15. **A thread is a filter on the run plane, never a second aggregation model**
+    (`Plan §12`, ADR-023). ADR-023 rejected making the thread the traced unit on
+    *one run, one trace* alone, and that assumption is untouched: a thread spanning four
+    runs is **four traces**, correlated by `ops.agent_runs.thread_id`. So `thread` joins
+    `agent`, `department` and `account` as one more optional predicate — `?thread=<uuid>`
+    on `/metrics/query`, `/metrics/runs` and `/metrics/activity`, and `threadId` on every
+    run and activity row. **There is no `/metrics/threads` and no `groupBy: thread`.** A
+    rollup would be a second way to compute `cost` and `runs`, and two ways to compute one
+    number is how a dashboard and a drawer start disagreeing about one client's spend.
+    `groupBy: thread` is refused for a second reason of its own: a thread has **no title**
+    by decision (`contracts/thread-model.md` §9.6), so the bar-list it produced could only
+    render uuids — a panel that looks like data and answers nothing.
+16. **`agnetos.thread.id` is optional on `SpanScope`, and the optionality is coupled to the
+    schema rather than left to taste.** The other three members are required because none
+    has a truthful absent state; `thread_id` does — `ops.agent_runs.thread_id` is nullable
+    on purpose (`0008_threads.sql` §3), meaning *"this run predates threads"*, and that is
+    true of every run this system can currently record. Requiring it would be a constraint
+    whose only satisfying value is a placeholder, i.e. M15's ledger defect written from the
+    other side, and it would put a fabricated correlation key on every trace in the
+    product. **The coupling is mechanical:** `threads-observability.test.ts` reads every
+    migration and, the day `thread_id` becomes `NOT NULL`, requires the member to lose its
+    `?`. The required set of `SpanScope` tracks the NOT NULL set of the ledger, and neither
+    moves without the other going red. Falsified in both directions by planting each.
+17. **What a trace may carry from an `ops.message` body: an id, a kind, a level and two
+    counts. Never a character of the body itself.** This is decided *before* anything writes
+    a message, because *redact at instrumentation, not after* means the decision has to
+    precede the first write — there is no unredact path and no viewer-side toggle to fix it
+    later. `messageSpanAttributes()` (`packages/contracts/src/threads.ts`) is the **only**
+    instrumentation point for that table and is a type with no `body` field to add back.
+    **And the redactor is not a fallback here, which is the finding rather than the rule.**
+    Decision 13 closed flattening for *derived* prose; a message body is not derived, it is
+    flat by construction — free text a person typed, with no keys to deny. Demonstrated
+    rather than asserted: `redact()` on `"Chase Fatima Al-Harbi about the Olaya lease"`
+    returns it **verbatim, zero hits**, because the name is not a denylisted key and has no
+    value shape a regex knows; the same content as `{client_name: …}` redacts. So the four
+    keys / one survivor arithmetic that appeared in the plan span, the approvals `summary`
+    and the redactor itself reaches its limit at `ops.message`: there is nothing to catch.
+    The defence is that the body never enters the object, and the mechanism is the type.
+    `bodyChars` is a length, and a length is not content — it exists so *"the human sent
+    something and the agent read nothing"* and *"the human sent nothing"* are different rows
+    on a trace.
 
 ## Coverage
 
@@ -141,6 +182,12 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
 | REQ-OBS-33 | §3.5 | The activity line is redacted at instrumentation, before the ledger row and before the §2.5 feed — including the artefact filename it is derived from | `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/instrument.test.ts` |
 | REQ-OBS-34 | §3.5 | A denylisted key redacts its value inside a **string** too, so flattening a payload into prose does not get it past the key pass | `apps/runner/src/observability/redact.ts` | `apps/runner/src/observability/__tests__/redaction.test.ts` |
 | REQ-OBS-35 | §3.5 | Erasure (PDPL rule 7) executes as a **project-scoped** operation across ledger, outputs, traces and artefacts | — *(not built — see `## Erasure`)* | — |
+| REQ-OBS-36 | §3.5 | *(`Plan §12` — filed under §3.5, the metrics plane it extends)* A thread narrows the existing metrics plane as a bound parameter (`?thread=` on query / runs / activity; `threadId` on every run and activity row), with **no** thread rollup route and **no** `groupBy: thread` | `apps/runner/src/db/queries.ts` · `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
+| REQ-OBS-37 | §3.5 | A malformed `?thread=` is refused `400 bad_thread` before the database, so it cannot answer zero runs and look like a thread that has none | `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
+| REQ-OBS-38 | §3.5 | The run ledger row **stores** `thread_id` — the INSERT names the column *and* binds the value — so a thread's runs are answerable from the table every number is read from | `apps/runner/src/db/ledger.ts` *(`runner-engineer`'s writer; landed during M16)* · `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
+| REQ-OBS-39 | §3.5 | Every span of a threaded run carries `agnetos.thread.id` and its trace carries `langfuse.trace.metadata.thread`; a run with **no** thread emits neither key rather than an empty one | `apps/runner/src/observability/instrument.ts` · `apps/runner/src/observability/langfuse.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
+| REQ-OBS-40 | §3.5 | `SpanScope`'s required set tracks the ledger's NOT NULL set — a migration making `ops.agent_runs.thread_id` NOT NULL fails the gate until `agnetos.thread.id` stops being optional | `apps/runner/src/observability/langfuse.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
+| REQ-OBS-41 | §3.5 | An `ops.message` body never becomes a span attribute — the projection is a type with no field it could arrive in, and the redactor is demonstrably **not** a fallback for free text | `packages/contracts/src/threads.ts` *(`messageSpanAttributes`, `thread-model-engineer`'s — consumed, not owned)* | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
 
 ## Interfaces we expose
 
@@ -159,14 +206,30 @@ and should read `project.slug` before labelling it.
 | `GET …/cost/today` | `{ usd: number \| null, runs, unpricedRuns, byAccount: [{accountId, account, label, source, usd, runs, unpricedRuns}], timezone, asOf }` |
 | `GET …/metrics/live` | `{ live, liveAgents, byDepartment, failing, failingAgents, totalSource, asOf }` — no `total` |
 | `GET …/metrics/status` | `{ agents: [{ agent, department, status, errorRate, reason, runs, successfulRuns, lastRunAt }], thresholds, asOf }` |
-| `GET …/metrics/query?metric=&range=&agent=&department=&account=` | `{ metric, range, filter, value, runs, previous, delta, asOf }` — `filter` echoes `projectId` |
-| `GET …/metrics/activity?limit=&department=` | `{ items: [{ runId, at, time, event, detail, agent, agentName, department, status, traceUrl }] }` |
-| `GET …/metrics/runs?agent=&limit=` | `{ runs: [{ runId, agent, agentRef, agentName, startedAt, status, durationMs, costUsd, costSource, accountId, accountSource, traceUrl }] }` |
+| `GET …/metrics/query?metric=&range=&agent=&department=&account=&thread=` | `{ metric, range, filter, value, runs, previous, delta, asOf }` — `filter` echoes `projectId` and `threadId` |
+| `GET …/metrics/activity?limit=&department=&thread=` | `{ items: [{ runId, at, time, event, detail, agent, agentName, department, status, threadId, traceUrl }] }` |
+| `GET …/metrics/runs?agent=&limit=&thread=` | `{ runs: [{ runId, agent, agentRef, agentName, startedAt, status, durationMs, costUsd, costSource, accountId, accountSource, threadId, traceUrl }] }` |
 | `GET …/metrics/accounts?range=` | `{ range, spend: [{accountId, account, label, source, usd, runs, unpricedRuns}], accountsRegistered, accountsEnforced: false, asOf }` |
 | `GET …/runs/:runId/tools` | `{ toolCalls: [{ seq, name, status, startedAt, durationMs, error }] }` · `404 run_not_in_project` when the run is another project's |
 | `GET …/metrics/sql` / `GET …/metrics/sql/:name` | named-query catalogue / rows |
 | `writeOutput(db, output)` | structured business row, redacted on the way in |
 | `METRICS` / `RANGES` / `NAMED_QUERIES` | `apps/runner/src/db/queries.ts`, `apps/runner/src/db/registry.ts` |
+
+`?thread=` takes a uuid and nothing else; a malformed one is **`400 bad_thread`** before the
+database. There is deliberately no `unthreaded` bucket to mirror `account`'s `unattributed`:
+that is a *value the ledger stores*, whereas "no thread" is a NULL and is every row in the
+table today — a bucket for it would be a filter whose answer is "everything" dressed as a
+category.
+
+**Read every `threadId` below through this.** The chain is now complete in *source* —
+`RunInit.threadId` → span scope and trace metadata → `RunRecord.threadId` →
+`ops.agent_runs.thread_id` (the ledger INSERT names the column and binds the value, landed
+by `runner-engineer` during M16, REQ-OBS-38). **It has never carried a value, because zero
+runs have executed** — `RUNNER_ANTHROPIC_API_KEY` is unset, no span has ever been emitted,
+and the table is empty. So every `threadId` is `null` and every `?thread=` answers zero runs,
+today, and will until Phase 0's human items land. **Completed is not validated**: what is
+demonstrated is that the column, the bind, the filter and the attribute all exist and agree;
+what is not demonstrated is any of it against a real run.
 
 Anything not listed is private.
 
@@ -214,13 +277,29 @@ Anything not listed is private.
   live project so it matches `ops.agent_run_tools`.
 - **Company.md redaction-rule inheritance.** Coordinate with
   `rtl-arabic-pdpl-specialist`; the rule list is in `redaction-rules.ts`.
-- **The project attribute on `lib/langfuse.ts`.** That is the runner's *second* emitter,
-  the deprecated `/api/public/ingestion` one, and it fires whenever `services.obs` is
-  absent — which is every `--profile dev` run, i.e. the only profile that exists today.
-  It posts `{name, tags, metadata:{durationMs, costUsd, toolsUsed, brainInjected}}` and
-  **no project**, so "every span the runner emits names its project" is true of this
-  module and not yet true of the runner. It is `runner-engineer`'s file; proposed to
-  them with the diff written out, not edited here.
+- **The project attribute on `lib/langfuse.ts` — and now the thread too. Still open, still
+  theirs, and threads make it worse rather than merely unchanged.** That is the runner's
+  *second* emitter, the deprecated `/api/public/ingestion` one, and it fires whenever
+  `services.obs` is absent — which is every `--profile dev` run, i.e. the only profile that
+  exists today. It posts `{name, tags, metadata:{durationMs, costUsd, toolsUsed,
+  brainInjected}}` and **no project**, so *"every span the runner emits names its project"*
+  is true of this module and not yet true of the runner. `runner-engineer` answered **(b) —
+  delete the second emitter**; it is not deleted at the time of writing. Adding
+  `thread_id` to the plane does not add a second defect here, it **widens the first one**:
+  a trace that cannot name its project also cannot name its thread, so the two correlation
+  keys M16 exists to provide are both absent from the only emitter that currently fires.
+  Left as an open row rather than quietly closed, because the fix is a deletion in a file
+  that is not mine.
+- **`groupBy: thread` and a `/metrics/threads` rollup.** Refused, not deferred — decision 15,
+  pinned by a test. A thread has no title (`thread-model.md` §9.6), so a thread breakdown
+  could only render uuids.
+- **The thread's *own* aggregate cost.** Answerable today as
+  `/metrics/query?metric=cost&thread=<id>` and deliberately not given a second spelling.
+  `TurnCost.estimatedUsd` stays typed `null` in `packages/contracts` for the composer's
+  *preview*; this is the retrospective figure and it is `null` too, for the older reason —
+  nothing has run.
+- **A retention horizon for `ops.thread` / `ops.message`.** Answered as *no horizon*, with
+  the reasoning, under *Retention*. The number is the human's.
 - **Erasure itself.** Below.
 
 ## Erasure (PDPL rule 7) — the selector landed; the operation did not
@@ -237,8 +316,15 @@ reason is structural rather than a missing feature.
 |---|---|---|
 | `ops.agent_runs` · `ops.agent_run_tools` | yes — `project_id`, NOT NULL, FK'd | prune is by **age**, not by project. `DELETE … WHERE project_id = $1` is one statement and is not written |
 | `app.agent_outputs` | yes — `project_id` in the unique index | same |
-| Langfuse traces | **yes, as of this change** — `langfuse.trace.metadata.project` + `agnetos.project.id` on every span | **no.** Nothing in this repo calls a Langfuse delete endpoint. We can now *find* them and cannot *remove* them |
-| Artefacts on disk | **no** — `artifactsRoot/<runId>/` has no project segment (`runner-engineer`, in flight) | `rm -rf` of a directory that does not exist yet |
+| Langfuse traces | **yes** — `langfuse.trace.metadata.project` + `agnetos.project.id` on every span | **no.** Nothing in this repo calls a Langfuse delete endpoint. We can now *find* them and cannot *remove* them |
+| Artefacts on disk | **yes, as of `7b6401d`** — `<artifactsRoot>/<project>/<runId>/`, and an old-layout directory is *refused*, never adopted (`runner-engineer`, REQ-RUN-42/43, new code `artifact_unattributed`) | **no.** A per-project directory now exists to remove and nothing removes it — `rm -rf` of a real path, unwritten |
+| `ops.thread` · **`ops.message`** | yes — `project_id` NOT NULL on both, FK-pinned, RLS'd (`0008_threads.sql` §5) | **no**, and `ops.prune` is deliberately not extended to them — see *Retention* |
+
+*(The artefacts row said **no** until 2026-08-17 and was wrong at `eaca677`: the project
+segment landed one commit later at `7b6401d`. Corrected on `commandcenter-orchestrator`'s
+routing of M15's PASS follow-up. The direction of the error was the safe one — it
+understated what exists — but this is the row a future erasure implementer reads, and as
+written it sent them to build something that was already there.)*
 
 **Subject-level erasure does not reduce to a search, and this is the part worth stating
 plainly.** Redaction runs at instrumentation with no unredact path, so a data subject's
@@ -249,6 +335,37 @@ name is *not in the trace* — which is excellent minimisation and is exactly wh
   nothing there to erase, and that is the strongest possible answer;
 - for any field that slipped through, erasure is **impossible by search**, because the
   handle we would have searched on is the thing we removed.
+
+### `ops.message` is where the minimisation argument stops working
+
+Added 2026-08-17, from `thread-model-engineer`'s ADR-023 / `contracts/thread-model.md` §7.3,
+and it is a genuine weakening of the position above rather than a caveat on it.
+
+Every plane in the table before it holds identifiers, mounts, counts, and the names of
+secrets — things minimisation gets to be *true* about. **`ops.message.body` holds free text
+a human typed, stored verbatim, and storing it verbatim is the point**: a redacted record is
+not a record. It is the first plane in this repo where a data subject's own words are held
+in full, and decision 17 above shows the redactor cannot be a fallback for it — a body has
+no keys to deny, so `redact()` returns a sentence naming a client with **zero hits**.
+
+So the sentence *"for every field the rules catch, erasure is satisfied by construction"*
+is still true and no longer sufficient, because at `ops.message` the rules catch nothing by
+design. The position moves:
+
+| | Before `ops.message` | At `ops.message` |
+|---|---|---|
+| Project-level erasure | terminates — bounded by one project's rows, traces and directory | **still terminates.** `project_id` is NOT NULL, FK-pinned and RLS'd from the first migration that created the table |
+| Subject-level erasure | *unanswerable because we minimised* — the strongest answer available | **unanswerable because no delete verb exists** — a weak one, and a different sentence entirely |
+
+The trace plane is unaffected and that is the one thing here that is load-bearing rather
+than regrettable: **a message body never becomes a span attribute** (decision 17,
+REQ-OBS-41), so nothing this weakening touches has leaked into Langfuse. The exposure is
+Postgres, and it is one table.
+
+**Owners:** the PDPL ruling is `rtl-arabic-pdpl-specialist`'s (`thread-model.md` §9.3); this
+table is mine. **A delete verb gets its own ADR before its first line of code** — erasure is
+destructive, the number it needs is the human's, and writing one into a migration nobody
+asked to review is how an irreversible capability arrives without a decision behind it.
 
 So the only erasure unit this architecture can actually execute is **the project** — erase
 everything for that client, or demonstrate the subject's data was never in the trace store.
@@ -283,3 +400,31 @@ should not land in the same change as the attribute that makes it possible.
   via `scripts/sync-ofelia.mjs` (always emitted). Never called from metrics GETs or
   `POST /api/run`.
 - Langfuse project retention = **90 days** (match spans).
+
+### Threads and messages are **not** pruned, and that is a decision — `thread-model.md` §9.4
+
+Routed to me as the owner of the retention horizon. **Answered: `ops.prune` is not extended
+to `ops.thread` or `ops.message`, and no horizon is invented here.**
+
+ADR-008's horizons are horizons *on telemetry*. A span is exhaust: past 90 days it is a
+record of how a thing ran, and deleting it costs a drill-down. **A thread is not exhaust —
+it is the record of what a person asked and what was done about it**, which is the product's
+memory rather than its by-product. `Plan §12` makes continuing a thread a new run *seeded
+with the thread's history*, so an age-based prune copied from `ops.agent_runs` would delete
+the conversations that make continuation work, silently, at 03:00, by cron. That is the
+opposite of what a thread is for, and it would also make erasure *look* solved by making the
+data go away for an unrelated reason.
+
+**So: unbounded today, deliberately, and stated rather than implied.** Growth is a real
+operational question and it is not answered by pretending it is a retention question:
+
+| | Position |
+|---|---|
+| Horizon | **none.** Nothing deletes a thread or a message |
+| Why not a number now | any figure I pick is a plausible number on a surface with no data to derive it from — zero threads exist, zero messages, zero runs. The same rule that types `TurnCost.estimatedUsd` as `null` |
+| What it needs | **the human**, one number, in an ADR. Erasure and retention are the product's first destructive operations and they arrive together or not at all |
+| Meanwhile | the exposure is bounded by the fact that nothing writes either table yet |
+
+Filed as a decision-request rather than a default. **An unbounded table that says so is an
+operational task; an invented 90-day horizon on a client's conversation is a data-loss
+incident with a changelog entry.**

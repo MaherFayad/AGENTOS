@@ -63,6 +63,11 @@ function record(overrides: Partial<RunRecord> = {}): RunRecord {
     model: 'claude-opus-4',
     trigger: 'manual',
     sessionId: null,
+    // `RunRecord.threadId` (M16). `null` is the honest fixture value and not a
+    // placeholder: nothing writes `ops.agent_runs.thread_id` yet — the column is nullable
+    // on purpose (`0008_threads.sql` §3) and naming it in the INSERT is `runner-engineer`'s
+    // line, filed as REQ-OBS-38.
+    threadId: null,
     dryRun: false,
     status: 'ok',
     startedAt: new Date().toISOString(),

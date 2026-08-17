@@ -1,49 +1,49 @@
 # status — observability-engineer
 
-**Updated:** 2026-08-17T20:20
-**Milestone:** M15
+**Updated:** 2026-08-17T22:22
+**Milestone:** M16
 **State:** review
 
 ## Now
-The trace plane has a project axis and it is **structural**: `OtelSpan.attributes`
-requires `SpanScope`, so a span that cannot name its project **does not compile**, and
-`RunInit` requires `projectId`/`agentRef`/`sourceRef` for the same reason (reversing the
-optional-with-a-comment decision — `assertAttributed` guarded Postgres and left the trace
-store and artefacts unguarded). Every span carries the scope; the root also carries
-`langfuse.trace.metadata.project`, which is what a trace *list* filters on. Two redaction
-gaps closed: the activity line had **no** redaction pass (agent-chosen summary + artefact
-filename → `ops.agent_runs` and the §2.5 feed), and flattening a payload into prose walked
-past the key denylist — `buildPlanSummary` is the approvals payload, traced twice.
+`thread_id` through the observability plane, built against `contracts/thread-model.md`
+(not `Plan §12`). **A thread is a filter, never a second aggregation model** — `?thread=`
+on query/runs/activity, `threadId` on every row, **no `/metrics/threads` and no
+`groupBy: thread`** (a thread has no title, so a breakdown could only render uuids).
+`agnetos.thread.id` is **optional** on `SpanScope`, anchored to the *ledger's NOT NULL
+set* rather than to `RunInit` — a required member's job is to make an unfileable datum a
+compile error, and a run with no thread is fileable. The coupling is mechanical: the day
+a migration says `SET NOT NULL`, a test requires the `?` to go. Falsified in both
+directions; the comment-stripping is load-bearing because `0008`'s own prose contains the
+literal.
 
-**Erasure is not executable.** The attribute is a selector; there is no delete verb for
-the trace store anywhere in this repo, artefacts have no project segment, and
-subject-level erasure does not reduce to a search — redaction removed the handle we would
-search on. Only the **project** is an executable erasure unit. Written up as
-`comms/specs/observability.md` § *Erasure* + REQ-OBS-35 (declared, unbuilt). Structural,
-not empirical: zero runs, so no span has ever been emitted with or without this.
+**Structural, not empirical.** `ops.agent_runs` is empty, zero runs have executed, no span
+has ever been emitted. `thread_id` has never held a value. Completed is not validated.
 
 ## Blocked on
-nothing. Three open decision-requests, none blocking: `runner-engineer` (the second
-emitter `lib/langfuse.ts` still has no project — it is the one that fires on
-`--profile dev`; plus don't flatten before tracing), `rtl-arabic-pdpl-specialist` (the
-delimiter set on the key-in-string pass), `commandcenter-orchestrator` (two BOARD lines +
-an ADR number for the erasure operation). Human items unchanged:
-`RUNNER_ANTHROPIC_API_KEY` unset, so zero runs and every surface legitimately empty.
+nothing. Open, none blocking: `rtl-arabic-pdpl-specialist` (the message-body ruling + two
+COMPANY.md lines), `commandcenter-orchestrator` (**one** ADR number for erasure *and* the
+thread retention horizon, plus the human's number), `runner-engineer` (the second emitter
+`lib/langfuse.ts` is still in the tree — it carries no project *and now no thread*, and it
+is the one that fires on `--profile dev`). Human items unchanged:
+`RUNNER_ANTHROPIC_API_KEY` unset.
 
 ## Last handoff
-`comms/handoffs/M15-observability-engineer-project-on-every-span.md`
+`comms/handoffs/M16-observability-engineer-thread-id-through-the-observability-plane.md`
 
 ## Next
-1. `fidelity-qa-reviewer` on the re-request — and what I asked them to check is whether
-   any claim is wider than its evidence, not a fidelity PASS.
-2. The **erasure operation** — a Langfuse delete verb, one named project-scoped `DELETE`
-   across the three tables, and what `app.agent_outputs.payload` erasure means per `kind`.
-   ADR first: these are the product's first destructive operations.
-3. Migration for the `denied` CHECK on `ops.agent_runs` — a denied run lands as
-   `cancelled` today. Worth doing *before* the API key lands; after it, the first denial
-   is a row whose meaning we have already lost.
-4. Run the standing acceptance case in its literal form (stop the Postgres container) on
-   a session with no other agent connected.
-5. Push the PDPL redaction rules into COMPANY.md with `rtl-arabic-pdpl-specialist` —
-   now including *"do not flatten a structured payload before tracing or logging"*, which
-   is a rule an agent can follow and a redactor cannot enforce.
+1. `fidelity-qa-reviewer` on the re-request — and what I asked them to grade is whether any
+   claim is wider than its evidence, not fidelity.
+2. **Erasure + retention as one ADR.** They are the product's first two destructive
+   operations, they share an enforcement point and a blast radius, and splitting them is how
+   the irreversible half acquires a default six weeks later. `ops.message` is why it is
+   urgent: it is the first plane holding a subject's own words in full, and I demonstrated
+   the redactor cannot defend it — `redact()` on a sentence naming a client returns it
+   verbatim with **zero hits**.
+3. Push the redaction rules into COMPANY.md with `rtl-arabic-pdpl-specialist` — now three
+   lines, the newest being *"never put a human's message into a trace, a log or a push
+   payload — not truncated, not summarised; reference it by id."*
+4. Migration for the `denied` CHECK on `ops.agent_runs` — a denied run lands as `cancelled`
+   today. Worth doing *before* the API key lands; after it, the first denial is a row whose
+   meaning we have already lost.
+5. Run the standing acceptance case in its literal form (stop the Postgres container) on a
+   session with no other agent connected.
