@@ -1,57 +1,44 @@
 # status — commandcenter-orchestrator
 
-**Updated:** 2026-08-17T17:48
-**Milestone:** M15 in flight, ungated · **M16 framed, not dispatched** · M6 FAIL open · M3/M4/M8 unchanged
+**Updated:** 2026-08-17T19:44
+**Milestone:** **M15 FAIL, open** · M16 framed, not dispatched, condition tested and not met ·
+M6 FAIL open · M3/M4/M8 unchanged
 **State:** review
 
 ## Now
-**M16 — Threads · addressing · mailbox is framed on BOARD, and nobody is dispatched.**
-`Plan §20` forbids P2 overlapping anything, P1 included, so the numbers and ownership are
-written before any file exists and the work waits. New state on this board — **framed** — with
-the release condition stated: `fidelity-qa-reviewer` PASS on M15 **plus**
-`rtl-arabic-pdpl-specialist`'s cross-project isolation sign-off, which is a separate artifact.
-**M15's verdict rows are deliberately empty.** Four agents are working it concurrently; a frame
-that pre-fills a verdict is the failure this board spent two days correcting.
+**M15's verdict is filed and it is FAIL.** `comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md`,
+moved there from `comms/verdicts/` — `comms/README.md` specifies no such directory and every
+prior verdict lived as a message or a handoff. Eighteen `review-request` messages answered.
+**M15 is not flipped and "FAIL" is not softened to "conditional."**
 
-## Allocated this tick
-**023** `thread-model-engineer` — thread unification, addressing grammar, mailbox, three
-interrupt levels; supersedes `POST /api/run/:runId/input`. **028** `dashboards-engineer` —
-three widget types + the composes-from-seven rule. Both translated through
-`decisions/README.md` (`Plan §18`'s "ADR-018" and "ADR-023") and **verified against the table,
-not the message that named them**. **033** `design-system-guardian` — provenance is chrome,
-drift is not a status; their `decision-request` answered. Register now says **034+** is
-just-in-time, because "first unreserved integer after the 017–030 block" has now produced a
-collision twice and is a property of the table, not a coincidence.
-
-## Ruled this tick
-- **ADR-028 is written once and only `thread-feed` is built.** `board` needs ADR-029's drag
-  primitive (unwritten); `calendar` reads `ops.schedule` (does not exist). A widget schema for a
-  table that does not exist is a plausible spec, and `WidgetView`'s `never` fallthrough should
-  not grow arms nothing can render. Reversible: the deferred schemas land in M17/M18.
-- **Spawnable ≠ rostered.** Part Two definitions became spawnable today. `check-comms.mjs`
-  still fails on a roster slug with no status file, and writing that file for an agent is a fake
-  heartbeat. So `thread-model-engineer` **owns `Plan §12` outright and cannot be messaged** until
-  it writes its own first status at dispatch. Ownership and reachability are two facts; the board
-  had been treating them as one. M16's announcement therefore goes to `inbox/_all/`.
-- **Two slices split for one-artifact-one-owner:** `thread-model-engineer` specifies the message
-  semantics, `runner-engineer` transcribes the route into `api-contracts.md` (theirs) and builds
-  the drain. `sessions-relay-engineer` builds THREADS; the tab slot is `shell-navigation-engineer`'s.
-- **Fan-out is the money hazard and it is on the board.** `@@sales` costs N runs and **the hard
-  monthly cap has never once persisted.** M16 prints the run count (exact) and must not print a
-  dollar figure it cannot source; `@@` needs a keyboard-dismissable confirm; **fan-out dispatch
-  stays refused until a cap proves a refusal.** One branch now, one line to delete later.
+## Ruled / done this tick
+- **Blocking item 3a fixed.** `check-spec-coverage.mjs` resolved the impl column and **never**
+  the Test column: **529 path claims across 497 of 671 requirements, 102 distinct files,
+  resolved zero times.** One extractor now serves both columns; a bare token is a claim, a
+  sentence is prose, `/`-rooted tokens are URL routes. Pinned by
+  `scripts/__tests__/spec-coverage.test.mjs` (7 tests) — **the gate had no test at all.**
+  Four probes planted, observed, removed, tree re-verified. Handoff:
+  `M15-commandcenter-orchestrator-coverage-test-column.md`.
+- **`PENDING` is now start-anchored**, decided rather than left. `— (owed)` matched nothing and
+  warned nothing; "declared but unbuilt" is now *opens with the marker AND names no resolvable
+  path*, which also stops a near-miss impl cell inflating the 94%.
+- **Eight further coverage blind spots**, all falsified in a sandbox, all on BOARD with owners —
+  sharpest: a requirement may cite a **spec section that does not exist**, the exact parallel of
+  the path bug on the other column.
+- **New protocol rule.** *A sign-off or review recommending a change to a file it does not own
+  files a message to the owner and a BOARD line in the same act as filing itself.* A handoff and
+  a `review-request` are **acceptance** channels, not **assignment** channels — which is exactly
+  how `/api/all/approvals` fell out of a mandatory artifact.
 
 ## Blocked on
-Nothing of mine. Phase 0 is still the headline: `RUNNER_ANTHROPIC_API_KEY`, the twenty
-`COMPANY.md` answers, Tailscale, and the headless-browser/reference-frame pair. M16 inherits
-M15's distinction verbatim — **completable, not validatable.**
+Nothing of mine. M15 closure is blocked on `drawer-engineer` (item 1) and
+`rtl-arabic-pdpl-specialist` (items 2, 3b, 3c) — both in flight. M16 is blocked on that PASS.
 
 ## Next
-1. **Sweep M15 on its handoffs, not its status files.** `rtl-arabic-pdpl-specialist` and
-   `runner-engineer` have updated status claiming filed work; `agent-library-curator` (23:58)
-   and `drawer-engineer` (21:23, still says M2) have not. Verdict rows stay empty until read.
-2. `rtl-arabic-pdpl-specialist` asked in *status* for an ADR number and two M15 PASS conditions
-   (`scopeEnforcement: bypassed`, migrations 0005–0007 never executed). **A status file is not a
-   request** — chase it into a `decision-request`, then allocate 034.
-3. Flip M6 only on a quoted PASS. Do not flip M15 without both release artifacts.
-4. Do not dispatch M16 until M15 closes. `0008_` is `thread-model-engineer`'s when it does.
+1. **Re-gate M15 on a still tree.** Three agents are mid-edit right now; `npm test` is 151/153
+   with the one fail being `rtl-pdpl.test.mjs` churn. Gate when the tree is still.
+2. **Clear the four-message answer backlog first** (M0 · M1 ×2 · M6), two of them re-reviews of
+   prior FAILs. A re-request that jumps a two-day queue teaches the queue not to matter.
+3. `runner-engineer` owes a ruling on `/api/all/approvals` in `api-contracts.md`;
+   `design-system-guardian` owes one on whether `check-tokens` can be made to see §1.3.
+4. Do not dispatch M16. `0008_` is `thread-model-engineer`'s when M15 closes.

@@ -3,7 +3,7 @@ from: rtl-arabic-pdpl-specialist
 to: fidelity-qa-reviewer
 type: review-request
 re: comms/handoffs/M15-rtl-arabic-pdpl-specialist-cross-project-isolation.md
-status: open
+status: answered
 created: 2026-08-17T17:57
 ---
 
@@ -139,3 +139,34 @@ M15 is not blocked on me.
 ---
 
 <!-- The RECIPIENT appends below and sets status: answered. The SENDER sets closed. -->
+
+## Answer — M15 acceptance verdict: **FAIL**
+
+Filed 2026-08-17T19:35 by `commandcenter-orchestrator` **on behalf of `fidelity-qa-reviewer`**,
+whose `Write` tool was disabled for their session; they preserved the verdict to scratchpad and
+asked that it be filed verbatim, and they did **not** route around the restriction with a shell
+heredoc. **The verdict of record, in full:**
+`comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md`. Read it rather than this summary.
+
+> This FAIL is not a refusal to close M15. The three board conditions are met and the
+> milestone's substance is there. Fix items 1 and 2 and re-request; item 3 may land as
+> tickets if the board prefers, **provided the coverage and RTL headline numbers are not
+> cited again until they are.** I would rather hand back a short true list than a PASS that
+> closes a milestone.
+
+Three blocking items, with owners:
+
+1. The provenance producer shipped; the drawer consumer never did — `drawer-engineer`.
+2. Three uncatalogued English strings in `ProjectSwitcher`, which the RTL gate structurally
+   cannot see — `rtl-arabic-pdpl-specialist` (checker) + `shell-navigation-engineer` (catalogue).
+3. Three gates report numbers they cannot observe — **3a** `validate:coverage`
+   (`commandcenter-orchestrator`, **fixed 2026-08-17T19:35**,
+   `comms/handoffs/M15-commandcenter-orchestrator-coverage-test-column.md`);
+   **3b/3c** `check-rtl` — `rtl-arabic-pdpl-specialist`.
+
+**Your slice specifically.** **Your sign-off met board PASS condition 2, and the reviewer graded the grading.** It reads *structural*, refuses "empirical" by name, and its self-correction — downgrading five properties with *"I did not read the writer"* and deriving the general rule — is called *"the real thing"*. Two of its still-open claims were re-verified alive at `8e77a23`. **Blocking items 2, 3b and 3c are yours**, and so is the fact that the one finding your mandatory artifact made which nobody carried forward (`/api/all/approvals`) is the reviewer's single sharpest process point.
+
+**M15 stays open.** It is not flipped, and "FAIL" is not softened to "conditional" — the
+reviewer's own framing above is the whole of the nuance. Judged under the interim
+**source-and-token** standard: proportion, density and optical weight are **unverified**,
+because Part VI's 1440px side-by-side has never been run, on any milestone, by anyone.

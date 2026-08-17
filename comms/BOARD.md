@@ -9,7 +9,8 @@ Two (§9–§24). It is **a plan that amends the spec of record, not a second sp
 a bare `§10` always means the spec of record, which has no §10.
 
 **Current milestone:** `M15 — Projects · cascade · identity` (Part Two, P1) **opened
-2026-08-16**, four slices in flight and **no verdict yet** · `M16 — Threads · addressing ·
+2026-08-16**, gated 2026-08-17 — **verdict FAIL, three blocking items, milestone stays open**
+(see the M15 verdict block below) · `M16 — Threads · addressing ·
 mailbox` (Part Two, P2) **framed 2026-08-17, not dispatched** — see its section below for the
 one condition that releases it · `M3 — Runner + Run now + Langfuse` (unblocked by M2; the
 runner half waits on the human for `RUNNER_ANTHROPIC_API_KEY`) · `M6 — DASHBOARDS` (FAIL open,
@@ -59,6 +60,35 @@ Costed proposal: `comms/inbox/_all/20260816-2110-fidelity-qa-reviewer-part-vi-sc
 Until it is funded, this standard is what "done" means here, and milestones already passed
 are **not** re-opened: the first capture run covers all five surfaces at once and anything it
 finds is filed as new findings against current owners.
+
+### What the gates structurally cannot see — so no PASS is read as wider than it is
+
+Added 2026-08-17 from M15's verdict. Each of these is a thing a green gate does **not** mean.
+They are recorded once, here, rather than re-derived by whoever next cites a percentage.
+
+- **`check-tokens` enforces BOARD rule 8. It structurally cannot enforce §1.3.** It catches
+  hex, arbitrary Tailwind type values, `rgb()` and `hsl()`. It does **not** catch named CSS
+  colours, concatenated hex, or — the one that matters — **a data-ink token applied to chrome**
+  (`border-ink-teal`, `focus-visible:ring-ink-copper`). §1.3 is what this board calls 90% of why
+  the product looks expensive, and **the tree is clean on it today by `fidelity-qa-reviewer`'s
+  hand inspection, not by any gate.** The only data-ink-on-chrome in the tree is `Chip.tsx:44-49`,
+  which is the sanctioned §1.3 exemption. `design-system-guardian` owns whether this becomes
+  mechanical; *"0 violations"* does not currently mean *"rule 1 holds"*.
+- **The three skipped runner tests are exactly the three that would catch a writer/schema
+  mismatch.** Of 156, the skips are `an unscoped read raises rather than returning rows`, `every
+  SQL statement the runner can emit is accepted by a real Postgres`, and `the write path and the
+  prune plan cleanly against a real Postgres` — **all three on `DATABASE_URL is not set`.** The
+  ledger writer changed on 2026-08-16, so the writer and the schema have never met. `153 / 156`
+  does not mean the ledger works.
+- **`validate:coverage` was enforcing half its table** until 2026-08-17T19:35. See the M15
+  verdict block, item 3a, and the *Spec coverage* section for the eight further things it
+  reports that it cannot observe.
+- **`check-rtl`'s headline percentages are not evidence** until blocking items 3b and 3c land.
+
+The shared property, and the reason this list exists rather than four separate notes: **every
+one of these is a declared value being read as an observed one.** That is the same defect as a
+plausible zero (CLAUDE.md rule 9), one level up — it is a plausible zero about the measurement
+instead of about the data.
 
 ---
 
@@ -123,6 +153,32 @@ existed, so their token results cannot be dated and I am not inventing a sha for
 keep their verdicts and are marked here, once, as undatable — the same treatment the fidelity
 bar gets. The requirement binds from M6 forward.
 
+**Review answer backlog — four `review-request` messages are genuinely unanswered.** Recorded
+2026-08-17 after the M15 sweep answered eighteen. These four are **not** M15 and were
+deliberately *not* back-filled with M15's verdict, because answering a question with a verdict
+about a different milestone is the kind of tidy-looking lie this board exists to prevent:
+
+| Message | Milestone | Waiting since |
+|---|---|---|
+| `…/20260816-2152-agent-library-curator-artifact-write-capability.md` | M0 · ADR-009 | 2026-08-16T21:52 |
+| `…/20260816-2236-map-galaxy-engineer-rail-tone-rereview.md` | M1 | 2026-08-16T22:36 |
+| `…/20260816-2247-shell-navigation-engineer-costticker-refail-fixed.md` | M1 | 2026-08-16T22:47 |
+| `…/20260817-0005-design-system-guardian-review-request-provenance-and-s9-ledger.md` | M6 | 2026-08-17T00:05 |
+
+Two of these are re-reviews of fixes to prior FAILs, which means **two agents believe a FAIL is
+cleared and no reviewer has said so.** M1 is marked `done` on the ladder above and the rail-tone
+and cost-ticker re-reviews sit under it unanswered; that is not a contradiction — both were fixes
+filed after the M1 PASS — but it is the shape that produces a stale PASS. `fidelity-qa-reviewer`
+picks these up before the M15 re-request, because a re-request that jumps a two-day queue teaches
+the queue not to matter.
+
+*Also found, and small:* seven of the messages answered this session carried a **bare, empty
+`## Answer` heading with `status: open`** — the stub from `comms/templates/message.md`, left in
+place by agents copying the template. `check-comms.mjs` only inspects the answer body when
+`status` is `answered` or `closed`, so an empty stub under `open` is invisible to it. Harmless in
+itself; it matters because *"does this file contain `## Answer`"* is what a human or a script
+greps for, and on seven files that grep was wrong.
+
 ---
 
 ## Part Two ladder — the platform (`Plan §20`)
@@ -133,7 +189,7 @@ a milestone still closes only on a `fidelity-qa-reviewer` PASS.
 
 | # | Milestone | Plan § | Lead (exists today) | State |
 |---|---|---|---|---|
-| 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **active** — opened 2026-08-16 |
+| 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **active — FAIL open.** Opened 2026-08-16, gated 2026-08-17: `comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md`. Three blocking items, owners below. **Not flipped.** |
 | 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **framed 2026-08-17, not dispatched** — released by one condition, below |
 | 17 | Presence · work products · diff review | §13 | `drawer-engineer` | not started |
 | 18 | Time & triggers · the scheduler | §14 | *unassigned* — `scheduler-engineer` when spawnable | not started |
@@ -190,24 +246,85 @@ rediscovery.
 this board still binds and is now the only thing standing between M15 and done: **completed is
 not validated.** Nothing here has been proven against a real run, because there have been none.
 
-*Tree state, so a sweep does not misread it:* `npm run test:web` is **red on 5 of 421** vitest
-tests (`AppShell.test.tsx`, `CostTicker.test.tsx`) from the in-flight project-switcher work.
-That is churn from a moving tree, **not a finding and not a gate failure** — it is recorded
-here so nobody files it as one, and so nobody commits on top of it. The rule stands: gate when
-the tree is still.
+### M15 verdict — **FAIL**, 2026-08-17, and the milestone stays open
 
-**`npm run validate:coverage` is red, and this one *is* a finding — it is an M15 PASS
-condition, not churn.** Verified 2026-08-17 17:50 · `1e5b5d7`. Eleven FAILs, all the same
-shape: M15 moved every view under `(views)/p/[project]/…` and **`comms/specs/*.md` still cite
-the pre-project paths**, which `git status` confirms have not been touched. The gate's own
-words for this class are on this board: *a requirement pointing at a file that does not exist
-is a lie in a document, which is worse than a gap, because a gap is visible.* It is the
-predictable cost of re-scoping every route and it is nobody's oversight — but it is owed
-before M15 can pass, by the agents who moved the files: `shell-navigation-engineer`
-(REQ-SHELL-46 · 47 ×2 · 48 · 49 ×2), `sessions-relay-engineer` (REQ-SES-01 · 02 · 48),
-`map-galaxy-engineer` (REQ-MAP-33 ×2). **M15 must not be flipped while this is red**, because
-the completeness gate is the one mechanical check that would otherwise report a green spec on
-top of moved code.
+Verdict of record: **`comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md`**, by
+`fidelity-qa-reviewer` at `8e77a23` on a clean tree. Answered onto eighteen `review-request`
+messages in `comms/inbox/fidelity-qa-reviewer/`. **It is a FAIL and it is not softened to
+"conditional"** — the reviewer's own framing, quoted rather than paraphrased:
+
+> This FAIL is not a refusal to close M15. The three board conditions are met and the
+> milestone's substance is there. Fix items 1 and 2 and re-request; item 3 may land as
+> tickets if the board prefers, **provided the coverage and RTL headline numbers are not
+> cited again until they are.** I would rather hand back a short true list than a PASS that
+> closes a milestone.
+
+**All three board PASS conditions were met.** The cascade allowlist test asserts what the
+session was *handed* (`result.allowedTools = [...sessionOptions.allowedTools]`), not the
+validator's opinion; the isolation sign-off reads *structural*, refuses "empirical" by name,
+and downgrades five of its own prior claims with *"I did not read the writer"*;
+`validate:coverage` re-ran green. The milestone fails on three other things.
+
+| # | Blocking item | Owner | State |
+|---|---|---|---|
+| 1 | **The provenance producer shipped; the drawer consumer never did.** `AgentDetail.sourceRef` is required at `packages/contracts/src/api.ts:438` and produced at `apps/runner/src/routes/api.ts:313-314`, but `apps/web/src/drawer/data/types.ts:67-77` drops it and `JobDrawer.tsx:180` reads the run stream only. **The header renders SOURCE UNKNOWN for every agent, always.** `provenance.test.ts:105` asserts the stale fact *as a requirement*. | `drawer-engineer` | **fix filed, unreviewed** — `comms/handoffs/M15-drawer-engineer-provenance-wiring.md` |
+| 2 | **Three user-visible English strings in `ProjectSwitcher.tsx:185-186` are uncatalogued**, one a visible tooltip. `check-rtl` is silent on them because they are template literals — silent even at **zero interpolations**, which defeats the checker's own stated reason for downgrading templates to a count. | `rtl-arabic-pdpl-specialist` (checker) · `shell-navigation-engineer` (catalogue) | **fix in flight** — RTL baseline re-recorded 261 → **308** at 19:45, i.e. the checker now sees 47 strings it could not before |
+| 3a | **`validate:coverage` never resolved Test-column paths.** Falsified: a nonexistent Test path gave exit 0, no FAIL, no warn. | `commandcenter-orchestrator` | **fixed 2026-08-17T19:35** — `comms/handoffs/M15-commandcenter-orchestrator-coverage-test-column.md` |
+| 3b | **Nothing can see a missing Arabic plural class.** 19 English / 43 Arabic plural strings sit outside `total`/`missing`/`translated`; deleting three Arabic plural lines moved no number and failed no gate. | `rtl-arabic-pdpl-specialist` | in flight |
+| 3c | **The "7 TODO(ar)" headline counts prose.** Real call sites 3, counted 7 (four inside comments), and the one genuine `// TODO(ar):` is missed for being uppercase. True figure `216 (99%)`, not `212 (97%)`. | `rtl-arabic-pdpl-specialist` | in flight |
+
+**Until 3b and 3c land, the RTL headline percentages are not citable as evidence** — that is
+the reviewer's condition, not a suggestion. Item 3a's equivalent is discharged.
+
+**"Fix filed" is not "fixed", and this row is where that distinction gets lost.** Every state
+above was read off the working tree at 19:50, not off a plan. **None of these fixes has been
+reviewed.** M15 re-gates as a whole, once, on a still tree — not item by item as each agent
+reports in. The definition of done has not moved: a handoff exists **and** the reviewer said
+PASS.
+
+#### Carried forward from the verdict — the finding that fell out of the record
+
+**`/api/all/approvals` serves every project's run `inputs`, and was tracked nowhere.**
+`apps/runner/src/routes/api.ts:224-226` → `lib/runStore.ts:196-213` (`inputs: state.inputs`);
+`packages/contracts/src/api.ts:324`, `:664` (`scope: 'cross-project'`). Owner:
+**`runner-engineer`**, fixing it concurrently. No web consumer today, so it is latent — but it
+is **contract-level**, so any future consumer gets the payload by default.
+
+**How a finding in a mandatory sign-off failed to reach this board, because the mechanism will
+drop the next one too.** The isolation sign-off is `Plan §22`/§21.8 **mandatory**, and it named
+this and recommended the route return the label and the count. It then reached neither BOARD nor
+the session log's carry-forward list. The mechanism: **a mandatory artifact is gated on being
+*filed*, and nothing is gated on its contents being *routed*.** It was filed as a handoff plus a
+`review-request` to `fidelity-qa-reviewer`, and both of those are *acceptance* channels — they
+prove the artifact exists and put it in a review queue. Neither is an *assignment* channel. A
+recommendation about `routes/api.ts` addressed to the reviewer never becomes work, because the
+reviewer does not own that file and the owner was never messaged. The reviewer caught it only
+because they read the sign-off end to end during acceptance, which is luck about reading order.
+
+**Rule, from now, and it is one line because a long rule is not followed:** *a sign-off or
+review that recommends a change to a file it does not own files a message to the owner and a
+BOARD line in the same act as filing itself — the artifact is not complete until both exist.*
+Adopted for the isolation sign-off, the fidelity verdict, and any future mandatory artifact. It
+is deliberately a protocol rule and not a checker: `check-comms.mjs` can see that a message
+exists, and cannot see that a recommendation inside prose has an owner.
+
+*Tree state, so a sweep does not misread it — measured 2026-08-17 19:50, and the tree is still
+moving:* the previously recorded *"red on 5 of 421 vitest tests"* **has cleared**;
+`npm run test:web` ran green on both halves at 19:42. `npm test` is **162 tests, 161 pass, 0
+fail, 1 skip** — up from 146 as three agents land fixes and tests concurrently. Ten minutes
+earlier the same command was 151/153 with `rtl-pdpl.test.mjs` red mid-edit, which is worth
+leaving on the record as the illustration: **a test count on this board is a timestamp, not a
+fact.** `validate:coverage` exits 0 at 674 requirements / 637 (95%) / 14 warns — the totals moved
+under me while I wrote this paragraph. `check-rtl --gate` holds at baseline **308**. The rule
+stands and is now the operative one: **gate when the tree is still.**
+
+*The coverage gate is green and the reason it was red is closed.* The eleven — **twenty, in
+fact; the earlier count on this board was wrong and omitted three spec files entirely** —
+`validate:coverage` FAILs from M15 moving every view under `(views)/p/[project]/…` were repointed
+by `shell-navigation-engineer`, `chart-matrix-engineer`, `sessions-relay-engineer` and
+`map-galaxy-engineer`. `npm run validate:coverage` now exits 0 with 0 FAILs, 16 warns, 671
+requirements / 634 (94%). **Read that green through blocking item 3a**: it was, until this
+session, a green over half a table.
 
 **Where identity landed, honestly.** `Plan §22` creates five specialists and **none of them
 owns §11**. The plan's intended owner, `identity-access-engineer`, is carried over from Part
@@ -266,10 +383,19 @@ included. M16 is dispatched on the day **both** of these are true, and not befor
 2. `rtl-arabic-pdpl-specialist`'s **cross-project isolation sign-off** is filed — it is
    mandatory, not advisory (`Plan §22` · §21.8), and it is a separate artifact from the PASS.
 
-Neither is recorded here yet. Four agents are working M15 concurrently as this is written and
-**none has been gated**; the verdict rows in the M15 section stay empty until the sweep that
-reads their handoffs. A frame that pre-fills a verdict is the exact failure this board spent
-two days correcting.
+**Status 2026-08-17: condition 2 is met; condition 1 was tested and failed. M16 is not
+dispatched.** The cross-project isolation sign-off is filed
+(`comms/handoffs/M15-rtl-arabic-pdpl-specialist-cross-project-isolation.md`) and the reviewer
+graded it honest. M15's acceptance verdict is **FAIL** with three blocking items. So the
+release condition is not "not yet attempted" — it was attempted and it did not hold, which is a
+different fact and the one worth recording. M16 releases on a **re-request that answers PASS**,
+not on the passage of time.
+
+An earlier revision of this row said *"four agents are working M15 concurrently and none has
+been gated"*. That was true when written and is not now; the verdict rows in the M15 section
+are filled from the verdict, not from a plan. A frame that pre-fills a verdict is the exact
+failure this board spent two days correcting — and so is a frame that leaves a stale "no
+verdict yet" standing after one arrives.
 
 **M16 inherits M15's distinction verbatim, and it is not a formality here:**
 
@@ -771,6 +897,44 @@ A requirement whose `Implemented in` column is `—` is **declared but unbuilt**
 separately, and the honest way to show the spec is complete before the code is. A requirement
 pointing at a file that does not exist is a lie in a document, which is worse than a gap,
 because a gap is visible.
+
+**That rule was enforced on half the table until 2026-08-17.** `check-spec-coverage.mjs`
+resolved the `Implemented in` column and never resolved the `Test` column at all — **529 test
+path claims, across 497 of 671 requirements, naming 102 distinct files, were resolved zero
+times.** Found by `fidelity-qa-reviewer` during M15 acceptance and falsified: a nonexistent Test
+path gave exit 0, no FAIL, no warn. Fixed and pinned by `scripts/__tests__/spec-coverage.test.mjs`
+(7 tests) — the gate had no test of its own before that. The judgement that *is* the fix — which
+cell forms count as path-shaped and why prose stays prose — is written out in
+`comms/handoffs/M15-commandcenter-orchestrator-coverage-test-column.md` and should be read before
+anyone edits the extractor. Every reported figure was unchanged by the fix: the column was
+unenforced but, on this tree, not lying. **That is luck, and it is recorded as luck.**
+
+#### What this gate still reports that it cannot observe
+
+All eight falsified in a sandbox on 2026-08-17, all left as findings with owners rather than
+fixed inside a session scoped to one item. Listed so that "coverage 94%, 0 FAILs" is read for
+what it is.
+
+| | What passes silently | Why it matters |
+|---|---|---|
+| **A** | A requirement citing a **spec section that does not exist** — `§9.9`, `§2.5.9`. Only the `§`/`PART` prefix is checked, never the id. | The exact parallel of the path bug, on the section column. A citation pointing nowhere is the same lie. |
+| **B** | A spec with a `## Coverage` heading and **zero requirement rows**. | An agent can claim every section it owns and owe nothing. Section claims are checked; whether a claim has any requirements behind it is not. |
+| **C** | A **typo'd requirement id** (`req-x-02`, lowercase). The row is not matched, so it vanishes from the table and from the total. | Requirements can be silently deleted by a typo, and the denominator moves with them. |
+| **D** | A **truncated row** with three cells instead of five. `impl` and `test` come back empty and it counts as *declared-unbuilt*. | A malformed row is graded as an honest gap. |
+| **E** | An impl cell reading **`yes`**, or a token/type/CSS class — anything unresolvable. Counted as **implemented**. | The 94% counts *cells that are non-empty*, not *files that exist*. |
+| **F** | Renaming this section's heading. `boardOwnership()` finds nothing, and the ownership cross-check **degrades to warnings**. | The gate's second job disappears without turning anything red. |
+| **G** | Any of the **16 warnings**. The script exits on `errors.length` only. | `implemented but has no verification` has never failed a build. |
+| **H** | `## Deliberately not done` being present and **empty** — only the heading's presence is checked. | The section this project calls the most useful in a handoff is enforced as a string match. |
+
+Owners: **A, B, C, D, E, H** are the gate's, i.e. `commandcenter-orchestrator` under ADR-013.
+**F** is the same. **G** is a policy decision with 16 immediate consequences and belongs to the
+agents who owe those warns (`runner-engineer` 11, `shell-navigation-engineer` 2,
+`observability-engineer` 1, `rtl-arabic-pdpl-specialist` 1) — not to a gate fix.
+
+**The general lesson, since this is the third instrument caught this week:** *a checker that has
+never been falsified is a claim, not a measurement.* Three agents proved their fixes by planting
+a defect and watching the gate go red, and that is the only reason M15's three blocking items
+were found at all.
 
 ---
 

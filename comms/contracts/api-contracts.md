@@ -199,11 +199,42 @@ prompt-injected agent cannot commit to `apps/`.
 
 | route | purpose |
 |---|---|
-| `GET /api/approvals` | pending gates → the approvals queue (Mission Control footer links here, §2.5.7) |
-| `POST /api/approvals/:runId` | `{decision:"approve"\|"deny", note?}` — resumes or aborts the paused run |
+| `GET /api/p/:project/approvals` | one project's pending gates → `PendingApproval[]`: the ref fields **plus `summary` and `inputs`** |
+| `POST /api/p/:project/approvals/:runId` | `{decision:"approve"\|"deny", note?}` — resumes or aborts the paused run |
+| `GET /api/all/approvals` | every project's pending gates → `PendingApprovalRef[]`: **no `inputs`, no `summary`**. Backs the Mission Control footer badge (§2.5.7) |
 
 A pending approval pulses the MAP node amber and fires a push notification. Denial aborts
 cleanly and records the note; the run ends `done{status:"denied", denialNote}`.
+
+### The two routes return two shapes, on purpose (PDPL rule 4)
+
+`/api/all/approvals` is the only route on this surface declared `scope: 'cross-project'`.
+That scope is correct and stays — **an approvals queue that shows one project's pending
+approvals is not an approvals queue.** What was wrong until 2026-08-17 is that it returned
+the full `PendingApproval`, so `inputs` — the form data a human typed, the highest-PII thing
+the runner holds — crossed every project boundary M15 was built to establish.
+
+Everywhere else on this API, *client data does not cross clients* is discharged by the route
+scope. **Here it has to be argued field by field**, and the cross-project row is now exactly
+what survives that argument: `runId`, `project`, `agent`, `agentName`, `department`,
+`requestedAt`, `inputCount`. Identifiers, frontmatter, a timestamp, and **how many** inputs
+there were — never which, never what.
+
+Two things a consumer should know rather than rediscover:
+
+1. **`summary` is not a label.** `buildPlanSummary` renders the inputs into an `Inputs: …`
+   line and appends the `deliver:` Slack channel and email address, so dropping `inputs`
+   while keeping `summary` would have moved the payload from an object into a string. The
+   label is `agentName`.
+2. **Needing to show *what* is being approved is a project-scoped fetch**, and it is not a
+   hop you would otherwise have avoided: deciding is `POST /api/p/:project/approvals/:runId`,
+   so acting on a row already means entering its project. The cross-project queue's job is to
+   say that something is waiting and where.
+
+Asserted at the wire — on the raw response body, not on the type — in
+`apps/runner/src/routes/__tests__/approvals-payload.test.ts`. A type cannot hold this line:
+TypeScript is structural, so a `PendingApproval[]` is assignable to `PendingApprovalRef[]`
+and a fat row would type-check on the way out.
 
 ## Reads
 

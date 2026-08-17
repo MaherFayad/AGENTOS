@@ -60,10 +60,22 @@ selection; we own the panel it opens.
    from the cascade's own `source_ref` string (`{layer}:{path}@{digest}`, ADR-014 §2). The
    drawer holds no `layer` field, so there is nothing to invalidate and no way for a stale
    answer to survive. `data/provenance.ts` is the web app's only reader of that grammar.
-9. **`unknown` is a state, not a fallback.** `GET /api/agents/:slug` carries no
-   `source_ref` today, so the header opens on an honest "source unknown" rather than
-   assuming `global`. The badge primitive refuses a default `state` for the same reason
-   (tokens contract §10) and this spec does not work around it.
+9. **`unknown` is a state, not a fallback — and it is no longer the state the drawer opens
+   in.** Two sources can answer, in this order: `AgentDetail.sourceRef` from the agent read
+   (present on open, resolved through the same call dispatch uses — *the file that would
+   run*), then `SseStartData.sourceRef` from the run stream (*the file that did run*, in
+   this session). `unknown` is what the header says when **neither** did, which now needs a
+   reason — a runner older than the contract, or a ref in a grammar this app cannot read —
+   rather than being the normal case. The badge primitive refuses a default `state` (tokens
+   contract §10) and this spec does not work around it.
+
+   *This decision used to read "`GET /api/agents/:slug` carries no `source_ref` today".*
+   That was true when written and stopped being true mid-M15, when `AgentDetail.sourceRef`
+   landed as a **required** field. Nothing consumed it, so the header said SOURCE UNKNOWN
+   for every agent, always, and the sentence in this file explained the bug as if it were
+   the design. Recorded rather than quietly corrected, because the shape — producer shipped,
+   consumer did not, documentation asserting the pre-change fact — is the same one M15's
+   verdict found twice.
 10. **No path is typed; every path is built from `RUNNER_ROUTES`.** M15 moved the routes
    under `/api/p/:project` (ADR-015) and this drawer's five literals kept pointing at the
    pre-project spelling, so the drawer could not open an agent or start a run for a day
@@ -123,8 +135,9 @@ selection; we own the panel it opens.
 | REQ-DRW-27 | §2.3 | Chart extras (autonomy toggle, REPLACES cost quote, SKILLS cards, TOOLS, HOW TO RUN IT, NOW badge) share the map section set | `apps/web/src/drawer/sections/ChartSections.tsx` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` |
 | REQ-DRW-28 | §2.3 | Direction is logical (`inset-inline-*`, `data-side=start\|end`) so RTL is a `dir` attribute, not a retrofit | `apps/web/src/drawer/drawer.module.css` | `apps/web/src/i18n/direction.ts` |
 | REQ-DRW-29 | §2.3 | An unknown input type is reported in the drawer as a schema gap, not coerced into a text box | `apps/web/src/drawer/data/inputs.ts` | `apps/web/src/drawer/data/inputs.test.ts` |
-| REQ-DRW-30 | §2.3 | Both drawer headers show where the agent came from, using the shared `ProvenanceBadge`, projected from the cascade's `source_ref` — the drawer stores no layer of its own (`Plan §23.6`, ADR-014 §2) | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/sections/Header.tsx` · `apps/web/src/drawer/run/console-model.ts` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` |
-| REQ-DRW-31 | §2.3 | Unknown provenance renders as **unknown** and never as `global`; an unreadable `source_ref`, a silent runner, or another agent's run all resolve to the same honest empty state | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` |
+| REQ-DRW-30 | §2.3 | Both drawer headers show where the agent came from, using the shared `ProvenanceBadge`, projected from the cascade's `source_ref` — the drawer stores no layer of its own (`Plan §23.6`, ADR-014 §2) | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/sections/Header.tsx` · `apps/web/src/drawer/run/console-model.ts` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` · `apps/web/src/drawer/JobDrawer.test.tsx` |
+| REQ-DRW-31 | §2.3 | Unknown provenance renders as **unknown** and never as `global`; an unreadable `source_ref`, a silent runner, or another agent's run all resolve to the same honest empty state | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` · `apps/web/src/drawer/JobDrawer.test.tsx` |
+| REQ-DRW-36 | §2.3 | The header's provenance is **wired to the agent read**: `AgentDetail.sourceRef` survives `normalizeAgentDoc` onto `AgentDoc`, and `drawerProvenance` prefers it over the run stream — so opening an agent names a real layer **with no run having executed**, which is the state this repo is actually in | `apps/web/src/drawer/data/types.ts` · `apps/web/src/drawer/data/normalize.ts` · `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` · `apps/web/src/drawer/data/provenance.test.ts` |
 | REQ-DRW-32 | §2.3 | Every drawer fetch carries `/api/p/:project` (M15, ADR-015) and every path is **built from `RUNNER_ROUTES`**, never typed — no path literal remains in `data/client.ts` or `run/transport.ts` | `apps/web/src/drawer/data/client.ts` · `apps/web/src/drawer/run/transport.ts` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/data/client.test.ts` · `apps/web/src/drawer/run/transport.test.ts` |
 | REQ-DRW-33 | §2.3 | No project ⇒ **no request**: a `null` (or non-slug) segment refuses with a sentence and never falls back to an unscoped path, and the tests assert `fetch` was not called at all | `apps/web/src/drawer/data/client.ts` | `apps/web/src/drawer/data/client.test.ts` |
 | REQ-DRW-34 | §2.3 | A run that cannot name its project is refused **before any POST** and **non-retryably**, so no billable run starts and no "reconnecting…" spinner hides a client-side fault | `apps/web/src/drawer/run/transport.ts` · `apps/web/src/drawer/run/useRunStream.ts` | `apps/web/src/drawer/run/transport.test.ts` |
@@ -155,7 +168,7 @@ Everything else under `src/drawer` is private.
 | `openDrawer(agentSlug, {side:'right'})`, `OPEN_DRAWER_EVENT` | `chart-matrix-engineer` | `apps/web/src/chart/events.ts` |
 | `shell:flyTo` | `shell-navigation-engineer` | `apps/web/src/lib/shell-bus.ts` |
 | `GlassPanel`, `Pill`, `Eyebrow`, `ProvenanceBadge`, `--dur-drawer` | `design-system-guardian` | `comms/contracts/design-tokens.md` §10 |
-| `sourceRef()` / `CascadeLayer`, and `SseStartData.sourceRef` on the first frame | `runner-engineer` · resolution semantics `agent-library-curator` | `comms/contracts/api-contracts.md` · ADR-014 |
+| `sourceRef()` / `CascadeLayer`; **`AgentDetail.sourceRef` on the agent read** (required, from `resolveForDispatch`); `SseStartData.sourceRef` on the first frame | `runner-engineer` · resolution semantics `agent-library-curator` | `comms/contracts/api-contracts.md` · ADR-014 |
 | Drawer string keys | `rtl-arabic-pdpl-specialist` | `apps/web/src/i18n/strings.en.ts` |
 
 ## Test plan
@@ -175,10 +188,18 @@ Everything else under `src/drawer` is private.
 - **Console reducer** (`run/console-model.test.ts`) — the seven events, the approval
   pause, unknown events as notices, and `start`'s `agent` + `sourceRef` retained so the
   header can answer at all.
-- **Provenance** (`data/provenance.test.ts`, `sections/Header.test.tsx`) — every input
-  either yields a layer the cascade named or yields `unknown`; `override` reads as
-  `project` per ADR-014 §4.1; one agent's run is never attributed to another agent's
-  header; the unknown state draws no mark and is not painted in the disabled token.
+- **Provenance** (`data/provenance.test.ts`, `sections/Header.test.tsx`,
+  `JobDrawer.test.tsx`) — every input either yields a layer the cascade named or yields
+  `unknown`; `override` reads as `project` per ADR-014 §4.1; one agent's run is never
+  attributed to another agent's header; the unknown state draws no mark and is not painted
+  in the disabled token. **The third file is the one that matters and it was missing:** the
+  first two prove the parser and the component, and between them sits the wiring — which of
+  the two sources the drawer hands the header — which had no test and was where the bug was.
+  `JobDrawer.test.tsx` mounts the real drawer, answers `GET /api/p/:project/agents/:slug`
+  with a real `AgentDetail`, starts **no run**, and asserts the header names the layer. It
+  was run against the pre-fix wiring first and failed on *"expected 'Source unknown' to
+  contain 'Resolved from this project's library.'"* — a test that has never been red proves
+  nothing.
 - **Focus arithmetic** (`a11y/focus-trap.test.ts`) — Esc / Tab wrap.
 - **Markup** (`JobDrawer.test.tsx`) — INPUTS markup is the frontmatter label, not the
   agent name; chart NOW badge and autonomy toggle; chart event name is stable.
@@ -217,17 +238,23 @@ Everything else under `src/drawer` is private.
   the parent's current digest (cascade §4.3), and §11 records that nothing computes one —
   *"nothing computes a digest comparison — not built."* They arrive through the same
   function when the resolver does.
-- **Inventing `AgentDetail.sourceRef`.** The field the drawer needs is requested from
-  `runner-engineer`, not added speculatively to a contract this agent does not own.
-  Until it lands, provenance is known only after a run has reported it.
+- ~~**Inventing `AgentDetail.sourceRef`.**~~ **Done — and the gap between the two is the
+  finding.** The field was requested rather than invented, `runner-engineer` shipped it
+  inside the same milestone, and this line went on saying "until it lands" for the rest of
+  M15 while the drawer read the run stream only. *Deferring a consumer is legitimate; the
+  defect is that nothing watched for the producer.* The consumer is now wired
+  (REQ-DRW-36) and the deferral is struck rather than deleted, so the shape stays visible.
 - **Exporting the metrics route table.** `/metrics/runs` is still a local suffix here
   (decision 12) because it is `observability-engineer`'s to export and not mine to add to
   `@agnetos/contracts`. Requested, not built around.
-- **Driving the `known` provenance branch from a live cascade.** The fetches are scoped
-  now, so `POST /api/p/:project/run` is addressable — but `runnerConfigured: false` and
-  zero runs have ever executed, so `SseStartData.sourceRef` has still never arrived. The
-  branch remains reachable only through its unit tests. `AgentDetail.sourceRef` is the
-  route that would make it reachable without a run and it is `runner-engineer`'s field.
+- **Driving the `known` provenance branch from a *running* cascade.** Narrowed, not closed.
+  The branch is now reachable without a run — `AgentDetail.sourceRef` is produced by
+  `resolveForDispatch` and consumed here — and `JobDrawer.test.tsx` drives it end to end
+  through the drawer's own fetch. What is still untested by anything in this repo is the
+  **round trip against a live runner**: `runnerConfigured: false`, zero runs have ever
+  executed, and the runner's own resolution has never been observed from a browser. So the
+  claim this slice can make is *"the drawer renders whatever `resolveForDispatch` says"*,
+  not *"the layer on your screen is the layer on disk"*. The second needs a runner that runs.
 - **A per-project `Take it ↓`.** `downloadUrl` now builds
   `/api/p/:project/agents/:slug/download`, which is still not in the contract; the button
   stays disabled with the same honest tooltip (`DOWNLOAD_ROUTE_AGREED = false`).

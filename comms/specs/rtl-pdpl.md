@@ -106,6 +106,21 @@ an ownership claim, so none of the following ids appear there. Rows below that c
 | REQ-RTL-29 | §1.4 | Headline accent phrases are marked `[[like this]]` so a translator moves the emphasis; Latin renders serif italic, Arabic weight contrast | `apps/web/src/i18n/t.ts` · `apps/web/src/i18n/provider.tsx` | `apps/web/src/i18n/i18n.test.ts` |
 | REQ-RTL-30 | §1.4 | Drawers slide with `--dir` / `inlineSign()`, never `locale === 'ar'` inside a component | `apps/web/src/styles/rtl.css` · `apps/web/src/i18n/direction.ts` | `apps/web/src/i18n/i18n.test.ts` |
 
+### What the checker must be able to SEE — added 2026-08-17 after the M15 verdict
+
+Each of the four below was a silence somebody read as a pass, and each is written as a
+property of `check-rtl.mjs` rather than of the code it scans, because the failure was never
+"an agent added a string" — it was "the counter could not move."
+
+| ID | Spec § | Requirement | Impl | Test |
+|---|---|---|---|---|
+| REQ-RTL-31 | §1.4 | A template literal with no `${}` is scanned as a plain string literal, in an attribute and anywhere else; the `assembled-template` blind spot covers only genuinely interpolated ones | `scripts/check-rtl.mjs` | `scripts/__tests__/rtl-pdpl.test.mjs` |
+| REQ-RTL-32 | §1.4 | Machine-context suppression is judged on the code skeleton, so a sentence cannot silence its own finding by containing `to`, `it`, `as`, `name`, `key` or `type` | `scripts/check-rtl.mjs` | `scripts/__tests__/rtl-pdpl.test.mjs` |
+| REQ-RTL-33 | §1.4 | An Arabic plural entry missing `one`/`two`/`few`/`many`/`other`, or missing a class English declares, is a finding — type-checking cannot see it because `Plural`'s classes are optional | `scripts/check-rtl.mjs` · `apps/web/src/i18n/entry.ts` | `scripts/__tests__/rtl-pdpl.test.mjs` |
+| REQ-RTL-34 | §1.4 | Catalogue-integrity rules bypass the ratchet: `missing-catalogue`, `missing-translation`, `missing-plural-class`, `orphan-translation` fail `--gate` at any baseline | `scripts/check-rtl.mjs` · `scripts/rtl-baseline.json` | `scripts/__tests__/rtl-pdpl.test.mjs` |
+| REQ-RTL-35 | §1.4 | Every number the checker prints names what it counted: keys vs strings vs plural classes, `todo()` call sites vs `TODO(ar)` markers, and one blind-spot id per measured root | `scripts/check-rtl.mjs` | `scripts/__tests__/rtl-pdpl.test.mjs` |
+| REQ-RTL-36 | §1.4 | `elementDirection` / `inlineStep` have exactly one home, `i18n/direction.ts`, exported from `@/i18n`; `chart/model/direction.ts` is a re-export | `apps/web/src/i18n/direction.ts` · `apps/web/src/i18n/index.ts` | `apps/web/src/chart/model/direction.test.ts` |
+
 ## Interfaces we expose
 
 - `apps/web/src/i18n` — `useI18n()`, `useT()`, `<I18nProvider>`, `<Accented>`, `t()`, formatters, `inlineSign()`, `DRAWER_ANCHOR`, `MIRRORS` / `DOES_NOT_MIRROR`.

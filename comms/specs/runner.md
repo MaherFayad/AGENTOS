@@ -83,6 +83,30 @@ the coverage checker does not steal them from the heading above.
     panel is a query shape naming agents and metrics from the library it was written against,
     so an inherited one renders another project's frame filled with this project's numbers —
     and that is indistinguishable on screen from a dashboard someone meant to build.
+11. **A cross-project route is scoped *and* narrowed — the second is a separate decision, and
+    only the first had been made.** `GET /api/all/approvals` is the one route on this surface
+    declared `scope: 'cross-project'`, and the scope is right: a queue that shows one client's
+    pending approvals is not an approvals queue. But it served `PendingApproval` — including
+    `inputs`, the form data a human typed, which is the highest-PII surface the runner has.
+    Everywhere else on this API, PDPL rule 4 (*client data does not cross clients*) is
+    discharged by the scope; **here it has to be argued field by field, and nobody had.**
+    The row is now `PendingApprovalRef`: ids, frontmatter, a timestamp, and `inputCount` —
+    how many inputs there were, never which and never what.
+
+    Two things a future reader should not have to rediscover. First, **`summary` had to go
+    too, and dropping only `inputs` would have changed nothing**: `buildPlanSummary` renders
+    the inputs into an `Inputs: …` line and appends the `deliver:` Slack channel and email
+    address, so the summary is the same payload flattened into prose. The label is
+    `agentName`. Second, **a consumer that needs to show what is being approved fetches it
+    project-scoped**, and that is not a hop it would otherwise have avoided — deciding is
+    `POST /api/p/:project/approvals/:runId`, so acting on a row already means entering its
+    project. One click is the right price for crossing a client boundary.
+
+    Structurally: `pendingApprovals(project)` no longer takes a `'*'` sentinel. One argument
+    deciding both *which* rows come back and *whose boundary they cross* is how the fat row
+    became expressible cross-project in the first place. `pendingApprovalRefs()` constructs a
+    narrow row field by field, so a field added to `RunState` cannot arrive here by
+    inheritance — a subtraction can be forgotten, a construction cannot.
 
 ## Coverage
 
@@ -101,8 +125,8 @@ the coverage checker does not steal them from the heading above.
 | REQ-RUN-11 | §3.2 | `GET /api/run/:runId/stream` honours `Last-Event-ID` (header or `?lastEventId=`) for 5 minutes past end | `apps/runner/src/lib/sse.ts` | `apps/runner/src/lib/__tests__/sse.test.ts` |
 | REQ-RUN-12 | §3.2 | Artifact (md/pdf/json/txt) is saved and `GET /api/run/:runId/artifact` serves it | `apps/runner/src/lib/artifacts.ts` | — |
 | REQ-RUN-13 | §3.2 | Delivery follows `deliver:` (Slack when webhook set; email declared unsupported) | `apps/runner/src/lib/deliver.ts` | — |
-| REQ-RUN-14 | §3.2 | `approval: required` pauses at `plan`, listed on `GET /api/approvals`, resumed or aborted by `POST /api/approvals/:runId` | `apps/runner/src/lib/runStore.ts` | — |
-| REQ-RUN-15 | §3.2 | A denied run ends `done{status:denied, denialNote}` — data, not a discard | `apps/runner/src/lib/runService.ts` | — |
+| REQ-RUN-14 | §3.2 | `approval: required` pauses at `plan`, listed on `GET /api/p/:project/approvals`, resumed or aborted by `POST /api/p/:project/approvals/:runId` | `apps/runner/src/lib/runStore.ts` | `apps/runner/src/routes/__tests__/approvals-payload.test.ts` · `apps/runner/src/lib/__tests__/company-interview.test.ts` |
+| REQ-RUN-15 | §3.2 | A denied run ends `done{status:denied, denialNote}` — data, not a discard | `apps/runner/src/lib/runService.ts` | `apps/runner/src/lib/__tests__/company-interview.test.ts` |
 | REQ-RUN-16 | §3.2 | `POST /api/schedule` writes `schedule:` via a git commit confined to `agents/**` | `apps/runner/src/lib/schedule.ts` · `apps/runner/src/lib/git.ts` | — |
 | REQ-RUN-17 | §3.2 | ofelia config is regenerated from frontmatter after that commit | `scripts/sync-ofelia.mjs` | `scripts/__tests__/sync-ofelia.test.mjs` |
 | REQ-RUN-18 | §3.2 | ofelia jobs POST the same `/api/run` the drawer uses | `scripts/sync-ofelia.mjs` | `scripts/__tests__/sync-ofelia.test.mjs` |
@@ -127,6 +151,8 @@ the coverage checker does not steal them from the heading above.
 | REQ-RUN-37 | §2.5 | Panels are mounted per project with no coordinator fallthrough; no `panels/` is an empty carousel | `apps/runner/src/lib/panels.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
 | REQ-RUN-38 | §3.2 | A project whose library holds no layout artifact gets `graph_not_built` naming it — never another project's graph | `apps/runner/src/lib/graph.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
 | REQ-RUN-39 | §3.3 | A brain write-back aimed at the global tier throws `brain_write_refused` (403), not a silent `null` | `apps/runner/src/lib/brain.ts` | `apps/runner/src/lib/__tests__/brain.test.ts` |
+| REQ-RUN-40 | §3.2 | `GET /api/all/approvals` carries no run `inputs` and no plan `summary` — a `scope: 'cross-project'` row is ids, frontmatter, a timestamp and `inputCount`; the values stay on the project-scoped route | `packages/contracts/src/api.ts` · `apps/runner/src/lib/runStore.ts` · `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/__tests__/approvals-payload.test.ts` |
+| REQ-RUN-41 | §3.5 | Every column and conflict target the ledger writer names exists in a migration, and every function it calls is defined by one — checked with no database, so the writer/schema class is caught on a laptop | `apps/runner/src/db/ledger.ts` · `apps/runner/src/db/migrations` | `apps/runner/src/db/__tests__/writer-schema-agreement.test.ts` |
 
 ## Interfaces we expose
 
@@ -153,6 +179,26 @@ the coverage checker does not steal them from the heading above.
   `Last-Event-ID`; dryRun prompt assembly without the SDK; ofelia job shape.
 - **HTTP inject:** `/healthz`, `/api/status`, `/api/agents/:slug`, `/api/approvals`,
   `/api/runs`, uniform 404 envelope.
+- **Cross-project payload, asserted on the raw body.** `GET /api/all/approvals` with a real
+  gate open, and a distinctive string planted in the inputs: the assertion is that the string
+  does not appear **anywhere in `res.payload`**, not that a named key is absent. A key-absence
+  test only sees the field it was told about; a body-substring test sees the field somebody
+  adds next year. A *type* cannot do this job at all — TypeScript is structural, so
+  `PendingApproval[]` is assignable to `PendingApprovalRef[]` and a fat row type-checks on
+  the way out.
+- **Writer/schema agreement, with no Postgres.** The three tests that would catch a
+  writer/schema mismatch all skip on `DATABASE_URL is not set`, and the mismatch they would
+  catch is silent: one bad column name in `recordRun`'s 31 and the first real run is never
+  recorded, leaving the ledger empty in exactly the way an honest empty ledger is empty. The
+  migrations are text and the writer's SQL is text, so the **column** half of the question is
+  answerable with no database. `writer-schema-agreement.test.ts` does that, and falsifies its
+  own parser: a name that does not exist must be absent, and `ops.device.identity_id` — which
+  appears only inside a `--` comment in `0006` — must be absent too, because a parser that
+  believed comments would invent a column and then pass a writer that used it.
+  **Verified by planting `account_sourse` in the 31-column insert: FAIL, naming the column;
+  reverted, tree clean.** It is a lower bound on agreement and not a substitute for
+  `sql-executes.test.ts` — it cannot see types, `NOT NULL`, `CHECK`, or whether the partial
+  unique index `ON CONFLICT` infers actually exists. The three skipped tests stay owed.
 - **Not automatable here:** a live SDK session against Anthropic (needs the runner's
   capped key); ofelia HUP inside compose (runner has no docker.sock — infra); push
   notifications on the approval gate (sessions-relay); the 1440px fidelity screenshot
@@ -205,6 +251,25 @@ the coverage checker does not steal them from the heading above.
   layer written to is not the winner, naming the winning file — is specified and unbuilt. It
   is now the only shipped caller of `loadAgent`, which `one-door.test.ts` asserts exhaustively
   so the list cannot grow by accident.
+- **No run-detail route was added when `inputs` left the cross-project row.** The question
+  was asked, because "delete a field and leave the next person to rediscover the requirement"
+  is the failure mode here. It was not needed: `GET /api/p/:project/approvals` already carries
+  `summary` and `inputs`, and a consumer that wants them is already going to that project to
+  press the button. Adding `GET /api/p/:project/run/:runId` for a need no consumer has stated
+  would be a route invented to justify a deletion.
+- **`GET /api/projects` was audited in the same pass and left alone — clean today, for a
+  reason that expires.** It is `scope: 'coordinator'`, but it is the other route returning one
+  row per client. `toProjectSummary` hardcodes `budgetMonthlyUsd`, `defaultAccountId`,
+  `hostAffinity` and `libraryRemote` to empty values and `useProjects.ts` says it does not read
+  them, so nothing client-shaped crosses. **The day ADR-015 Q6 makes `budgetMonthlyUsd` real,
+  this route hands every client's monthly budget to any caller** — the same defect as
+  `/api/all/approvals`, arriving through a field that already exists rather than a route
+  someone adds. Recorded in `packages/contracts/src/project.ts` next to the field. Not fixed
+  here: a filter over four hardcoded nulls is untestable, and `ProjectSwitcher` is mid-review.
+- **Nothing was proven empirically.** No second project is mounted, so "project A's inputs do
+  not reach a caller in project B" is still argued from one project's row not carrying inputs
+  *at all*, which is stronger than a filter but is not the same as two projects on one box.
+  `project-scoping.md` §6 is unchanged by this work.
 - **Ceiling enforcement on the reads is per agent, not a pass-2 validator.** A widened
   override is excluded from `/api/agents` with its reason; the other invariants in
   `agent-cascade.md` §7.2 (Class A match, `deliver` at L0, `status` from the ledger) are still

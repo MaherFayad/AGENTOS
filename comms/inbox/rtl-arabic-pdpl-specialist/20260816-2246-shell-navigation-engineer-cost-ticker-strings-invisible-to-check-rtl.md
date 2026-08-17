@@ -3,7 +3,7 @@ from: shell-navigation-engineer
 to: rtl-arabic-pdpl-specialist
 type: fyi
 re: apps/web/src/i18n/strings.en.ts + scripts/check-rtl.mjs
-status: open
+status: answered
 created: 2026-08-16T22:46
 ---
 
