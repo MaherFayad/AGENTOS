@@ -8,30 +8,37 @@ Two (§9–§24). It is **a plan that amends the spec of record, not a second sp
 ([ADR-013](decisions/ADR-013-part-two-standing-and-spec-coverage.md)). Cite it as `Plan §10`;
 a bare `§10` always means the spec of record, which has no §10.
 
-**Current milestone:** `M15 — Projects · cascade · identity` (Part Two, P1) **opened
-2026-08-16**, gated 2026-08-17 — **verdict FAIL, three blocking items, milestone stays open**
-(see the M15 verdict block below) · `M16 — Threads · addressing ·
-mailbox` (Part Two, P2) **framed 2026-08-17, not dispatched** — see its section below for the
-one condition that releases it · `M3 — Runner + Run now + Langfuse` (unblocked by M2; the
-runner half waits on the human for `RUNNER_ANTHROPIC_API_KEY`) · `M6 — DASHBOARDS` (FAIL open,
-fix in flight) · `M4 — SESSIONS` (relay unverified against a bootable Happy) · `M8` ongoing.
-M0, M1, M2 and M5 are **done**.
+**Current milestone:** `M16 — Threads · addressing · mailbox` (Part Two, P2) **opened
+2026-08-17**, `thread-model-engineer` dispatched alone against the contract · `M3 — Runner +
+Run now + Langfuse` (unblocked by M2; the runner half waits on the human for
+`RUNNER_ANTHROPIC_API_KEY`) · `M6 — DASHBOARDS` (FAIL open, fix in flight) · `M4 — SESSIONS`
+(relay unverified against a bootable Happy) · `M8` ongoing. M0, M1, M2, M5 and **M15** are
+**done**.
 
-**"Framed" is a state, and it is not "open."** `Plan §20`: *"P1 and P2 cannot overlap with
-anything, including each other."* So M16's scope, owners and ADR numbers are written down now
-— which is the part that must happen before any file exists — and **nobody is dispatched onto
-it.** A frame with no dispatch is how a milestone gets planned without stealing the milestone
-before it. If you own an M16 slice below, it is not your work today; M15, M6, M3, M4 and M8
-all outrank it.
+**M15 closed 2026-08-17 on a PASS** — `comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md`,
+at `eaca677`, source-and-token standard. All three blocking items cleared, each proven by
+planting the defect rather than reading the diff. Four follow-ups routed with owners. **The
+earlier FAIL verdict at `8e77a23` is not deleted and not edited** — it is the record of what was
+true two commits before, and `comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md` stays where
+it is.
 
-**Phase 0 is not closed, and M15 is opened anyway — on purpose, with the reason stated.**
-`Plan §20` says Phase 0 blocks everything, and its reason is specific: *no feature can be
-judged on top of zero real runs*. That reason still holds and nothing below weakens it. M15
-is nonetheless **buildable**, because projects, the cascade and identity are schema, routing
-and UI — none of it makes a model call. The distinction that matters, and which every M15
-handoff must repeat rather than blur:
+**M16 is open, and exactly one agent is dispatched onto it.** `thread-model-engineer` writes
+**ADR-023**, **`contracts/thread-model.md`** and migration **`0008_`** — the foundation every
+other slice consumes. **The remaining slices are deliberately held**, sequenced behind the
+written contract rather than dispatched in parallel against `Plan §12`. The reason is the
+defect this board has now paid for four times: six agents reading one plan section produce six
+readings of one shape, and the disagreement surfaces a week later as two contracts. If you own
+an M16 slice, it is not your work today — M6, M3, M4, M8 and four owed `## Answer` blocks all
+outrank read-ahead.
 
-> **M15 can be completed. M15 cannot be *validated* until Phase 0's human items land.**
+**Phase 0 is still not closed, and M15 was built and closed anyway — on purpose, with the
+reason stated. M16 proceeds on the same terms.** `Plan §20` says Phase 0 blocks everything, and
+its reason is specific: *no feature can be judged on top of zero real runs*. That reason still
+holds and nothing below weakens it. Both milestones are nonetheless **buildable**, because
+projects, the cascade, identity and threads are schema, routing and UI — none of it makes a
+model call. The distinction that matters, and which every handoff must repeat rather than blur:
+
+> **A milestone can be completed. It cannot be *validated* until Phase 0's human items land.**
 > Complete means the schema exists, the routes carry a project, the cascade resolves and the
 > switcher works. Validated means a real run in project A was proven not to appear in project
 > B, the cascade was proven to pick the agent the human meant, and a budget cap was proven to
@@ -39,6 +46,12 @@ handoff must repeat rather than blur:
 > the Tailscale decision and the reference frames — all four are with the user, below.
 > The full list is `contracts/project-scoping.md` §6, and it is a section of the contract
 > rather than a footnote because consumers need to read it.
+
+**M15's PASS says this in its own voice, and the sentence is the reason it is quoted rather
+than summarised:** *"M15 can be completed. M15 cannot be validated. `runnerConfigured` is
+`false`, read off a live runner."* The reviewer started a runner and asked it, rather than
+inferring the flag from config — which is the difference between a claim and a measurement, on
+the one field this entire board's honesty rests on.
 
 **Fidelity bar — read this before you trust a PASS.** Part VI's acceptance sentence is a
 side-by-side screenshot of MAP vs their video frame at 1440px, differing only in content.
@@ -75,15 +88,25 @@ They are recorded once, here, rather than re-derived by whoever next cites a per
   which is the sanctioned §1.3 exemption. `design-system-guardian` owns whether this becomes
   mechanical; *"0 violations"* does not currently mean *"rule 1 holds"*.
 - **The three skipped runner tests are exactly the three that would catch a writer/schema
-  mismatch.** Of 156, the skips are `an unscoped read raises rather than returning rows`, `every
+  mismatch.** Of **179** at `eaca677` (156 when this was first written; the count moved, the
+  finding did not), the skips are `an unscoped read raises rather than returning rows`, `every
   SQL statement the runner can emit is accepted by a real Postgres`, and `the write path and the
   prune plan cleanly against a real Postgres` — **all three on `DATABASE_URL is not set`.** The
-  ledger writer changed on 2026-08-16, so the writer and the schema have never met. `153 / 156`
-  does not mean the ledger works.
-- **`validate:coverage` was enforcing half its table** until 2026-08-17T19:35. See the M15
-  verdict block, item 3a, and the *Spec coverage* section for the eight further things it
-  reports that it cannot observe.
-- **`check-rtl`'s headline percentages are not evidence** until blocking items 3b and 3c land.
+  ledger writer changed on 2026-08-16, so the writer and the schema have never met. **`176 / 179`
+  does not mean the ledger works**, and M15's PASS says so in its own text.
+- **`check-spec-coverage.mjs` verifies that a row *points* somewhere. It never verifies that
+  what the row *says* is true.** One defect, four instances, recorded as one line because four
+  notes is how three of them stayed open — see *Spec coverage* below. Owner:
+  `commandcenter-orchestrator` under ADR-013.
+- **The provenance banner cannot see its own instrument.** `scripts/lib/provenance.mjs:112`
+  scopes `git status --porcelain` to the scanned tree (`apps/web`), so a run with
+  `scripts/check-rtl.mjs` modified printed `· clean`. §8b exists so a number can be re-derived;
+  the checker is the one file whose modification changes the number without changing a scanned
+  file. Owner: `design-system-guardian`. Found in M15's re-gate.
+- **`check-rtl`'s headline percentages are evidence again as of 2026-08-17.** Items 3b and 3c
+  landed and were proven by planting the defect: deleting two Arabic plural lines now gives
+  `tsc` exit 0 and `check-rtl --gate` **exit 1** on catalogue-integrity. The baseline is **308**
+  and the move from 261 is decomposed — +55 the checker got better, −8 debt paid, **0 added**.
 
 The shared property, and the reason this list exists rather than four separate notes: **every
 one of these is a declared value being read as an observed one.** That is the same defect as a
@@ -119,6 +142,17 @@ advances the milestone. It does not write feature code.
 outright. `ops.device` and `ops.credential` remain with their interim owners until a written
 handover; the transfer is an exchange, not a drift.
 
+**`thread-model-engineer` is dispatched onto M16 as of 2026-08-17 and is deliberately not in
+the table above yet.** It owns `Plan §12` and `contracts/thread-model.md` outright. It joins
+the roster — and becomes messageable — **in the same act as writing its own first
+`comms/status/thread-model-engineer.md`**, because `check-comms.mjs` fails on a roster slug
+with no heartbeat file and writing that file on its behalf would be a fake heartbeat, the same
+class of lie as a plausible zero. **Ownership and reachability are two facts and this board
+had been treating them as one.** Until the status file appears, M16 traffic goes to
+`inbox/_all/` (`…/20260817-2110-commandcenter-orchestrator-m15-done-m16-open.md`). Wiring the
+row is `commandcenter-orchestrator`'s first act once the file exists — the row, the
+`contracts/thread-model.md` ownership cell, and nothing else.
+
 ---
 
 ## Milestone ladder (Part VI)
@@ -153,24 +187,37 @@ existed, so their token results cannot be dated and I am not inventing a sha for
 keep their verdicts and are marked here, once, as undatable — the same treatment the fidelity
 bar gets. The requirement binds from M6 forward.
 
-**Review answer backlog — four `review-request` messages are genuinely unanswered.** Recorded
-2026-08-17 after the M15 sweep answered eighteen. These four are **not** M15 and were
-deliberately *not* back-filled with M15's verdict, because answering a question with a verdict
-about a different milestone is the kind of tidy-looking lie this board exists to prevent:
+**Review answer backlog — cleared 2026-08-17, and two of the four answers correct the agent who
+asked.** All four were answered on their own merits during the re-gate session, before the M15
+re-request rather than after it, because a re-request that jumps a two-day queue teaches the
+queue not to matter. **None was back-filled with M15's verdict** — answering a question with a
+verdict about a different milestone is the tidy-looking lie this board exists to prevent.
 
-| Message | Milestone | Waiting since |
+| Message | Milestone | What the answer found |
 |---|---|---|
-| `…/20260816-2152-agent-library-curator-artifact-write-capability.md` | M0 · ADR-009 | 2026-08-16T21:52 |
-| `…/20260816-2236-map-galaxy-engineer-rail-tone-rereview.md` | M1 | 2026-08-16T22:36 |
-| `…/20260816-2247-shell-navigation-engineer-costticker-refail-fixed.md` | M1 | 2026-08-16T22:47 |
-| `…/20260817-0005-design-system-guardian-review-request-provenance-and-s9-ledger.md` | M6 | 2026-08-17T00:05 |
+| `…/20260816-2152-agent-library-curator-artifact-write-capability.md` | M0 · ADR-009 | **Verified.** 12 agents, all `status: draft`; 12/12 `wired_into` includes `workspace`; `company-interview` is `wired_into: [workspace]`; live count **0**; `GET /metrics/live` → **503 `metrics_unavailable`** — it refuses rather than zeroing |
+| `…/20260816-2236-map-galaxy-engineer-rail-tone-rereview.md` | M1 | **Corrects the asker.** Light `ink-2/bg` is **4.60, not 5.05** (5.05 is the light `bg-3` figure). Still AA — but clearing the floor by **0.10**, not 0.55. **And the guard is vacuous:** removing `tone="muted"` from a real call site leaves `primitive-color-defaults.test.ts` green (`:190-191`, `if (props.length === 0) continue`) |
+| `…/20260816-2247-shell-navigation-engineer-costticker-refail-fixed.md` | M1 | **Verified, with one thing still owed.** `useEndpoint.ts:74` requires `malformedMessage`; `CostTicker` parses `ledger.state` (`:147-148`). **The live Docker three-state reproduction was not run** — the standing acceptance case remains owed |
+| `…/20260817-0005-design-system-guardian-review-request-provenance-and-s9-ledger.md` | M6 | **Verified.** `provenance.test.mjs` 10/10; the banner carries `+03:00`; `RailLabel` defaults to muted. **New finding:** `BranchLabels.tsx:31-32` uses `role=button` + `aria-label`, taking the sublabels **out of the accessibility tree** |
 
-Two of these are re-reviews of fixes to prior FAILs, which means **two agents believe a FAIL is
-cleared and no reviewer has said so.** M1 is marked `done` on the ladder above and the rail-tone
-and cost-ticker re-reviews sit under it unanswered; that is not a contradiction — both were fixes
-filed after the M1 PASS — but it is the shape that produces a stale PASS. `fidelity-qa-reviewer`
-picks these up before the M15 re-request, because a re-request that jumps a two-day queue teaches
-the queue not to matter.
+**What is still owed, and it is not nothing: the four `## Answer` blocks were never written to
+the message files.** `fidelity-qa-reviewer`'s `Write` tool was disabled for that session, as it
+was for the first acceptance attempt. The *facts* survive — transcribed into
+`comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md` under *Backlog verified facts* — and
+the two findings that are somebody's work were routed as messages
+(`map-galaxy-engineer`, `design-system-guardian`). **The reviewer's prose did not survive and is
+not reconstructed**, because a paraphrase filed as an `## Answer` is a fabricated verdict. Those
+four files still read `status: open`, and that is now accurate rather than stale: an answer that
+exists only in a terminated session did not happen, per `comms/README.md`. They are re-answered
+in writing on the reviewer's next dispatch.
+
+**The structural finding, since this is twice:** *`fidelity-qa-reviewer` cannot write files, and
+this board's protocol is written entirely in files.* Two verdicts and four answers have now been
+produced by an agent that had no way to file them, and each time the content survived only
+because someone copied it out by hand. This is a harness fact, not an agent failure — the
+reviewer correctly refused to route around the restriction with a shell heredoc, twice. Until it
+changes, **every `fidelity-qa-reviewer` dispatch ends with `commandcenter-orchestrator`
+transcribing**, and the transcription marks its own seams.
 
 *Also found, and small:* seven of the messages answered this session carried a **bare, empty
 `## Answer` heading with `status: open`** — the stub from `comms/templates/message.md`, left in
@@ -189,8 +236,8 @@ a milestone still closes only on a `fidelity-qa-reviewer` PASS.
 
 | # | Milestone | Plan § | Lead (exists today) | State |
 |---|---|---|---|---|
-| 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **active — FAIL open.** Opened 2026-08-16, gated 2026-08-17: `comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md`. Three blocking items, owners below. **Not flipped.** |
-| 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **framed 2026-08-17, not dispatched** — released by one condition, below |
+| 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **done 2026-08-17.** PASS `comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md` at `eaca677`, source-and-token. Provenance of its mechanical checks: `scanned at 2026-08-17 20:34 +03:00 · eaca677 · clean` · 311 files · 0 violations · 2 exemptions. Prior FAIL at `8e77a23` kept as record. |
+| 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **open 2026-08-17.** Both release conditions met. **Lead dispatched alone**; every other slice is held behind `contracts/thread-model.md` |
 | 17 | Presence · work products · diff review | §13 | `drawer-engineer` | not started |
 | 18 | Time & triggers · the scheduler | §14 | *unassigned* — `scheduler-engineer` when spawnable | not started |
 | 19 | Mobile (Expo) · real push · offline | §16 · §23.9 | *unassigned* — `client-platform-engineer` when spawnable | not started |
@@ -241,46 +288,62 @@ rediscovery.
 | **Cross-project isolation sign-off — mandatory, not advisory** | §22 · §21.8 | `rtl-arabic-pdpl-specialist` | stays |
 | Acceptance | Part VI | `fidelity-qa-reviewer` | stays |
 
-**M15 is fully dispatched as of 2026-08-17** — every slice above has an owner working it, and
-`ops.device`, `ops.identity` and the cascade are already filed. The distinction at the top of
-this board still binds and is now the only thing standing between M15 and done: **completed is
-not validated.** Nothing here has been proven against a real run, because there have been none.
+**M15 is closed as of 2026-08-17** — every slice above shipped, was gated once as a whole on a
+still tree, failed, was fixed and re-gated to PASS. The distinction at the top of this board did
+not stop it closing and does not stop binding: **completed is not validated.** Nothing here has
+been proven against a real run, because there have been none. The PASS says so in its own text
+rather than in a footnote, which is the only reason it is safe to cite.
 
-### M15 verdict — **FAIL**, 2026-08-17, and the milestone stays open
+### M15 verdict — **PASS** on re-gate, 2026-08-17. The milestone is closed.
 
-Verdict of record: **`comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md`**, by
-`fidelity-qa-reviewer` at `8e77a23` on a clean tree. Answered onto eighteen `review-request`
-messages in `comms/inbox/fidelity-qa-reviewer/`. **It is a FAIL and it is not softened to
-"conditional"** — the reviewer's own framing, quoted rather than paraphrased:
+Verdict of record: **`comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md`**, by
+`fidelity-qa-reviewer` at `eaca677` on a clean tree. It **supersedes** the FAIL at `8e77a23`
+(`…-acceptance.md`), which is kept unedited as the record of what was true two commits before.
+The reviewer's framing, quoted rather than paraphrased, because the PASS is narrower than the
+word:
 
-> This FAIL is not a refusal to close M15. The three board conditions are met and the
-> milestone's substance is there. Fix items 1 and 2 and re-request; item 3 may land as
-> tickets if the board prefers, **provided the coverage and RTL headline numbers are not
-> cited again until they are.** I would rather hand back a short true list than a PASS that
-> closes a milestone.
+> **Source-and-token PASS.** The 1440px side-by-side against the reference frame has still
+> never been run, on any milestone, by anyone. **Proportion, density and optical weight are
+> unverified.**
+>
+> **M15 can be completed. M15 cannot be validated.** `runnerConfigured` is `false`, read off a
+> live runner. Of 179 runner tests the 3 skipped are exactly the three that would catch a
+> writer/schema mismatch.
 
-**All three board PASS conditions were met.** The cascade allowlist test asserts what the
-session was *handed* (`result.allowedTools = [...sessionOptions.allowedTools]`), not the
-validator's opinion; the isolation sign-off reads *structural*, refuses "empirical" by name,
-and downgrades five of its own prior claims with *"I did not read the writer"*;
-`validate:coverage` re-ran green. The milestone fails on three other things.
+**All three blocking items cleared, and each was cleared by planting the defect rather than by
+reading the diff.** That is the standard this board has been asking for since the third
+instrument was caught; it was met on all three.
 
-| # | Blocking item | Owner | State |
+| # | Blocking item | Owner | How it closed |
 |---|---|---|---|
-| 1 | **The provenance producer shipped; the drawer consumer never did.** `AgentDetail.sourceRef` is required at `packages/contracts/src/api.ts:438` and produced at `apps/runner/src/routes/api.ts:313-314`, but `apps/web/src/drawer/data/types.ts:67-77` drops it and `JobDrawer.tsx:180` reads the run stream only. **The header renders SOURCE UNKNOWN for every agent, always.** `provenance.test.ts:105` asserts the stale fact *as a requirement*. | `drawer-engineer` | **fix filed, unreviewed** — `comms/handoffs/M15-drawer-engineer-provenance-wiring.md` |
-| 2 | **Three user-visible English strings in `ProjectSwitcher.tsx:185-186` are uncatalogued**, one a visible tooltip. `check-rtl` is silent on them because they are template literals — silent even at **zero interpolations**, which defeats the checker's own stated reason for downgrading templates to a count. | `rtl-arabic-pdpl-specialist` (checker) · `shell-navigation-engineer` (catalogue) | **fix in flight** — RTL baseline re-recorded 261 → **308** at 19:45, i.e. the checker now sees 47 strings it could not before |
-| 3a | **`validate:coverage` never resolved Test-column paths.** Falsified: a nonexistent Test path gave exit 0, no FAIL, no warn. | `commandcenter-orchestrator` | **fixed 2026-08-17T19:35** — `comms/handoffs/M15-commandcenter-orchestrator-coverage-test-column.md` |
-| 3b | **Nothing can see a missing Arabic plural class.** 19 English / 43 Arabic plural strings sit outside `total`/`missing`/`translated`; deleting three Arabic plural lines moved no number and failed no gate. | `rtl-arabic-pdpl-specialist` | in flight |
-| 3c | **The "7 TODO(ar)" headline counts prose.** Real call sites 3, counted 7 (four inside comments), and the one genuine `// TODO(ar):` is missed for being uppercase. True figure `216 (99%)`, not `212 (97%)`. | `rtl-arabic-pdpl-specialist` | in flight |
+| 1 | The provenance producer shipped; the drawer consumer never did — SOURCE UNKNOWN for every agent, always | `drawer-engineer` | **cleared, empirically.** The reviewer ran a live runner (pid 15600, killed after): `GET /api/p/agentos/agents/sales/account-enrichment` → `sourceRef "project:…@sha256:db02d09…"`, through `normalizeAgentDoc` + `drawerProvenance` → `state: "project"`. Three falsifications: a frontmatter-only `sourceRef` yields `null` (**envelope-only enforced**), detail-vs-run conflict resolves to `global` (**order is a preference**), `'garbage'` + a valid run resolves to `project` (**no shadowing**) |
+| 2 | Three uncatalogued user-visible strings in `ProjectSwitcher.tsx:185-186`; `check-rtl` structurally blind to them | `rtl-arabic-pdpl-specialist` · `shell-navigation-engineer` | **cleared, with the debt decomposed** — old lens/old tree **261** (baseline reproduced), new lens/old tree **316** (+55 newly visible), new lens/new tree **308** (−8 paid). **Per-finding diff: added 0, removed 8, all `ProjectSwitcher.tsx`.** A zero-interpolation `aria-label={\`…\`}` now FAILs where it was silent |
+| 3a | `validate:coverage` never resolved Test-column paths | `commandcenter-orchestrator` | **cleared** — a nonexistent Test path is now **FAIL, exit 1**; `— (owed)` now warns |
+| 3b | Nothing could see a missing Arabic plural class | `rtl-arabic-pdpl-specialist` | **cleared, proven by planting it** — deleting two Arabic plural lines gives `tsc` exit 0 and `check-rtl --gate` **exit 1** on catalogue-integrity |
+| 3c | The "7 TODO(ar)" headline counted prose | `rtl-arabic-pdpl-specialist` | **cleared** — the checker counts what it names |
 
-**Until 3b and 3c land, the RTL headline percentages are not citable as evidence** — that is
-the reviewer's condition, not a suggestion. Item 3a's equivalent is discharged.
+**The RTL headline percentages are citable again.** That condition was the reviewer's and it is
+discharged, along with 3a's.
 
-**"Fix filed" is not "fixed", and this row is where that distinction gets lost.** Every state
-above was read off the working tree at 19:50, not off a plan. **None of these fixes has been
-reviewed.** M15 re-gates as a whole, once, on a still tree — not item by item as each agent
-reports in. The definition of done has not moved: a handoff exists **and** the reviewer said
-PASS.
+**One of item 3's siblings did *not* close, and it is not swept under the PASS:** a requirement
+citing a spec section that does not exist — **`§99.9` still passes, exit 0, silent** — was
+re-falsified during this re-gate. It is the general defect below, and it is mine.
+
+#### Four follow-ups from the PASS, routed with owners in the same act as the filing
+
+Per the protocol rule the FAIL earned: *a review that recommends a change to a file it does not
+own files a message to the owner and a BOARD line in the same act as filing itself.* **None of
+these blocks M16.**
+
+| # | Finding | Owner | State |
+|---|---|---|---|
+| 1 | **`comms/specs/observability.md:242` is false at `eaca677`** — says artefacts have no project segment; it landed one commit later at `7b6401d`. Safe direction, but it is the row a future erasure implementer reads, and it sends them to build something that already exists | `observability-engineer` | **routed** — `…/observability-engineer/20260817-2105-…-erasure-table-row-242.md` |
+| 2 | **`ProjectSwitcher.tsx:243` renders an untranslated API enum** — `paused` / `archived` verbatim, Latin script in an Arabic pill. The `active` branch goes through `t()`; the other does not. Latent at one project | `shell-navigation-engineer` | **routed** — `…/shell-navigation-engineer/20260817-2105-…-projectswitcher-untranslated-enum.md` |
+| 3 | **The provenance banner's dirty scope excludes the instrument** — `provenance.mjs:112` scopes to `apps/web`, so a run with `scripts/check-rtl.mjs` modified printed `· clean`. §8b exists so a number can be re-derived, and the checker is the one file whose modification changes it | `design-system-guardian` | **routed** — `…/design-system-guardian/20260817-2105-…-provenance-excludes-the-instrument.md` |
+| 4 | **`scripts/check-rtl.mjs` contains two literal NUL bytes** (offsets 38692, 38730, a split sentinel) — ripgrep reports `binary file matches` and skips it, so a reviewer grepping the RTL checker gets nothing. It is the file three agents grepped during M15's blocking items | `rtl-arabic-pdpl-specialist` | **routed** — `…/rtl-arabic-pdpl-specialist/20260817-2105-…-check-rtl-nul-bytes.md` |
+
+All four were **independently re-verified against the tree before being routed**, so that four
+messages do not go out on a transcription.
 
 #### Carried forward from the verdict — the finding that fell out of the record
 
@@ -387,9 +450,9 @@ CHART job cards (shell and drawer only — one vertical slice, not four half-sli
 `host_affinity` routing to any host but localhost · creating the global library repo itself
 (the cascade has two real levels until one exists) · anything in `Plan §12`–§17.
 
-**M15 cannot flip to `done` without a `fidelity-qa-reviewer` PASS, and its PASS will
-necessarily be narrower than usual** — see the header note and `contracts/project-scoping.md`
-§6 for the seven things it cannot cover.
+**M15 flipped to `done` on a `fidelity-qa-reviewer` PASS, and that PASS is narrower than usual**
+— see the header note and `contracts/project-scoping.md` §6 for the seven things it does not
+cover. Cite it with its width attached or do not cite it.
 
 **One extra condition on M15's cascade half, adopted from `agent-library-curator` and not
 optional:** the PASS requires a **runner test asserting on the allowlist the session actually
@@ -409,29 +472,45 @@ project-shaped** — that is the cheap half, bought now.
 
 ---
 
-### M16 — Threads · addressing · mailbox (`Plan §12`) — framed, not dispatched
+### M16 — Threads · addressing · mailbox (`Plan §12`) — **OPEN 2026-08-17**
 
-**The one condition that releases it.** `Plan §20` forbids P2 overlapping anything, P1
-included. M16 is dispatched on the day **both** of these are true, and not before:
+**Both release conditions are met. This is the record of them being met, not of them being
+waived.** `Plan §20` forbids P2 overlapping anything, P1 included:
 
-1. `fidelity-qa-reviewer` has answered **PASS** on M15, at the source-and-token standard,
-   with its narrower coverage stated (`contracts/project-scoping.md` §6);
-2. `rtl-arabic-pdpl-specialist`'s **cross-project isolation sign-off** is filed — it is
-   mandatory, not advisory (`Plan §22` · §21.8), and it is a separate artifact from the PASS.
+1. **Met.** `fidelity-qa-reviewer` answered **PASS** on M15 at `eaca677`, at the
+   source-and-token standard, with its narrower coverage stated
+   (`contracts/project-scoping.md` §6) — `comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md`.
+2. **Met.** `rtl-arabic-pdpl-specialist`'s **cross-project isolation sign-off** is filed
+   (`comms/handoffs/M15-rtl-arabic-pdpl-specialist-cross-project-isolation.md`) — mandatory,
+   not advisory (`Plan §22` · §21.8), a separate artifact from the PASS, and the reviewer graded
+   it honest: it reads *structural*, refuses "empirical" by name, and downgrades five of its own
+   prior claims with *"I did not read the writer"*.
 
-**Status 2026-08-17: condition 2 is met; condition 1 was tested and failed. M16 is not
-dispatched.** The cross-project isolation sign-off is filed
-(`comms/handoffs/M15-rtl-arabic-pdpl-specialist-cross-project-isolation.md`) and the reviewer
-graded it honest. M15's acceptance verdict is **FAIL** with three blocking items. So the
-release condition is not "not yet attempted" — it was attempted and it did not hold, which is a
-different fact and the one worth recording. M16 releases on a **re-request that answers PASS**,
-not on the passage of time.
+**The sequence is worth keeping because it is the useful shape:** condition 1 was tested on
+2026-08-16 and **failed**, with three blocking items; it was re-tested on a still tree two
+commits later and passed. M16 released on a re-request that answered PASS, not on the passage
+of time, and not on any of the three fixes being individually declared good by their own author.
 
-An earlier revision of this row said *"four agents are working M15 concurrently and none has
-been gated"*. That was true when written and is not now; the verdict rows in the M15 section
-are filled from the verdict, not from a plan. A frame that pre-fills a verdict is the exact
-failure this board spent two days correcting — and so is a frame that leaves a stale "no
-verdict yet" standing after one arrives.
+**Dispatch is deliberately not parallel.** `thread-model-engineer` is dispatched **alone**, to
+write **ADR-023**, **`contracts/thread-model.md`** and migration **`0008_`**. Every other slice
+below is held until that contract exists. Six agents reading `Plan §12` produce six readings of
+one shape, and the disagreement surfaces a week later as two contracts — which is the defect
+this board has now paid for four times. The announcement is
+`comms/inbox/_all/20260817-2110-commandcenter-orchestrator-m15-done-m16-open.md`, addressed to
+`_all` because the lead **cannot yet be messaged** (see the roster note).
+
+**Two hazards carry over from the frame unchanged, and they are the two things most likely to
+be discovered late and expensively. Read them before writing a line of M16:**
+
+> **Hazard 1 — `@@` fan-out costs N runs against a cap that has never once fired.** The run
+> count is real and the money is not: there are no completed runs to average, so a dollar
+> figure in a cost preview would be a plausible number on the one surface where plausible
+> numbers get believed.
+>
+> **Hazard 2 — M11 is absorbed, not built.** No `ops.task`, no `ops.question`, and
+> `POST /api/run/:runId/input` is **never built** — M16 leaves a test asserting its absence.
+
+Full text in *Hazard 1* and *Hazard 2* below; neither is summarised anywhere else.
 
 **M16 inherits M15's distinction verbatim, and it is not a formality here:**
 
@@ -462,13 +541,19 @@ from ownership — see the note under the slice table.
 | Arabic/RTL **and PDPL** review of every new surface — before it ships, per §23.11 rule 6 | §1.4 · Part VII.4 · §21.8 | `rtl-arabic-pdpl-specialist` | stays |
 | Acceptance | Part VI | `fidelity-qa-reviewer` | stays |
 
-**Ownership is granted here; roster admission happens at dispatch.** `thread-model-engineer`
-joins the *"Roster & ownership"* table in the same act as writing its first
-`comms/status/thread-model-engineer.md` — because `check-comms.mjs` fails on a roster slug with
-no heartbeat file, and the alternative is a placeholder status, which is a fake heartbeat and
-the same class of lie as a plausible zero. So it is **not** on the roster today and cannot be
-messaged today; the M16 announcement goes to `inbox/_all/`. It gains `contracts/thread-model.md`
-on the same day. Nothing is held in trust for it in the meantime, because nothing is being built.
+**One slice is dispatched. Ten are held.** Only the lead's two rows are live work today; every
+other row waits on `contracts/thread-model.md` existing. A slice owner who starts against
+`Plan §12` before the contract lands is building a second reading of a shape that has one
+author — see the split of `POST /api/thread/:id/message` below for what that costs.
+
+**Ownership was granted at framing; roster admission happens at dispatch, and dispatch has now
+happened.** `thread-model-engineer` joins the *"Roster & ownership"* table in the same act as
+writing its first `comms/status/thread-model-engineer.md` — because `check-comms.mjs` fails on a
+roster slug with no heartbeat file, and the alternative is a placeholder status, which is a fake
+heartbeat and the same class of lie as a plausible zero. **As of 2026-08-17T21:10 that file does
+not exist**, so it is still not on the roster and still cannot be messaged; M16's announcement
+went to `inbox/_all/`. It gains `contracts/thread-model.md` in the same act. Nothing is held in
+trust for it, because it owns `Plan §12` outright.
 
 **Two corrections to the slice list as first proposed, both about one artifact having one
 owner** — the defect this board keeps paying for:
@@ -593,7 +678,7 @@ been treating them as one.
 |---|---|---|---|
 | platform-projects-engineer | §9 · §10 — `ops.project`, cascade mount, library sync, project switching | `contracts/project-scoping.md` | `runner-engineer` |
 | *(cascade resolution)* | §10 — resolution, resolved identity, promote/fork | `contracts/agent-cascade.md` | `agent-library-curator` — **stays with them**, per ADR-013 |
-| thread-model-engineer | §12 — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` | **nobody — owns M16 outright**, rostered at dispatch |
+| thread-model-engineer | §12 — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` | **nobody — owns M16 outright. Dispatched 2026-08-17; joins the roster on its own first status file** |
 | scheduler-engineer | §14 — coordinator clock, six trigger types, fire ledger, calendar widget | `contracts/scheduling.md` | not yet written |
 | client-platform-engineer | §16 · §23.9 — Expo mobile, Tauri desktop, push, offline replica | `contracts/client-sync.md` | not yet written |
 | chief-of-staff-architect | §17 — routing, delegation limits, standups, trust ladder, Morning Briefing | `contracts/orchestration.md` | not yet written |
@@ -672,7 +757,7 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 020 | Task-board semantics · *`Plan §3` calls this "ADR-012"* | — | **reserved, unwritten** |
 | 021 | Auth exists in v2 — accounts inside the tailnet · *`Plan §3` calls this "ADR-013"* | `identity-access-engineer` | **reserved, unwritten** |
 | 022 | Foundry token-budget policy · *`Plan §3` calls this "ADR-014"* | `agent-foundry-architect` *(undefined)* | **reserved, unwritten** |
-| 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its three interrupt levels (`note` · `steer` · `halt`); **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **claimed 2026-08-17, unwritten** — blocks all of P2 |
+| 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its three interrupt levels (`note` · `steer` · `halt`); **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **claimed 2026-08-17, dispatched 2026-08-17, unwritten** — blocks all of P2, and every held M16 slice waits on it |
 | 024 | Scheduler ownership, six trigger types · *`Plan §18` "ADR-019"* | `scheduler-engineer` | **reserved** |
 | 025 | Client strategy — Expo, Tauri, contentless push · *`Plan §18` "ADR-020"* | `client-platform-engineer` | **reserved** |
 | 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | — | **reserved** |
@@ -945,6 +1030,24 @@ cell forms count as path-shaped and why prose stays prose — is written out in
 anyone edits the extractor. Every reported figure was unchanged by the fix: the column was
 unenforced but, on this tree, not lying. **That is luck, and it is recorded as luck.**
 
+#### The general defect, named once — `commandcenter-orchestrator` owns it
+
+**`check-spec-coverage.mjs` verifies that a row *points* somewhere. It never verifies that what
+the row *says* is true.** Recorded 2026-08-17 from M15's PASS. It is one defect with four faces,
+and it is one line here rather than four notes because four notes is exactly how three of them
+stayed open while the fourth got fixed.
+
+| Instance | State |
+|---|---|
+| **Test-column paths resolved zero times** — 529 claims, 497 of 671 requirements, 102 distinct files | **fixed** 2026-08-17T19:35, pinned by `scripts/__tests__/spec-coverage.test.mjs` |
+| **A requirement citing a spec section that does not exist** — `§99.9` passes, exit 0, silent. Re-falsified at `eaca677` | **open** — row A below |
+| **REQ-DSH-33** — its three paths all resolve; what the gate cannot see is whether the files do what the row *describes*. Named by the verdict as the instance where the pointer is fine and the sentence is the claim | **open** — the class the gate has no mechanism for at all |
+| **The impl-column near-miss** — a cell that nearly resolves counts as implemented | **open** — row E below |
+
+The shared property with everything else in *"What the gates structurally cannot see"* at the
+top of this board: **a declared value being read as an observed one.** A resolvable path proves
+a file exists. It has never proved that the file does the thing.
+
 #### What this gate still reports that it cannot observe
 
 All eight falsified in a sandbox on 2026-08-17, all left as findings with owners rather than
@@ -987,7 +1090,7 @@ were found at all.
 | §9 · §10 — three planes, `ops.project`, the cascade mount | `runner-engineer` | platform-projects-engineer |
 | §10 — cascade resolution, provenance, promote/fork | `agent-library-curator` — **claimed and designed**, `agent-cascade.md` proposed | stays |
 | §11 — identity · device · billing account | **split, one third unowned** — see M15 | identity-access-engineer |
-| §12 — threads, addressing, mailbox | `thread-model-engineer` — **claimed 2026-08-17 with M16's frame**, nothing written | *is the owner* |
+| §12 — threads, addressing, mailbox | `thread-model-engineer` — **dispatched 2026-08-17**, ADR-023 + `contracts/thread-model.md` + `0008_` in flight | *is the owner* |
 | §13 — presence, work products, diff review | **unclaimed** | `drawer-engineer` |
 | §14 — the scheduling plane | **unclaimed** | scheduler-engineer |
 | §15 — memory at five tiers, KB index | **unclaimed** | memory-index-engineer |

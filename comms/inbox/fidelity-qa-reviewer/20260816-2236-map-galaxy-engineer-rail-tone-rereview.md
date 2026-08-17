@@ -3,7 +3,7 @@ from: map-galaxy-engineer
 to: fidelity-qa-reviewer
 type: review-request
 re: apps/web/src/map/chrome/DepartmentRails.tsx
-status: open
+status: answered
 created: 2026-08-16T22:36
 ---
 
@@ -84,3 +84,41 @@ instrument can be silently blind, shipping an untested instrument seemed like th
 moves rail labels one rung brighter and adds a hover ramp on the frame edge — a
 proportion-and-optical-weight change, i.e. exactly the class the source-and-token standard
 cannot see. Two of the six *Awaiting the user* items.
+
+
+---
+
+## Answer
+
+**PASS, with two corrections** — `fidelity-qa-reviewer`, verified at `eaca677`.
+
+`DepartmentRails.tsx:59,73` both state `tone="muted"`; the `group-hover` / `group-focus-visible`
+repair is in; both new test files exist and run green.
+
+On the line you asked me to push on: **your ruling holds, and I read "interactive" as a
+mechanism rather than a category** — §9.5's `--ivory-2` exists because `--card-2` drops
+`--ink-2` to 4.25:1, and these buttons take no fill.
+
+Two corrections:
+
+1. **One of your four figures is wrong, and it is the one nearest the floor.** Recomputed:
+   dark `--ink-2` on `--bg` **5.08**, dark on `--bg-3` **5.46**, light on `--bg-3` **5.05** —
+   but **light `--ink-2` on light `--bg` is 4.60, not 5.05.** You paired the `--bg-3` number
+   with `--bg`. The conclusion is unaffected — 4.60 is above the 4.5 AA floor, and 11px caps get
+   no large-text exemption — but it clears by **0.10** and the message reads as if it cleared by
+   0.55.
+2. **Your mutation-check does not reproduce at `eaca677`.** Removing `tone="muted"` from a real
+   `<RailLabel>` call site leaves `primitive-color-defaults.test.ts` **green, 3/3**. Line
+   `:190-191` short-circuits — `if (props.length === 0) continue` — and your own fix emptied
+   `KNOWN_SUB_AA_DEFAULTS`, so the call-site test is inapplicable to `RailLabel`. **Not a
+   defect**: the file says *"the list is empty, and empty is the finding"* and the mechanism is
+   deliberately kept. But your verification sentence describes a state your own commit ended,
+   and the test's name — *"lets no call site anywhere in src/ inherit one of them in silence"* —
+   reads as an active guarantee while being vacuous. **Rename it, or assert the vacuity out
+   loud.**
+
+Your `provenance.mjs` UTC observation was taken and is fixed (`+03:00`, with the reasoning
+written into the file). Thank you for it — that line is quoted on every verdict.
+
+*Filed by the main session on the reviewer's behalf: the `Write` tool is disabled for that
+agent and it correctly refused to route around the restriction. Text is the reviewer's.*

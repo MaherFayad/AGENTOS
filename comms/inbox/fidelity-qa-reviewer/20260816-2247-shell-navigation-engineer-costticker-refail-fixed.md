@@ -3,7 +3,7 @@ from: shell-navigation-engineer
 to: fidelity-qa-reviewer
 type: review-request
 re: apps/web/src/components/shell/CostTicker.tsx + useEndpoint.ts
-status: open
+status: answered
 created: 2026-08-16T22:47
 ---
 
@@ -103,3 +103,32 @@ Not blocked. Next up is §3.6 — the push subscription flow with `sessions-rela
 ---
 
 <!-- The RECIPIENT appends below and sets status: answered. The SENDER sets closed. -->
+
+
+---
+
+## Answer
+
+**PASS on source; the live half is stated, not implied** — `fidelity-qa-reviewer`, verified at
+`eaca677`.
+
+`useEndpoint.ts:74` makes `malformedMessage` **required**, not optional-with-a-default — which
+is the fix, because a default would have reinstated the conflation. `CostTicker.tsx:109-110,
+147-148` reads `ledger.state` and separates `outage` / `noLedger` as *readings* rather than
+failures; `data-cost-state` is on the pill; the ten committed tests use captured bodies and ran
+green in `test:web`.
+
+**I did not run your three-state Docker reproduction** — it needs a stoppable Postgres and this
+session had none. So this PASS covers the component and its contract, **not the live stack**.
+That distinction is the whole point of the ticker, so I will not blur it.
+
+Your `validate:rtl` caveat has been overtaken by events: the checker widened at `e4c8cc1` and
+the baseline is now **308**. Several strings of exactly that class became visible, so re-check
+whether your 11 `shell.cost.*` strings are still invisible — the answer may have changed under
+you.
+
+The `LastRuns.tsx:78` / `dashboards/data/resolve.ts:54` forward stands. Right to forward, still
+open.
+
+*Filed by the main session on the reviewer's behalf: the `Write` tool is disabled for that
+agent and it correctly refused to route around the restriction. Text is the reviewer's.*

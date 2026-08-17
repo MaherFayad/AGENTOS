@@ -1,0 +1,72 @@
+M15 RE-GATE — fidelity-qa-reviewer — tree eaca677 clean — VERDICT: PASS (source-and-token)
+
+GATES (all run by me at eaca677)
+npm test            162 / 161 pass / 0 fail / 1 skip   exit 0
+test:runner         179 / 176 / 0 / 3 skip             exit 0
+test:web            vitest 92/0 + node:test both       exit 0
+typecheck (all 3)   clean                              exit 0
+tsc web / runner    clean / clean                      exit 0 / 0
+check-tokens        0 violations / 311 files / 2 exempt exit 0
+check-rtl --gate    holding, baseline 308              exit 0
+validate:coverage   0 FAIL, 12 warns, 692 / 654 (95%)  exit 0
+validate:frontmatter 12/12 valid                       exit 0
+validate:comms      15 agents, 270 msgs, 1 warn        exit 0
+rtl-pdpl.test.mjs   31/31                              exit 0
+spec-coverage.test.mjs 7/7                             exit 0
+
+TOKEN BANNER VERBATIM
+Token discipline
+  scanned at        2026-08-17 20:34 +03:00 · eaca677 · clean
+  files scanned     311
+  violations        0
+  exemptions        2
+
+3 SKIPPED RUNNER TESTS (unchanged, all on DATABASE_URL is not set):
+  an unscoped read raises rather than returning rows
+  every SQL statement the runner can emit is accepted by a real Postgres
+  the write path and the prune plan cleanly against a real Postgres
+
+ITEM 1 EMPIRICAL (my own runner, pid 15600, killed after)
+  /api/status: runnerConfigured:false activeRuns:0 ledger.state:absent projects.count:1
+  GET /api/p/agentos/agents/sales/account-enrichment ->
+    sourceRef "project:agents/sales/account-enrichment/SKILL.md@sha256:db02d09ac428..."
+  through normalizeAgentDoc + drawerProvenance ->
+    {"kind":"known","state":"project","source":{layer:"project",path:"...",digest:"sha256:db02d09..."}}
+  FALSIFY A frontmatter-only sourceRef  -> doc.sourceRef === null   (envelope-only enforced)
+  FALSIFY B detail global vs run override -> state 'global'          (order is a preference)
+  FALSIFY C detail 'garbage' + valid run  -> state 'project'         (no shadowing)
+
+ITEM 2 RTL SPLIT AUDIT (worktree at 8e77a23)
+  old lens / old tree  261   (= recorded baseline, reproduced)
+  new lens / old tree  316   (= 261 + 55 newly visible)
+  new lens / new tree  308   (= 316 - 8 paid)
+  PER-FINDING DIFF: added 0, removed 8, all ProjectSwitcher.tsx  -> 0 new debt CONFIRMED
+  MACHINE_CONTEXT probe (4 string literals, both checkers):
+    OLD silent on lines 1 and 3 ('...scoped to it.', '...to the archive now.')
+    NEW flags all four. className / href still silent.
+  zero-interp template aria-label={`...`} -> FAIL (was silent)
+  delete 2 Arabic plural lines: tsc exit 0, check-rtl --gate exit 1 catalogue-integrity
+
+ITEM 3a COVERAGE
+  Test cell -> NoSuchFile.test.tsx : FAIL, exit 1   (was exit 0)
+  Test cell -> "— (owed)"          : warn
+  spec cite -> §99.9               : SILENT, exit 0  (declared blind spot CONFIRMED REAL)
+
+FOLLOW-UPS
+  1 comms/specs/observability.md:242 false at eaca677 (artefacts DO carry project since 7b6401d)
+  2 ProjectSwitcher.tsx:243 renders raw ProjectStatus enum paused/archived untranslated (latent)
+  3 provenance.mjs:112 dirty scope excludes the instrument -> printed "clean" on modified checker
+  4 scripts/check-rtl.mjs has 2 NUL bytes (38692, 38730) -> ripgrep treats as binary, skips it
+
+BACKLOG VERIFIED FACTS
+  M0/ADR-009: 12 agents all status:draft, 12/12 wired_into workspace,
+              company-interview wired_into:[workspace], live count 0,
+              /metrics/live -> 503 metrics_unavailable (refuses, does not zero)
+  M1 rails:   contrast recomputed: dark ink-2/bg 5.08, dark ink-2/bg-3 5.46,
+              light ink-2/bg 4.60 (NOT 5.05), light ink-2/bg-3 5.05
+              MUTATION: removing tone="muted" from a real call site leaves guard GREEN
+              (primitive-color-defaults.test.ts:190-191 `if (props.length === 0) continue`)
+  M1 ticker:  useEndpoint.ts:74 malformedMessage required; CostTicker parses ledger.state
+              (outage/noLedger at :147-148). Live docker 3-state repro NOT run.
+  M6:         provenance.test.mjs 10/10; banner carries +03:00; RailLabel default muted;
+              BranchLabels.tsx:31-32 role=button + aria-label -> sublabels out of a11y tree
