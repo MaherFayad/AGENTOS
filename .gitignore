@@ -5,6 +5,8 @@ node_modules/
 # `scripts/smoke-routes.mjs` boots its own dev server (ADR-035) and must not write the
 # developer's `.next` out from under a running one.
 .next-smoke/
+# `scripts/check-page-errors.mjs` boots a third one, for the same reason.
+.next-pagecheck/
 dist/
 build/
 out/

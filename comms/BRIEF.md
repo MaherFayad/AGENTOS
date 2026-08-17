@@ -91,9 +91,12 @@ nothing red.
 **`unknown` is not `zero`, and an aggregate over a failed read is `unknown`.** A failed
 load dimmed seven CHART tabs, and dimming is a claim.
 
-**No gate loads a page.** `tsc`, three test suites, every validator *and* `next build` all
-passed while the app white-screened. `npm run validate:barrel` and `npm run smoke` exist
-now; they are the only instruments that observe the artifact rather than the source.
+**A gate loads a page now — it did not, and that is how a dead app passed everything.**
+`tsc`, three suites, every validator *and* `next build` were green while the app
+white-screened. `validate:barrel` and `smoke` observe the artifact; **`smoke:browser`
+(`check-page-errors.mjs`) runs it in Chrome** and fails on any uncaught throw, `console.error`
+or browser error. Our own `/api/` 5xx is reported, not fatal — the ledger is honestly absent.
+The 1440px side-by-side is still not runnable: it needs **reference frames**, not a browser.
 
 ---
 
@@ -127,9 +130,11 @@ each other. Read narrowly, write narrowly.
 
 ## Gates
 
-`npm run verify` runs them all. Individually: `test`, `test:web`, `test:runner`,
+`npm run verify` runs the source gates; **`npm run verify:runtime` adds the two that observe
+a running app** (`smoke`, `smoke:browser`). Individually: `test`, `test:web`, `test:runner`,
 `typecheck`, `validate:barrel`, `validate:coverage`, `validate:tokens`, `validate:rtl:gate`,
-`validate:frontmatter`, `validate:comms`, `smoke`.
+`validate:frontmatter`, `validate:comms`. `smoke:browser:falsify` proves the browser gate
+can still go red; run it if you ever doubt a green.
 
 Run them on a **still tree**. Several reports have been invalidated by another agent
 landing mid-run. Quote `check-tokens`'s provenance banner verbatim when citing token
