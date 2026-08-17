@@ -261,3 +261,83 @@ below.
 None of the three blocks M15 being **complete**. All three block calling it **validated**,
 which is the distinction BOARD's own header draws and which this amendment now applies
 per-mechanism rather than to the milestone as a whole.
+
+---
+
+## Second pass, 2026-08-17T17:57 — the audit of the code as landed
+
+Provenance: **scanned at 2026-08-17 17:57 +03:00 · `1e5b5d7` · 33 uncommitted.**
+Full record: `comms/handoffs/M15-rtl-arabic-pdpl-specialist-cross-project-isolation.md`.
+
+The verdict above is **not withdrawn and not upgraded.** It is still structural. What this
+pass adds is one correction to my own grading, one new finding, one fix, and the retirement
+of Condition B.
+
+### The correction — I graded five properties from one side
+
+Rows 3, 4, 5 (and by extension 6) were graded **ARMED** on the strength of the schema: the
+rollup primary key, the outputs unique index, `agent_ref NOT NULL` and its CHECK, the FKs.
+All of that was true about the *table*. **I never read the writer.**
+
+`db/ledger.ts` `recordRun` inserted 26 columns and named none of `project_id`, `agent_ref`,
+`source_ref`, `account_source` — all four `NOT NULL` in 0005 with no default. `writeOutput`'s
+`ON CONFLICT (kind, entity_key)` still targeted the index 0005 dropped. The first real run
+against a migrated database would have failed on a NOT NULL violation, and the ledger would
+have stayed empty **in exactly the way an honest empty ledger is empty.**
+
+Both were fixed by `runner-engineer` in the working tree while this audit ran, and the fix is
+the right one — `assertAttributed` refuses rather than defaulting, for the reason a default
+would have been worse than a missing row: *"a row that looks complete and is half invented is
+worse than a row that never existed, because it is quotable."*
+
+The bug is theirs and is closed. **The grading error is mine and is the part worth keeping:**
+
+> **Grade a constraint from both sides. A `NOT NULL` nobody can satisfy and a `NOT NULL` that
+> holds are identical in a schema dump, and only one of them has a working product behind it.**
+
+This is the same disease as row 8 in the first amendment, one plane over. There I caught a
+mechanism that was written and switched off. Here I missed a mechanism that was written,
+switched on, and unreachable from the only code that would ever meet it. Both read as ARMED
+from where I was standing.
+
+### The new finding — five read routes resolve the project and discard it
+
+`graph` · `agentsIndex` · `agent` · `panels` · `panel` call `projectOf(…)` and then read
+`config.agentsDir` / `config.panelsDir` / `config.graphFile`. The **run** path does not:
+`resolveForDispatch` → `cascadeRoots(config, project)`. So the library plane is
+project-derived at dispatch and coordinator-derived on every read behind MAP, CHART and
+DASHBOARDS. Unreachable with one mount, and that is the point — the isolation of those five
+routes is a **coincidence between two variables**, not a derivation from one. Filed to
+`runner-engineer`, not fixed: five signatures across three of their modules plus a real
+design question about `graphFile` being one artifact per coordinator.
+
+### Condition B is retired — the brain write-back is fixed
+
+`lib/brain.ts` + `lib/runService.ts`. The gate keys on `agent_ref` **derived from the project
+being written to**, the target is `project.companyFile`, and a write to the global tier
+throws rather than returning `null`. Four structural tests, none needing Postgres, an API key
+or a second library. `readCompanyBrain(project)` on the read side too, because §3.3 injects on
+every invocation and a config-resolved tier is the same leak from the other direction.
+
+**Q8b is answered from my side: two tiers, project-first, no global fallback, and the global
+tier has no agent write path at all.** The mount half stays `runner-engineer`'s.
+
+### PDPL rule 4, graded per plane
+
+Enforceable in Operations (one layer inert) · enforceable at dispatch and coincidental on
+reads in the Library plane · enforceable in the brain as of today · **merely stateable in the
+trace store.** No span carries a project attribute, which also leaves **rule 7, right to
+erasure**, with no handle to search a trace store on. Filed to `observability-engineer`.
+
+### Conditions on M15's PASS — still three, one replaced
+
+- **A. The non-superuser Postgres role.** Unchanged, `infra-compose-engineer`.
+- **B. ~~The brain write-back becomes project-aware.~~ Done.** Replaced by:
+  **B′. The five library-plane read routes take `MountedProject`** (`runner-engineer`), or a
+  written decision that `readGraph` refuses rather than serves under a second mount.
+- **C. Migrations 0005–0007 applied to a real Postgres, applied schema read back.** Unchanged,
+  and now sharper: the *writer* changed tonight and is uncommitted, so **the writer and the
+  schema have never met** — and `db/__tests__/sql-executes.test.ts`, the only instrument that
+  could introduce them, does not currently compile.
+
+None blocks M15 being **complete**. All three block calling it **validated**.

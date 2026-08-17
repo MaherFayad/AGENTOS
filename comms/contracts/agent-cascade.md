@@ -1,43 +1,61 @@
-# WORKING DRAFT — The agent cascade
+# CONTRACT — The agent cascade
 
-**Owner:** `agent-library-curator` · **Status:** **draft of [ADR-014](../decisions/ADR-014-agent-cascade-resolution.md),
-not a contract** · **Milestone:** M15 (P1)
+**Owner:** `agent-library-curator` · **Status:** **accepted**
+([ADR-014](../decisions/ADR-014-agent-cascade-resolution.md), accepted 2026-08-17) ·
+**Milestone:** M15 (P1)
 **Source:** `AGENTOS-V2-PLAN.md` Plan §9, §10, §19, §21 risks 8–9, §22, §23.12 —
-*a plan that amends the spec of record, not spec* ([ADR-012](../decisions/ADR-012-part-two-standing-and-spec-coverage.md))
+*a plan that amends the spec of record, not spec* ([ADR-013](../decisions/ADR-013-part-two-standing-and-spec-coverage.md))
 **Answers:** [`project-scoping.md`](project-scoping.md) §5.2 **Q9–Q15** — see §10
 **Depends on:** [`frontmatter-schema.md`](frontmatter-schema.md) ·
 [ADR-001](../decisions/ADR-001-department-taxonomy.md) ·
 [ADR-009](../decisions/ADR-009-artifact-write-capability.md)
 
-> This is a **design proposal, not an implementation**. No feature code exists for any rule
-> below. Every "must" here names the thing that enforces it, because tonight proved twice
-> that a sentence which names no enforcer enforces nothing.
+> **Accepted ≠ enforced. Read [§11](#11-mechanism-state--what-is-built-and-what-is-a-sentence)
+> before you cite any rule below as a guarantee.** Every "must" here names the thing that
+> enforces it, and §11 says whether that thing exists yet. Three rules are enforced in
+> `apps/runner/src/lib/cascade.ts` at dispatch and are proved by a test that asserts on the
+> allowlist a session actually received. Most of the rest are specified and unbuilt, with an
+> owner each. The one thing this contract may never become is a document claiming a boundary
+> it does not have — that mistake has been made twice in this repo and cost a session each
+> time.
 
 ---
 
-## 0. Where this lives — reconciled with the orchestrator's skeleton
+## 0. Where this lives — settled
 
-`comms/contracts/project-scoping.md` landed while this was being drafted. **Its routing is
-accepted, in full, and it is the reason this file is a draft rather than a contract.** Three
-things it settles:
+**This file is a contract and it stays.** The earlier text here said the opposite: that on
+acceptance everything below would merge into `frontmatter-schema.md` and this file would be
+deleted. It is corrected in place, with the correction visible, because a reader who saw the
+old sentence needs to know it was reversed rather than to wonder which version they remember.
 
-1. **The cascade is mine.** §5.2 assigns Q9–Q15 to `agent-library-curator`. My own claim was
-   the same; there is nothing to arbitrate.
-2. **Its home is `frontmatter-schema.md`, not a new contract.** §4: *"Resolution semantics are
-   defined in `comms/contracts/frontmatter-schema.md`, owned by `agent-library-curator`, and are
-   deliberately not restated here… Two documents describing one resolution algorithm will drift,
-   and the drift will be invisible until a run picks the wrong agent."* That is correct and I am
-   not going to create the third document it warns about.
-3. **The ADR is 014**, not the 012 this was drafted as (012 is taken, and accepted).
+What happened is worth one line, since it is the same failure the rest of this contract is
+built to prevent: I reconciled to a line in `project-scoping.md` §4 that its author had
+already deleted, and the author had meanwhile moved to my position. **Two agents reading each
+other's stale drafts each adopted the other's abandoned view.** Ruled on the merits by
+`commandcenter-orchestrator` (answered 2026-08-16T22:48) and recorded in
+[ADR-013](../decisions/ADR-013-part-two-standing-and-spec-coverage.md), which accepts this
+file's boundary verbatim.
 
-**So: on acceptance of ADR-014, everything below merges into `frontmatter-schema.md` and this
-file is deleted.** It exists separately only while ADR-014 is `proposed`, because amending an
-accepted contract on the strength of a proposed decision is the same mistake pointing the other
-way. Until then, **cite ADR-014, not this file.**
+**The split, which is the ruling:**
 
-The division of labour, restated so no one has to reconcile two headers:
-`project-scoping.md` owns the **mount** — which roots are read, in what order, for which
-project. This owns the **resolution** — what happens once they are read.
+| Subject | Contract | Why there |
+|---|---|---|
+| What one file's fields mean; `forked_from`; `status` authorable only as `draft` | [`frontmatter-schema.md`](frontmatter-schema.md) | per-file schema |
+| Which of three files wins; the four field classes; promote/fork/provenance; the three validator passes | **this file** | cross-layer semantics |
+| Which roots are mounted, in what order, for which project | [`project-scoping.md`](project-scoping.md) | the mount, not the resolution |
+
+Two contracts about two subjects is not the third-document warning §4 was making — that
+warning was about **one algorithm described twice**, and there is exactly one description of
+the resolution algorithm in this repo: §1 below.
+
+Three things `project-scoping.md` settles and this file does not re-litigate:
+
+1. **The cascade is mine.** §5.2 assigned Q9–Q15 to `agent-library-curator`; the questions
+   have since been deleted from that file rather than marked answered, and §5.2 is a pointer
+   here. A question living in two contracts is one contract with two readings, and the second
+   reading is the one that gets built.
+2. **The mount is theirs.** Which roots are read, in what order, for which project.
+3. **The ADR is 014.** Drafted as 012, which was raced and is now deliberately vacant.
 
 ---
 
@@ -196,10 +214,19 @@ cannot inherit a halo and a new tool in one commit.
 1. **The validator**, on the resolved agent, in the coordinator's watcher (§7.2, invariant 9).
    This is the fast feedback loop and it is not a security boundary.
 2. **The runner**, at dispatch: it re-derives the ceiling from the introducing layer's file and
-   refuses any resolved `wired_into` that exceeds it. If the runner cannot read the introducing
-   layer — global library unfetched, mount unavailable — it **fails closed** with
-   `cascade_unresolved` (422). It does not fall back to the local file's list. This is the
-   mechanism; the validator is the courtesy.
+   refuses any resolved `wired_into` that exceeds it with **`capability_widened` (403)**. This
+   is the mechanism; the validator is the courtesy. **Built** —
+   `apps/runner/src/lib/cascade.ts`, `resolveForDispatch`, which is the only way the run
+   pipeline may obtain a runnable agent: the `AgentRecord` does not exist until
+   `assertNarrowsDownward` has returned, so a future caller cannot resolve without asserting.
+
+**Two kinds of missing, and collapsing them breaks something either way.** This distinction is
+not in the proposed text; it was found while building and it belongs in the contract:
+
+| The introducing layer is… | Answer | Why not the other one |
+|---|---|---|
+| configured but **unreadable** — permissions, a half-fetched mount | **`cascade_unresolved` (422). Nothing runs.** | Reading "cannot open" as "does not define this agent" silently promotes the local file to introducing layer and hands it *its own* ceiling. That is the widening this rule exists to stop, arrived at through an I/O error. |
+| **not configured at all** — no global library on this host | **Not an error.** The project layer is then the introducing layer and sets the ceiling. | There is no global library repo yet (BOARD, M15 scope), so erroring here breaks every machine; and trusting a local list *because* the global one is absent is the same bug as the row above. Same disease as `unknown` vs `zero`, one plane up. |
 
 **Explicitly not a mechanism:** the note in `connectors.json`, the sentence in this contract,
 and the reviewer's attention. Tonight's `workspace` confinement bug was a code comment that
@@ -208,6 +235,14 @@ prove it. The equivalent test here is a runner test that mounts a fixture projec
 declares `[shell]` over an L0 ceiling of `[workspace]`, dispatches, and asserts the process
 never receives `Bash` — asserting on the **allowlist the session actually got**, not on the
 validator's opinion of the file.
+
+**That test exists**, and `commandcenter-orchestrator` made it a condition of M15's PASS
+rather than a suggestion: `apps/runner/src/lib/__tests__/cascade-ceiling.test.ts`, six cases,
+driving the real dispatch path with a session factory that records `options.allowedTools`.
+It is the one structural proof of a no-error-message property that was obtainable **before**
+`RUNNER_ANTHROPIC_API_KEY` lands. What it proves is narrow and worth stating exactly: *whatever
+the cascade picks, its tool list cannot exceed the introducing layer's.* It does not prove the
+cascade picks the agent a human meant — that has no error message and needs a real run.
 
 ### Class D — egress. Project-scoped, never cascaded.
 
@@ -244,7 +279,55 @@ Owner: `runner-engineer` (registry, allowlist) with `identity-access-engineer` (
 Named here because it is the cascade's sharpest cross-project edge and belongs written down
 before either builds.
 
-### 3.2 The field-class table, for reference
+### 3.2 Who may *write* into a layer — the classes are about resolution, not the write path
+
+Added 2026-08-17, on a question from `runner-engineer` that the field classes did not answer
+and should have. `POST /api/schedule` writes `schedule:` into a `SKILL.md` and commits it, and
+it writes to **the project layer** — which is today always the winner, because this repo has no
+global library and no `_overrides/`. The day an override wins, the runner would write a cron
+into **a file that does not run**, and the clock badge — which reads frontmatter — would render
+it. One identifier, two readings, in the scheduling plane.
+
+`schedule` is Class B, and Class B says a lower layer may freely *declare* a different value.
+It says nothing about who may author one on a human's behalf. **These are different questions
+and only the first was answered.**
+
+> **Rule: a write into the library plane must name the layer it is writing to, and refuse when
+> that layer is not the winner — naming the winning file in the refusal.** It never writes to
+> a layer it did not resolve, and it never writes to L0 at all.
+
+This is the general form; `schedule` is the first instance and the brain write-back (ADR-007)
+is the second. Three reasons, and the third is the one that decided it:
+
+1. **Writing to a non-winning layer manufactures a value that never runs.** Under whole-file
+   replacement (§1.1) there is no merge to carry it upward. The file would hold a cron, the
+   resolved agent would not have one, and both readings would be defensible.
+2. **Writing to the winner is not always available.** If the winner is L0 the coordinator
+   would be committing to the global library, and §6.3 forbids that outright — a coordinator
+   that can push to L0 can grant every project a new agent without review. Promotion is a pull
+   request a human merges, and a schedule endpoint must not become a second door into it.
+3. **Writing to a winning L2 is *legal* and still refused today, for a reason that is mine to
+   fix rather than theirs.** `agents/_overrides/**` is invisible to every enumerator in this
+   repo — MAP, CHART and the validator all skip `_`-prefixed folders (§11). A cron written
+   there would be a schedule no view can show and no CI run can check. **Refusing costs a
+   manual edit; permitting costs a scheduled run nobody can see.**
+
+**So, concretely, until the resolver lands:** write when the project layer is the winner;
+refuse otherwise with the winning file named. This is `runner-engineer`'s option 2, adopted —
+with the third reason above, which strengthens it from *"the safest of three"* to *"the only
+one with no invisible outcome"*. When the resolver lands and `_overrides/**` is validated and
+rendered, the rule relaxes to *write to the winner, refuse at L0*, and that relaxation is a
+one-line change in the same place.
+
+**Direction of travel, so nobody builds the permanent version of the interim answer:**
+`schedule` in frontmatter cannot survive N projects. One L0 file cannot carry four projects'
+crons, and the moment a global agent is scheduled differently per project the value belongs in
+the operations plane, not in git. That is `ops.schedule` (`Plan §14`, M18, `scheduler-engineer`),
+and when it lands the frontmatter field becomes a default that seeds a row — not a thing an API
+writes back into a library. **Do not build a richer write path into `agents/**` in the
+meantime.**
+
+### 3.3 The field-class table, for reference
 
 | Field | Class | Lower layer may… |
 |---|---|---|
@@ -476,58 +559,126 @@ tails is the same defect class as a schedule that fails at 03:00 (§21 risk 6).
 
 ---
 
-## 8. Open — routed, not answered
+## 8. Routed — three answered, one open
 
-### 8.1 One brain or N? → `rtl-arabic-pdpl-specialist`
+Everything in this section was routed to an owner rather than decided here. Three have come
+back. The fourth is out of M15 by BOARD ruling and is an ADR-001 question, not a cascade one.
 
-§3.3 injects `COMPANY.md` into every invocation and it is global today. With N projects this
-is a PDPL question before it is an engineering one, `COMPANY.md`'s own block says client data
-does not cross clients, and §22 gives that agent a **mandatory** sign-off on cross-project
-isolation. **This contract does not answer it.** Routed:
-`comms/inbox/rtl-arabic-pdpl-specialist/20260816-2340-agent-library-curator-company-md-cross-project.md`.
+### 8.1 One brain or N? — **ruled, `rtl-arabic-pdpl-specialist`, 2026-08-17**
 
-Until they rule, this contract assumes nothing about brain scoping and no rule above depends
-on the answer.
+§3.3 injects `COMPANY.md` into every invocation and it is global today. With N projects that
+is a PDPL question before it is an engineering one, and `Plan §22` gives that agent a
+**mandatory** sign-off on cross-project isolation, so it was routed rather than answered here
+(`comms/inbox/rtl-arabic-pdpl-specialist/20260816-2340-agent-library-curator-company-md-cross-project.md`).
 
-### 8.2 The engineering department — and two documents that already disagree
+**The ruling: two tiers, and the split is drawn by a test rather than by taste.**
 
-Plan §10 adds an eighth department, `engineering`, per project, holding `.claude/agents/**`.
-**`project-scoping.md` invariant 6 says seven** ("every project gets the same seven departments
-(ADR-001)"). Both cite Plan §10. That is a live contradiction between an accepted invariant and
-the plan it is drawn from, and it is better found now than during implementation.
+> Global holds what is true about the operator regardless of who the client is. Project holds
+> everything else. **If a fact would be wrong or embarrassing in another client's prompt, it is
+> project-tier — and if you have to think about it, it is project-tier.**
 
-Either way it is an ADR-001 amendment (seven canonical branches, §2.1; a tab bar built for
-seven, §2.6.1) touching the MAP's radial force groups, the CHART tab bar, `clusters.json` and
-a department enum with five consumers. Mine to file. **Not filed** — it needs
-`map-galaxy-engineer` and `chart-matrix-engineer` to price the layout and tab-bar cost, and
-M15's scope to decide whether it is in P1 at all. Raised with `commandcenter-orchestrator`.
+Against `COMPANY.md`'s twenty questions: **§5 Voice** and **§7 Data handling** are global;
+§1 Identity, §2 Offers, §3 ICP, §4 Pricing, §6 Red lines, §8 Operations and §9 Sources are
+project. §1 is the one that looks global and is not — *who we are as presented to a client* is
+positioning, and positioning is per-client. The ruling is written into `company/COMPANY.md` §7
+as rule 9, which is the only place that binds everything: §3.3 injects that file into every
+run, so a rule inside it is inherited without anyone importing anything.
 
-### 8.3 ADR numbering in the plan
+One global brain was rejected as a **breach, not a risk** — string concatenation puts client
+A's pricing and red lines into every prompt of every run for client B. N copies were rejected
+too, and that reason is the less obvious one: *a safety rule copied N times is a safety rule
+with N versions, and the weakest one is the one that governs.*
 
-`AGENTOS-V2-PLAN.md` §3 and §18 reuse **ADR-009**, **ADR-010** and **ADR-011**, all three
-already accepted in `comms/decisions/` for unrelated decisions, and reserve **ADR-016** for a
-project-scoping ADR the real sequence has now split across **013** (`ops.project`, `runner-engineer`),
-**014** (this cascade) and **015** (identity). One reconciling edit to the plan, before anyone
-cites a plan number in a commit message. Raised with `commandcenter-orchestrator`; not fixable
-from here.
+**What this contract owes it — the sibling of Class D, requested by them and worded here:**
 
-### 8.4 Are `panels/*.json` cascaded too? — `runner-engineer` (`project-scoping.md` Q8)
+> **A `company/COMPANY.md` in the global layer may contain only the sections on the global
+> allowlist — `Voice`, `Data handling`. Any other `## ` heading at the global layer is a
+> validator error.**
 
-Not answered here, and **nothing above should be read as answering it.** Every rule in this
-document is written about `agents/**` specifically; the field classes, the monotonicity rule and
-the `status` derivation all depend on properties panels do not have. If panels do cascade, they
-need their own resolution rules from `dashboards-engineer` and ADR-004's six Command Centers.
+Section-level, not content-level, deliberately and for the same reason Class D scopes a
+*field* rather than a target list: *"does this sentence name a client"* is undecidable and a
+checker attempting it is wrong in both directions, while *"is this file carrying a §4 Pricing
+block it is not allowed to have"* is a heading match that fails in the safe direction.
+
+**Mechanism state: not built.** It needs pass 1's `--layer` flag (§7.1), which does not exist
+— §11. Two things carry the rule meanwhile, and neither is this document: the global tier has
+**no write path** (ADR-007 gates brain write-back on the interview agent, which is
+client-facing and must write only the project tier), and rule 9 lives inside the file that is
+injected into every run.
+
+*Not adopted, and named so nobody adds it thinking it was implied:* a redaction pass at
+injection. Redaction finds names, emails, IBANs and national IDs; it does not find *"we price
+the retainer at 18k for this account"*, which is client-identifying with no PII token in it. It
+would supply the feeling of a boundary without the boundary.
+
+### 8.2 The engineering department — **still open, out of M15, and not a cascade question**
+
+Plan §10 adds an eighth department, `engineering`, per project, holding `.claude/agents/**`,
+one sentence after saying *"the same seven departments"*.
+
+**The contradiction this section was filed to report is fixed.** `project-scoping.md`
+invariant 6 quoted only the first half; `commandcenter-orchestrator` corrected the invariant
+in place, visibly, and ruled the eighth department **out of M15**. What remains is an
+**ADR-001 amendment** — seven canonical branches (§2.1), a tab bar built for seven (§2.6.1),
+the MAP's radial force groups, `clusters.json`, and a department enum with five consumers,
+plus a frontmatter adapter, since Claude Code frontmatter and Command Center frontmatter are
+not the same schema (`Plan §3`).
+
+**It does not block anything in this contract, and the reason is structural rather than
+convenient: no rule here counts departments.** Resolution is by `(department, slug)` over
+whatever set `department` ranges over; adding an eighth member changes no decision in ADR-014.
+It blocks ADR-001, which is a different decision with different consumers.
+
+Mine to file. **Blocked on a price, and the request is now dated rather than sitting with me:**
+`map-galaxy-engineer` (radial force groups, §2.1–2.2) and `chart-matrix-engineer` (the §2.6.1
+tab bar) were asked on 2026-08-17 what an eighth branch costs their surfaces
+(`comms/inbox/map-galaxy-engineer/20260817-…-agent-library-curator-eighth-department-price.md`,
+same to `chart-matrix-engineer`). The ADR-001 amendment is written when both answer.
+
+**The cheap half is already bought:** M15 bakes no `7` into anything project-shaped — no
+`CHECK (department IN (…))`, no literal `7` in `0005_project_axis.sql`, and a test in
+`project-id.test.ts` that strips SQL comments before asserting it, because a test matching its
+own documentation is the purest form of the mistake this repo keeps auditing for.
+
+### 8.3 ADR numbering in the plan — **resolved**
+
+`AGENTOS-V2-PLAN.md` §3 and §18 reuse **ADR-009**, **ADR-010** and **ADR-011**, all already
+accepted here for unrelated decisions, and §18 reserves "ADR-016" for content the real sequence
+split across 014 and 015. Ruled in ADR-013's 2026-08-17 amendment: **filed ADRs keep their
+numbers; the plan's are re-allocated**, on the principle *allocate against the side with no
+dependents*. The concordance is [`decisions/README.md`](../decisions/README.md) and the register
+is BOARD. **Translate a plan number through that file before citing it** — a citation followed
+literally lands on an unrelated decision. The plan itself is deliberately not edited; it is the
+user's file.
+
+### 8.4 Are `panels/*.json` cascaded too? — **answered by `runner-engineer`, ADR-015 Q8**
+
+**No, not in M15.** Panels are mounted per project; they are not resolved through layers.
+The reasoning is the one this section asked for: every rule in this document is written about
+`agents/**` specifically, and the field classes, the monotonicity rule and the `status`
+derivation all depend on properties panels do not have — a capability ceiling, an `agent_ref`,
+a status earned by runs. Symmetry is not a reason. If panels ever do cascade they need their
+own resolution rules from `dashboards-engineer` against ADR-004's six Command Centers, and
+§2.5.6's warning applies first: a seventh centre or a rename is a rail-order change in six
+files, and that multiplies by N projects.
 
 ---
 
-## 9. Changes this proposes to `frontmatter-schema.md`
+## 9. What landed in `frontmatter-schema.md`
 
-None yet — ADR-014 is `proposed`. On acceptance, that contract gains: `forked_from` as an
-optional field (L1/L2 only), the field-class table (§3.2), invariants 8–13, and an amendment to
-invariant 6 replacing "hand-set values get overwritten" with §5's hard rule — and this file is
-deleted (§0). All of it is additive to today's twelve agents: **zero existing files change.**
+ADR-014 is accepted, and its **per-file** half landed there on 2026-08-17 (§0's split — that
+contract describes one file, this one describes which of three files wins):
 
----
+- **`forked_from: {ref, commit, digest}`** — optional, legal only at L1/L2.
+- **Invariant 6 amended** — "hand-set values get overwritten by `agent-auditor`" becomes §5's
+  hard rule: `draft` is the only authorable `status`, anything else is a validator **error**,
+  and the resolved value comes from the ledger without the file being read.
+- The canonical example's `status:` changed from `live` to `draft`, because the example is the
+  thing people copy.
+
+The field-class table (§3.3) and invariants 8–13 stay **here**, because they are statements
+about layers rather than about a file. **Zero `agents/**` files changed:** all twelve are
+already `draft` and none declares `forked_from`.
 
 ## 10. `project-scoping.md` §5.2 — Q9 to Q15, answered
 
@@ -552,3 +703,45 @@ can confirm:** *"the cascade picks the right agent"* cannot be validated without
 runner test asserting on **the allowlist the session actually received** rather than on the
 validator's opinion of the file — a structural proof, available before the key lands, of the
 one property whose failure has no error message.
+
+---
+
+## 11. Mechanism state — what is built, and what is a sentence
+
+> This section is the reason acceptance is safe. Every row is a rule from this contract; the
+> **Mechanism** column is what would actually stop a violation today. A row marked *not built*
+> is a specification, and citing it as a guarantee is the exact error — a comment claiming a
+> boundary — that ADR-009's twelve-of-twelve finding and the `workspace` confinement bug both
+> were. Provenance: repo state at 2026-08-17, tree clean.
+
+| § | Rule | Mechanism today | State |
+|---|---|---|---|
+| §1, §1.1 | Resolve by `(department, slug)`, most-specific wins, **whole file, no merge** | `resolveThroughCascade` walks the three roots and returns one winner; nothing merges fields anywhere | **built** (dispatch only) |
+| §1.2 | A file that fails **pass-1 validation** is excluded and does not fall through | At dispatch: `frontmatterOf` throws `cascade_unresolved` on unparseable frontmatter, and `recordFromSource` throws `invalid_frontmatter` on a department/path mismatch. Unknown `wired_into` names refuse separately with `unknown_connector` (422). **But that is three checks, not pass 1.** A winning file with a bad `tier`, a bad `phase` or a missing `replaces` still dispatches: the runner refuses what would make the run wrong, and the contract says the *node* is excluded. The two agree only because nothing else has an opinion yet | **partial** |
+| §2 | `agent_ref = {project}/{department}/{slug}`; `source_ref` recorded per run | `makeAgentRef`, `sourceRef`; `CHECK agent_ref_ends_with_agent`; `source_ref NOT NULL`; both on the SSE `start` frame before any token | **built** |
+| §3 Class C | Capability narrows downward; widening is `capability_widened` (403) | `assertNarrowsDownward`, reachable only through `resolveForDispatch`; asserted in `cascade-ceiling.test.ts` on `options.allowedTools` — the allowlist the session actually received | **built — the one real boundary** |
+| §3 two-kinds-of-missing | unreadable ⇒ 422; unconfigured ⇒ the project layer is the ceiling | both cases in `readLayer`, both tested | **built** |
+| §3.1 | Names cascade, credentials never; no global fallback | the *absence* of a fallback: `ops.credential` is keyed `(project_id, connector)` with no nullable column to fall through to. **The test that seeds project A and dispatches in project B is not written** — it needs Postgres, not an API key | **partial** — `runner-engineer` |
+| §5 | `status` authorable only as `draft` | `validate-frontmatter.mjs` — **error** as of this commit. Feedback, not a boundary | **built (pass 1)** |
+| §5 | The resolver overwrites `status` from `ops.run_ledger` | **nothing.** No ledger-derived status exists; every view projects the file's value, which is `draft` for all twelve. Honest today (zero runs), and it is the half that makes the copper halo *possible* | **not built** — mine + `observability-engineer` |
+| §3 Class D | `deliver` illegal at L0 | **nothing.** Needs pass 1's `--layer` flag | **not built** — mine |
+| §8.1 | Global `COMPANY.md` limited to the section allowlist | **nothing.** Same `--layer` flag. Carried meanwhile by ADR-007's write gate and by rule 9 living inside the injected file | **not built** — mine |
+| §7.2 | Invariants 8, 9, 10, 12, 13 on the **resolved** agent | **nothing.** Pass 2 needs a resolver that sees three layers outside the runner | **not built** — mine |
+| §7.4, decision 9 | One resolver, `{resolved[], excluded[]}`, read by MAP · CHART · DASHBOARDS · drawer · runner | **nothing.** `resolveForDispatch` has exactly one caller, `runService.ts`. The views enumerate `agents/{department}/**` directly and **skip `_`-prefixed folders**, so they cannot see `agents/_overrides/**` at all | **not built** — mine, with `map-galaxy-engineer` + `shell-navigation-engineer` |
+| §4.3 | Fork drift states, rendered as the badge | `ProvenanceBadge` exists (`design-system-guardian`) and the drawer has the header slot; nothing computes a digest comparison | **not built** |
+| §6 | Promotion, its five preconditions, the PR | **nothing.** There is no global library repo to promote into | **not built** |
+
+**The two gaps that would bite first, stated plainly rather than left to be inferred:**
+
+1. **An `_overrides/` file today would run and be invisible.** The dispatch cascade honours
+   L2; the views skip it; **pass 1 never validates it**, since the validator also skips
+   `_`-prefixed folders. So an override could win a run while MAP, CHART and the drawer render
+   the L1 file's `wired_into` — a drawer displaying a tool list that is not what ran. It is
+   latent, not live: `agents/_overrides/` does not exist and no project has a second layer.
+   Anyone creating the first override file before the resolver lands is creating that bug.
+2. **The cascade has two real levels, not three.** There is no global library repo (BOARD, M15
+   scope), so for every agent in this repo the project layer *is* the introducing layer and
+   §3's ceiling check passes trivially. It is proved on fixtures, not on production layers.
+
+---
+

@@ -1,38 +1,40 @@
 # status — agent-library-curator
 
-**Updated:** 2026-08-16T23:58
-**Milestone:** M15 (P1) design · M0 Phase 0 items still open
+**Updated:** 2026-08-17T18:30
+**Milestone:** M15 (P1) cascade slice — handoff filed, awaiting review
 **State:** review
 
 ## Now
-Agent cascade designed — **ADR-014** (proposed) + `comms/contracts/agent-cascade.md`, which
-is its **working draft, not a third contract**: `project-scoping.md` §4 routes resolution
-semantics into `frontmatter-schema.md`, so on acceptance it merges there and is deleted.
-Their §5.2 **Q9–Q15 are all answered** (`agent-cascade.md` §10). Resolution by
-`(department, slug)`, most-specific wins, whole file, no merge. Identity is the mount point
-(`agent_ref = project/dept/slug`), so history and liveness never follow a fork or a
-promotion. `status` stops being authored — the resolver sets it from the ledger, which is how
-BOARD rule 9 survives a cascade that would otherwise copy a claim with the bytes. Capability
-narrows downward only. `deliver` illegal at the global layer. Zero code, zero `agents/**`
-changes.
+**ADR-014 is `accepted`** (2026-08-17), so BOARD's *"hard stop for MAP/CHART/DASHBOARDS"* is
+lifted. Moved on §8 coming back, not on M15 closing: 8.1 ruled by `rtl-arabic-pdpl-specialist`
+(two brain tiers), 8.3 by ADR-013, 8.4 by ADR-015 Q8; **8.2 (eighth department) stays open and
+does not block — no decision in ADR-014 counts departments.** The one thing that *did* block it
+was mine: the ADR's *Contract edits* still said `agent-cascade.md` merges and is **deleted** on
+acceptance, reversed by the orchestrator weeks of citations ago. Fixed visibly, not silently.
+`agent-cascade.md` is now a contract with **§11, a mechanism-state table** — accepted ≠ enforced,
+one owner per unbuilt row — and a new **§3.2**: a write into the library plane must name its
+layer and refuse when that layer is not the winner (`runner-engineer`'s schedule question).
+`frontmatter-schema.md` took the per-file half (`forked_from`, invariant 6). Validator: authored
+`status` ≠ `draft` is an **error**, verified against a planted violation.
 
 ## Blocked on
-Nothing of mine. **Nothing should be built on ADR-014 while it is `proposed`.**
-Routed, not blocking: one brain or N →
-`comms/inbox/rtl-arabic-pdpl-specialist/20260816-2340-…` · three arbitrable rules + the
-seven-vs-eight departments contradiction (`project-scoping.md` inv. 6 vs Plan §10) →
-`comms/inbox/commandcenter-orchestrator/20260816-2342-…` · dispatch-time ceiling check and two
-new refusals → `comms/inbox/runner-engineer/20260816-2344-…`.
-From M0: `RUNNER_ANTHROPIC_API_KEY` (human) blocks step 0.5's live pass.
+Nothing of mine. **Open with others:** eighth-department pricing — `chart-matrix-engineer`
+**answered** (under an hour; an eighth tab fits at 1440px, estimated not measured),
+`map-galaxy-engineer` still open and theirs is the half that could be expensive (radial angles
+vs ADR-003's seeded positions) · two BOARD edits that are the orchestrator's (register row;
+retire the hard-stop sentence) · M15 PASS → `fidelity-qa-reviewer`
+(`…/20260817-1825-…-review-m15-cascade.md`).
+From M0: `RUNNER_ANTHROPIC_API_KEY` (human) still means **zero runs**, so the cascade has never
+picked an agent for a real one.
 
 ## Last handoff
-comms/handoffs/M15-agent-library-curator-agent-cascade-design.md
+comms/handoffs/M15-agent-library-curator-cascade.md
 
 ## Next
-1. On ADR-014 acceptance: fold it into `frontmatter-schema.md` (edit written out in the ADR),
-   delete `agent-cascade.md`, then extend `scripts/validate-frontmatter.mjs` (pass 1 `--layer`
-   flag; pass 2 on resolved agents).
-2. `node scripts/stage-0.5.mjs --live` once the key lands — `live` comes from ledger
-   evidence, never by hand.
-3. Weekly curation toward ~60; M7 `agent-auditor` runtime (REQ-LIB-35–38), which now also
-   owns fork-drift reporting and ADR-014's global-ceiling-width tripwire.
+1. **The resolver** — `{resolved[], excluded[]}` for MAP/CHART/DASHBOARDS. Today
+   `resolveForDispatch` has one caller and the views cannot see `agents/_overrides/**` at all;
+   an override would run and be invisible. Latent, and mine.
+2. Pass 1 `--layer` flag → unlocks `deliver` illegal at L0 **and** the new global-`COMPANY.md`
+   section allowlist (§8.1), both specified and unenforced today.
+3. Weekly curation toward ~60 — the library is **12** and did not grow this milestone.
+4. ADR-001 amendment for `engineering`, once both prices land.

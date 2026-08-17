@@ -18,7 +18,8 @@ cluster: enrichment          # sub-cluster label on the map (§2.2)
 icon: building               # lucide icon name
 tier: autonomous             # human-led | assisted | autonomous — CHART row + drawer eyebrow
 phase: 2-capture             # 1-foundation | 2-capture | 3-generate | 4-orchestrate — CHART column
-status: live                 # live | draft | failing — map halo + "N OF 22 LIVE" counter
+status: draft                # ALWAYS `draft` in a file — the resolved value comes from the
+                             # ledger (invariant 6). live | failing are computed, never typed.
 breaks_into: [firmographic-appender, tech-stack-detector, growth-signal-scorer]
 builds_on: [database-mining]
 wired_into: [exa, firecrawl, workspace]  # MCP/tool names; runner allowlist derives from this
@@ -60,7 +61,8 @@ deliver: {slack: "#sales-ops"}
 | `inputs[]` | — | drawer `INPUTS` form for ▶ Run; `{key,label,type,required}`; type ∈ `text\|url\|number\|select\|textarea\|date` (+`options[]` for select) |
 | `schedule` | — | ofelia cron sync (§3.2), clock badge on node |
 | `approval` | — | `required` inserts the human gate: pause at plan, push notify, amber pulse |
-| `deliver` | — | post-run delivery; `{slack?: channel, email?: addr}` |
+| `deliver` | — | post-run delivery; `{slack?: channel, email?: addr}`. **Illegal in the global layer** — [`agent-cascade.md`](agent-cascade.md) §3 Class D |
+| `forked_from` | — | `{ref, commit, digest}` — where the text came from. **Legal only in a project library or an override, never global.** Fork-*time* values only: they never change when the parent moves, and staleness is computed by the resolver, never written to a file (ADR-014, cascade §4.2) |
 
 ## Invariants
 
@@ -74,8 +76,23 @@ deliver: {slack: "#sales-ops"}
    rejects unknown names at CI time; the runner rejects them at run time with
    `unknown_connector` (422). Adding a name here without wiring the connector in the
    runner is a `blocker` message to `runner-engineer`, not a silent TODO.
-6. `status: live` is set by observability (real runs exist), not by hand. Hand-set values
-   get overwritten by `agent-auditor` (§3.4).
+6. **`draft` is the only `status` a file may declare.** Any other authored value is a
+   validator **error**, and the resolved value is set from `ops.run_ledger` — keyed by
+   `agent_ref` — without the file's value being read at all.
+
+   *Amended by [ADR-014](../decisions/ADR-014-agent-cascade-resolution.md) (2026-08-17).* It
+   used to say hand-set values get overwritten by `agent-auditor` (§3.4). That convention is
+   not strong enough under a cascade, because **copying a file copies the claim**: promote an
+   agent or fork one and `live` travels with the bytes into a place that has never run
+   anything. BOARD rule 9 and Part VII.3 die at that moment with no error raised. Adopting
+   the hard rule costs nothing today — all twelve agents are already `draft` — and would cost
+   a great deal the day after the first agent goes live, which is the whole argument for
+   doing it now. `failing` likewise comes only from error-rate evidence (§3.4), never from a
+   file.
+
+   **Mechanism, stated honestly:** the validator error exists as of 2026-08-17; **the
+   ledger-derived resolved status does not.** Every view therefore projects `draft`, which is
+   true — zero runs have executed. See `agent-cascade.md` §11.
 7. **An agent with `produces` other than `none` must declare at least one connector that
    grants a file-writing tool** (`Write`, `Edit` or `Bash` — derived from the registry's
    `tools`, not from connector names). ADR-009. The runner asks every agent to write
@@ -118,6 +135,21 @@ found that `intelligence/company-interview` declared two connectors, neither of 
 write the `output.md` its own system prompt demanded — and that **all 12 agents in the
 library had the same shape**. The fix is a declaration on the agent, never a base grant in
 the runner.
+
+## Resolved — ADR-014, and where resolution is *not* described
+
+This contract describes **one file**. Which of three files wins — the layer order, the four
+field classes, `wired_into` narrowing downward, promote/fork/provenance, and the three
+validator passes — is [`agent-cascade.md`](agent-cascade.md)
+([ADR-014](../decisions/ADR-014-agent-cascade-resolution.md), accepted 2026-08-17). There is
+exactly one description of the resolution algorithm in this repo and it is there; two
+descriptions would drift, and the drift would be invisible until a run picked the wrong agent.
+
+What ADR-014 landed **here** is the per-file half only: `forked_from`, invariant 6 above, and
+the example's `status: draft`. The one sentence worth carrying across the boundary, because it
+governs this file's most security-relevant field: **`wired_into` may be narrowed by a lower
+layer and never widened, and the runner re-derives that ceiling at dispatch** — the validator
+is feedback, not the boundary.
 
 ## Resolved — ADR-001
 

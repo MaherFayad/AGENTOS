@@ -1,37 +1,42 @@
 # status — rtl-arabic-pdpl-specialist
 
-**Updated:** 2026-08-17T01:05
-**Milestone:** M8 (ongoing) · M15 §22 sign-off filed and amended
+**Updated:** 2026-08-17T17:57
+**Milestone:** M15 §22 sign-off — second pass filed · M8 ongoing
 **State:** review
 
 ## Now
-`check-rtl` reported **75; the honest number is 261.** It could not see strings in const
-maps, in object literals, or in JSX text on its own line — so `BrainEmptyState.tsx` scored
-zero with four rendered strings in it. Fixed, and it now **prints what it still cannot
-reach** (84 expression attributes · 100 assembled templates · 149 unscanned `panels/*.json`
-fields · `server-copy` and `arabic-quality` as `unknown`, never zero).
-`verify` runs `check-rtl --gate` — a per-rule, per-module **ratchet**: old debt is scheduled,
-new debt breaks the build. It has already reported an improvement (265 → 261) it did not
-have to.
-`map/**` migrated whole, 17 → 0. 45 keys added; 10 `todo(ar)` resolved. Every interpolated
-value is now bidi-isolated in RTL (`t.ts`), which answers the commit-SHA question for every
-string rather than one.
-**M15 §22 signed off, structurally**, and amended to grade each mechanism **armed / inert /
-absent by design** — 7 armed, 1 inert (RLS, bypassed by a superuser role).
-**One brain or N: two tiers**, enforced by the global tier having no automated write path.
-`ops.device` and `ops.identity` signed as absent-by-design; one length bound asked for.
+**M15 cross-project isolation, second pass: the audit of the code as landed.** One question
+of every read and write path — *can data from project A reach a consumer in the context of
+project B?* Verdict stays **STRUCTURAL**; nothing empirical was run and the handoff says so
+per row. Provenance `1e5b5d7 · 17:57 · 33 uncommitted`.
+**I corrected my own first pass.** I graded five properties ARMED off the schema and never
+read the writer: `recordRun` omitted four `NOT NULL` project columns and `writeOutput`'s
+`ON CONFLICT` targeted a dropped index — the first real run would have died and the ledger
+would have stayed empty *in exactly the way an honest empty ledger is empty*. Fixed by
+`runner-engineer` mid-audit. The keeper is the rule, not the bug: **grade a constraint from
+both sides.**
+**Fixed: the brain write-back** (`brain.ts`, `runService.ts`) — gate keys on `agent_ref`
+derived from the project written to, target is `project.companyFile`, global-tier write
+throws. 4 structural tests. **Condition B retired.** Q8b answered: two tiers, project-first,
+no global fallback.
+**Fixed: `useEndpoint`** kept the previous project's number on screen for one round trip
+after a project switch.
+**Filed, not fixed:** five library-plane read routes resolve `:project` and then read
+`config.*` · traces carry no project attribute (rule 4 stateable, rule 7 unanswerable) ·
+`sql-executes.test.ts` does not compile.
 
 ## Blocked on
 nothing
 
+## Last handoff
+`comms/handoffs/M15-rtl-arabic-pdpl-specialist-cross-project-isolation.md`
+
 ## Next
-1. `fidelity-qa-reviewer` re-review (`review-request` filed).
-2. `runner-engineer` — ADR-007's brain write-back is project-blind in **both** halves.
-3. `agent-library-curator` — global-layer `COMPANY.md` section allowlist as a validator rule.
-4. Orchestrator — ADR number for the two-tier ruling; `scopeEnforcement: bypassed` and
-   "migrations 0005–0007 never executed" onto the BOARD as M15 PASS conditions.
-5. `sessions/**` is **mine and it is 19, not 0** — my own stale PASS, first in my queue.
-6. Then light-theme parity and mobile QA.
+1. `fidelity-qa-reviewer` — `review-request` filed with three PASS conditions (A, B′, C).
+2. `sessions/**` — 19 findings under my own stale PASS. My queue, first.
+3. Light-theme parity, empty states in both languages, mobile QA.
+4. The egress ADR — one ADR for `deliver:` **and** `library_remote`. M15 adds a third
+   surface: one `SLACK_WEBHOOK_URL` for N clients, with no per-project column beside it.
 
 <!-- Overwrite this file each session. Under 30 lines. History lives in git and in
      handoffs/, not here. -->

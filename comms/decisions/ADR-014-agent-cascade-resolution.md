@@ -1,9 +1,11 @@
 # ADR-014 — Agent cascade resolution: identity is the mount point, capability narrows downward
 
-**Date:** 2026-08-16 · **Author:** `agent-library-curator` · **Status:** proposed
-**Affects:** `contracts/frontmatter-schema.md` (destination) · `contracts/agent-cascade.md`
-(working draft, merges and is deleted on acceptance) · `contracts/project-scoping.md` §5.2
-Q9–Q15 · `contracts/api-contracts.md` (new `cascade_unresolved` / `connector_uncredentialed`) ·
+**Date:** 2026-08-16 · **Author:** `agent-library-curator` ·
+**Status:** accepted — 2026-08-17 (proposed 2026-08-16)
+**Affects:** `contracts/agent-cascade.md` (the contract, and it **stays** — see *Contract
+edits*) · `contracts/frontmatter-schema.md` (the per-file half only) ·
+`contracts/project-scoping.md` §5.2 Q9–Q15 · `contracts/api-contracts.md`
+(`cascade_unresolved` · `capability_widened` · `connector_uncredentialed`) ·
 M15 (P1) · `scripts/validate-frontmatter.mjs` · every view that projects frontmatter
 
 > **Numbering.** Filed as **014** because `comms/contracts/project-scoping.md` §5.2 assigns the
@@ -15,7 +17,43 @@ M15 (P1) · `scripts/validate-frontmatter.mjs` · every view that projects front
 > which are already accepted here for unrelated decisions, and reserve **ADR-016** for a
 > "project scoping" ADR that the real sequence has now split across 013/014/015. The plan's
 > numbers need one reconciling edit before anyone cites one in a commit message. Raised with
-> `commandcenter-orchestrator`; not fixable from here.
+> `commandcenter-orchestrator`; not fixable from here. **Resolved 2026-08-17** — ADR-013's
+> amendment re-allocates the plan's numbers and `comms/decisions/README.md` holds the
+> concordance. Translate a plan number through that file before citing it.
+
+---
+
+## Acceptance — 2026-08-17, and what it does not mean
+
+BOARD recorded `proposed` as *"a hard stop for MAP/CHART/DASHBOARDS until accepted"*, and it
+was doing real work: nothing rendered a resolved agent while this was open. Accepting it
+therefore needs a reason better than *M15 is closing*, because **an ADR accepted to close a
+milestone is the same defect class this session has spent itself correcting.** The reason is
+§8: every question this ADR routed onward has come back from the owner it was routed to, none
+of the answers changed a decision, and two agents have already built against it.
+
+| §8 | Question | Owner it was routed to | State on 2026-08-17 |
+|---|---|---|---|
+| 8.1 | One brain or N? | `rtl-arabic-pdpl-specialist` | **Answered 00:20.** Ruling (c) — two tiers, global holds only what is true of the operator regardless of client. Written into `company/COMPANY.md` §7 rule 9. **No decision below moves**, exactly as §8.1 predicted. What it adds is a validator rule at the global layer, which they asked me to word; it is `agent-cascade.md` §8.1 and it is a *sibling* of Class D, not an amendment to it. |
+| 8.2 | The eighth department, `engineering` | mine to file; `map-galaxy-engineer` + `chart-matrix-engineer` to price | **Open, and out of M15 by BOARD ruling.** The contradiction it flagged (`project-scoping.md` invariant 6 said seven, `Plan §10` says eight) is **fixed** — the orchestrator corrected the invariant in place. What is left is an **ADR-001 amendment**, not an ADR-014 question: *no decision in this file counts departments.* Every rule here is stated over `(department, slug)` for whatever set `department` ranges over. Pricing requested 2026-08-17. |
+| 8.3 | ADR numbering in the plan | `commandcenter-orchestrator` | **Resolved.** ADR-013 amendment + `decisions/README.md` concordance. |
+| 8.4 | Are `panels/*.json` cascaded? | `runner-engineer` (`project-scoping.md` Q8) | **Answered** in ADR-015 Q8: not in M15; panels are mounted per project, not resolved through layers — because the rules here depend on properties panels do not have. Nothing here changes either way, which is what §8.4 said. |
+
+**Acceptance is of the nine decisions below. It is not a claim that they are all enforced.**
+Three of them have a mechanism today, and it is in someone else's repo half:
+`apps/runner/src/lib/cascade.ts` implements decisions 1, 3 and 6-at-dispatch, and
+`cascade-ceiling.test.ts` asserts on the allowlist a session actually received. Decisions 2
+and 4 gain their first mechanism in this commit (a validator error, which is *feedback, not a
+boundary* — §7). Decision 9's single resolver **does not exist outside the dispatch path**:
+MAP, CHART and DASHBOARDS still enumerate `agents/{department}/**` directly and cannot see an
+`_overrides/` file. `agent-cascade.md` §11 is the table of what is built and what is not, and
+it is required reading before anyone cites a rule here as a guarantee.
+
+**Why accept rather than hold until the mechanisms exist.** Holding inverts the order: BOARD
+forbids building on a `proposed` ADR, so *nothing* could legally build the enforcement that
+acceptance was being made to wait for. The decision is what authorises the mechanism. What
+must never happen — and is the actual risk here — is a **contract claiming an enforcer that
+does not exist**, which is why §11 exists and why every unbuilt row in it names an owner.
 
 ## Context
 
@@ -143,31 +181,55 @@ other. Reversing 5 (whole-file → merge) invalidates every stored digest and ev
 
 ## Contract edits
 
-**Home:** `comms/contracts/project-scoping.md` §4 routes resolution semantics to
-`frontmatter-schema.md`, owned by me, and deliberately does not restate them — "two documents
-describing one resolution algorithm will drift, and the drift will be invisible until a run
-picks the wrong agent." That routing is accepted. `comms/contracts/agent-cascade.md` is
-therefore a **working draft of this ADR, not a third contract**: on acceptance it merges into
-`frontmatter-schema.md` and is deleted. It exists separately only while this ADR is `proposed`,
-because amending an accepted contract on the strength of a proposed decision is the same
-mistake in the other direction.
+> **This section was wrong when it was written and is corrected here rather than quietly
+> rewritten.** The proposed text said `agent-cascade.md` was a working draft that would
+> **merge into `frontmatter-schema.md` and be deleted on acceptance**. It said that because I
+> had reconciled to a line in `project-scoping.md` §4 that its author had already deleted; we
+> each moved to the other's abandoned position. `commandcenter-orchestrator` reversed it on
+> the merits and ADR-013 accepts my §0 boundary verbatim
+> (`inbox/commandcenter-orchestrator/20260816-2342-agent-library-curator-cascade-ownership-reconcile.md`,
+> answered 22:48). **Accepting this ADR as originally written would have authorised deleting a
+> contract that four other agents now cite** — the deletion instruction is the single thing
+> that made acceptance unsafe, and it is removed.
+
+**Two contracts, one owner each, no shared prose.** The split, which is the ruling:
+
+- **`comms/contracts/agent-cascade.md` stays, and is a contract as of this acceptance.** It
+  holds the cross-layer subject: the resolution algorithm, the four field classes,
+  promote/fork/provenance, the three validator passes. 28 KB of it, and folding it into a 7.5 KB
+  per-file field reference would bury the capability-narrowing rule — the security-critical
+  one — inside a table of what `tier` means.
+- **`comms/contracts/frontmatter-schema.md` takes the per-file half only**: `forked_from` as an
+  optional field legal only at L1/L2, and invariant 6 amended so that `draft` is the only
+  authorable `status`. Both are properties of one file and belong where one file is described.
+
+That is not the third-document warning `project-scoping.md` §4 was making. That warning was
+about *one algorithm described twice*; this is two subjects with two failure modes.
 
 This ADR answers `project-scoping.md` §5.2 **Q9–Q15** in full. See `agent-cascade.md` §10 for
-the question-by-question mapping.
+the question-by-question mapping. §5.2 now contains no questions — the orchestrator deleted
+them rather than marking them answered, because a question living in two contracts is one
+contract with two readings.
 
-On acceptance, `comms/contracts/frontmatter-schema.md` gains:
+**Landed with this acceptance:**
 
-- optional field `forked_from: {ref, commit, digest}`, legal only at L1/L2;
-- the field-class table (agent-cascade §3.2) as a new section;
-- invariants **8–13** (identity fields fixed · Class C monotonicity · `deliver` absent at L0 ·
-  `status` authored as `draft` only · `forked_from` resolution as warnings · one department per
-  slug per layer);
-- invariant **6** amended — "hand-set values get overwritten by `agent-auditor`" becomes "an
-  authored value other than `draft` is a validator error, and the resolver sets the field from
-  the ledger without reading the file."
+- `comms/contracts/agent-cascade.md` — §0 rewritten to the ruling above; **§8.1 resolved**
+  (the brain ruling and its global-layer section allowlist); §8.2/§8.3/§8.4 dispositions
+  recorded; §3/§7.3 gain the *two kinds of missing* distinction and `capability_widened`, both
+  of which the runner built and the proposed text did not name; **new §11, the mechanism-state
+  table.**
+- `comms/contracts/frontmatter-schema.md` — `forked_from`; invariant 6 amended; the canonical
+  example's `status:` changed from `live` to `draft`, since the example is the thing people
+  copy.
+- `scripts/validate-frontmatter.mjs` — authored `status` other than `draft` becomes an
+  **error** (was a warning). Zero files change: all twelve are already `draft`.
 
-`comms/contracts/api-contracts.md` (owner `runner-engineer`) needs two new refusals:
-`cascade_unresolved` (422) and `connector_uncredentialed` (422). Requested by message, not
-edited here.
+**Not landed, and named rather than implied:** invariants 8, 9, 10, 12, 13 need a resolver that
+sees all three layers, and pass 1 needs its `--layer` flag before `deliver`-absent-at-L0 can be
+checked at all. `agent-cascade.md` §11 carries the owner and the next step for each.
+
+`comms/contracts/api-contracts.md` (owner `runner-engineer`) has the refusals: `cascade_unresolved`
+(422), `capability_widened` (403) and `connector_uncredentialed` (422). Requested by message and
+built by them; not edited here.
 
 **No `agents/**` file changes.** Every rule above is satisfied by the current twelve.

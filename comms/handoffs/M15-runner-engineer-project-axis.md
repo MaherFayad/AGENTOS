@@ -8,6 +8,14 @@ status: ready-for-review
 
 # M15 — The project axis: `ops.project`, project-scoped routes, and the cascade at dispatch
 
+> **Continued in [`M15-runner-engineer-project-axis-and-billing.md`](M15-runner-engineer-project-axis-and-billing.md)
+> (2026-08-17T17:57).** That file carries the enforcement proof the BOARD attached to M15's
+> PASS, the `ops.credential` / billing half this one names but does not describe, and **a
+> defect found afterwards in the write path of the table this slice added the project axis
+> to** — `db/ledger.ts` inserted none of the four `NOT NULL` columns migration 0005 created.
+> Nothing below is retracted; the acceptance table below should be read with that section
+> beside it.
+
 **This slice was interrupted by a session limit after the code landed and before it was
 documented or verified.** The user committed the work in progress as `4e0bbe6`. This handoff
 finishes it. What that means in practice, stated first because it changes how to read

@@ -9,10 +9,19 @@ Two (§9–§24). It is **a plan that amends the spec of record, not a second sp
 a bare `§10` always means the spec of record, which has no §10.
 
 **Current milestone:** `M15 — Projects · cascade · identity` (Part Two, P1) **opened
-2026-08-16** · `M3 — Runner + Run now + Langfuse` (unblocked by M2; the runner half waits on
-the human for `RUNNER_ANTHROPIC_API_KEY`) · `M6 — DASHBOARDS` (FAIL open, fix in flight) ·
-`M4 — SESSIONS` (relay unverified against a bootable Happy) · `M8` ongoing.
+2026-08-16**, four slices in flight and **no verdict yet** · `M16 — Threads · addressing ·
+mailbox` (Part Two, P2) **framed 2026-08-17, not dispatched** — see its section below for the
+one condition that releases it · `M3 — Runner + Run now + Langfuse` (unblocked by M2; the
+runner half waits on the human for `RUNNER_ANTHROPIC_API_KEY`) · `M6 — DASHBOARDS` (FAIL open,
+fix in flight) · `M4 — SESSIONS` (relay unverified against a bootable Happy) · `M8` ongoing.
 M0, M1, M2 and M5 are **done**.
+
+**"Framed" is a state, and it is not "open."** `Plan §20`: *"P1 and P2 cannot overlap with
+anything, including each other."* So M16's scope, owners and ADR numbers are written down now
+— which is the part that must happen before any file exists — and **nobody is dispatched onto
+it.** A frame with no dispatch is how a milestone gets planned without stealing the milestone
+before it. If you own an M16 slice below, it is not your work today; M15, M6, M3, M4 and M8
+all outrank it.
 
 **Phase 0 is not closed, and M15 is opened anyway — on purpose, with the reason stated.**
 `Plan §20` says Phase 0 blocks everything, and its reason is specific: *no feature can be
@@ -125,7 +134,7 @@ a milestone still closes only on a `fidelity-qa-reviewer` PASS.
 | # | Milestone | Plan § | Lead (exists today) | State |
 |---|---|---|---|---|
 | 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **active** — opened 2026-08-16 |
-| 16 | Threads · addressing · mailbox | §12 | *unassigned* — `thread-model-engineer` when spawnable | not started |
+| 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **framed 2026-08-17, not dispatched** — released by one condition, below |
 | 17 | Presence · work products · diff review | §13 | `drawer-engineer` | not started |
 | 18 | Time & triggers · the scheduler | §14 | *unassigned* — `scheduler-engineer` when spawnable | not started |
 | 19 | Mobile (Expo) · real push · offline | §16 · §23.9 | *unassigned* — `client-platform-engineer` when spawnable | not started |
@@ -187,6 +196,19 @@ That is churn from a moving tree, **not a finding and not a gate failure** — i
 here so nobody files it as one, and so nobody commits on top of it. The rule stands: gate when
 the tree is still.
 
+**`npm run validate:coverage` is red, and this one *is* a finding — it is an M15 PASS
+condition, not churn.** Verified 2026-08-17 17:50 · `1e5b5d7`. Eleven FAILs, all the same
+shape: M15 moved every view under `(views)/p/[project]/…` and **`comms/specs/*.md` still cite
+the pre-project paths**, which `git status` confirms have not been touched. The gate's own
+words for this class are on this board: *a requirement pointing at a file that does not exist
+is a lie in a document, which is worse than a gap, because a gap is visible.* It is the
+predictable cost of re-scoping every route and it is nobody's oversight — but it is owed
+before M15 can pass, by the agents who moved the files: `shell-navigation-engineer`
+(REQ-SHELL-46 · 47 ×2 · 48 · 49 ×2), `sessions-relay-engineer` (REQ-SES-01 · 02 · 48),
+`map-galaxy-engineer` (REQ-MAP-33 ×2). **M15 must not be flipped while this is red**, because
+the completeness gate is the one mechanical check that would otherwise report a green spec on
+top of moved code.
+
 **Where identity landed, honestly.** `Plan §22` creates five specialists and **none of them
 owns §11**. The plan's intended owner, `identity-access-engineer`, is carried over from Part
 One §6 and was never defined anywhere. That is a genuine gap in the roster, not an oversight
@@ -234,6 +256,155 @@ project-shaped** — that is the cheap half, bought now.
 
 ---
 
+### M16 — Threads · addressing · mailbox (`Plan §12`) — framed, not dispatched
+
+**The one condition that releases it.** `Plan §20` forbids P2 overlapping anything, P1
+included. M16 is dispatched on the day **both** of these are true, and not before:
+
+1. `fidelity-qa-reviewer` has answered **PASS** on M15, at the source-and-token standard,
+   with its narrower coverage stated (`contracts/project-scoping.md` §6);
+2. `rtl-arabic-pdpl-specialist`'s **cross-project isolation sign-off** is filed — it is
+   mandatory, not advisory (`Plan §22` · §21.8), and it is a separate artifact from the PASS.
+
+Neither is recorded here yet. Four agents are working M15 concurrently as this is written and
+**none has been gated**; the verdict rows in the M15 section stay empty until the sweep that
+reads their handoffs. A frame that pre-fills a verdict is the exact failure this board spent
+two days correcting.
+
+**M16 inherits M15's distinction verbatim, and it is not a formality here:**
+
+> **M16 can be completed. M16 cannot be *validated* until Phase 0's human items land.**
+> Threads are schema, routing and UI — `ops.thread`, `ops.message`, an addressing grammar, a
+> composer, a mailbox drained at tool boundaries. All of it can be built and none of it makes
+> a model call. **A thread with an agent on the other end cannot be proven until
+> `RUNNER_ANTHROPIC_API_KEY` lands.** Every M16 handoff repeats this rather than blurring it,
+> and M16's PASS will say which half it covered.
+
+#### Slices — owner, and successor where it differs
+
+`thread-model-engineer` **owns `Plan §12` outright**, not through an interim holder: the Part
+Two specialist definitions became spawnable on 2026-08-17. Roster admission is a separate act
+from ownership — see the note under the slice table.
+
+| Slice | `Plan §` | Owner | Successor |
+|---|---|---|---|
+| **Lead** · `ops.thread` + `ops.message` schema, `thread_id` on `ops.run_ledger`, `contracts/thread-model.md`, **ADR-023** | §12 | `thread-model-engineer` | *owner* |
+| The addressing grammar as a parser + its refusals — `@agent` · `#department` · `@@fan-out` · bare = Chief of Staff | §12 | `thread-model-engineer` | *owner* |
+| `POST /api/thread/:id/message` **in `api-contracts.md`**, and the mailbox drained at tool boundaries in the runner | §12 | `runner-engineer` | `platform-projects-engineer` |
+| THREADS view · addressing composer with cost preview | §12 · §23.8 · §23.12 P2 | `sessions-relay-engineer` *(§23.12 notes the rename)* | stays |
+| **THREADS replaces SESSIONS in the tab bar** — the shell slot, not the view | §23.5 · §23.8 | `shell-navigation-engineer` | stays |
+| Mailbox composer, three interrupt levels — replaces `RunConsole`'s one-way stream | §12 · §23.12 P2 | `drawer-engineer` | stays |
+| The monochrome register for `#` vs `@@`, and for `note` / `steer` / `halt` | §12 · Part I §1.3 | `design-system-guardian` | stays |
+| `thread-feed` widget · **ADR-028** | §23.7 · §23.8 | `dashboards-engineer` | stays |
+| `thread_id` on the ledger — the 34 metrics endpoints and LAST RUNS that read it | §12 · §3.5 | `observability-engineer` | stays |
+| Arabic/RTL **and PDPL** review of every new surface — before it ships, per §23.11 rule 6 | §1.4 · Part VII.4 · §21.8 | `rtl-arabic-pdpl-specialist` | stays |
+| Acceptance | Part VI | `fidelity-qa-reviewer` | stays |
+
+**Ownership is granted here; roster admission happens at dispatch.** `thread-model-engineer`
+joins the *"Roster & ownership"* table in the same act as writing its first
+`comms/status/thread-model-engineer.md` — because `check-comms.mjs` fails on a roster slug with
+no heartbeat file, and the alternative is a placeholder status, which is a fake heartbeat and
+the same class of lie as a plausible zero. So it is **not** on the roster today and cannot be
+messaged today; the M16 announcement goes to `inbox/_all/`. It gains `contracts/thread-model.md`
+on the same day. Nothing is held in trust for it in the meantime, because nothing is being built.
+
+**Two corrections to the slice list as first proposed, both about one artifact having one
+owner** — the defect this board keeps paying for:
+
+- `POST /api/thread/:id/message` was proposed as `runner-engineer` **+** `thread-model-engineer`.
+  It is split instead: **`thread-model-engineer` specifies the message and interrupt semantics
+  in `contracts/thread-model.md`; `runner-engineer` transcribes the route into
+  `api-contracts.md`, which is theirs, and implements the drain.** Two agents editing one
+  contract is how a shape acquires two readings.
+- THREADS *replaces* SESSIONS (§23.8), and the tab bar is `shell-navigation-engineer`'s
+  (§2.0, §23.5 — *"the shell cannot hold six tabs"*). `sessions-relay-engineer` builds the
+  view; the shell slot it lands in is not theirs to edit.
+
+**Migration number: `0008_` is `thread-model-engineer`'s.** Migrations are the second
+shared-integer namespace on this board and it has already been raced once (`0006`). One author
+writes M16's schema; if a second slice needs a migration it asks first.
+
+#### Hazard 1 — `#sales` costs one run, `@@sales` costs six, and the cap has never persisted
+
+`Plan §12`, quoted because paraphrase loses it:
+
+> *"`#sales` and `@@sales` must be different characters and must **look** different, because
+> one costs one run and the other costs six. A UI that makes broadcast easy to trigger
+> accidentally will cost real money on the first day."*
+
+The coupling nobody has named, and which is the reason this is on the board rather than in the
+composer's ticket: **the hard monthly cap that would stop a runaway fan-out has never once
+persisted.** Zero runs have executed, so `budget_monthly` has never refused anything; M15 lists
+"a budget cap was proven to refuse" among the things it *cannot* validate. Fan-out is therefore
+the first feature in this product whose **first ever validation run costs N× money, against an
+enforcement point that has never fired.** Three consequences, all binding on M16:
+
+1. **The run count is real; the money is not.** §23.8 wants the composer to say
+   `@@sales · 4 runs · ~$0.40`. **The `4` is knowable exactly** — it is the resolved member
+   count. **The `$0.40` has no source**: there are no completed runs to average. M16 prints the
+   count and either omits the money or states its basis in the same breath. Inventing a dollar
+   figure is BOARD rule 9 in the one direction it never permits, and a cost preview is exactly
+   the surface where a plausible number gets believed.
+2. **`@@` requires an explicit confirm that names the count.** Not a tooltip, not a hover.
+   §23.11 rule 7 (keyboard before pointer) applies: the confirm must be reachable and
+   *dismissable* from the keyboard without the fan-out firing.
+3. **Fan-out *dispatch* stays refused, with a stated reason, until a cap has proven a
+   refusal.** Grammar, parser, composer and preview all ship in M16. The path that actually
+   spawns N runs is gated behind the same Phase 0 item everything else waits on. This is the
+   cheap, reversible half — it costs one refusal branch now and it is deleted in one line the
+   day the key and the cap land.
+
+#### Hazard 2 — M11 is absorbed, not built. Repeated here because it is repeatable-wrong
+
+Already stated in the amendments table above (`Plan §19`); restated inside M16 because M16 is
+where someone will be tempted:
+
+> **Do not create `ops.task` or `ops.question` as standalone entities.** A task **is** a thread
+> with `due_at`. A question **is** a message kind inside a thread. `expires_at` stays
+> **mandatory** on it — Part One's reasoning is unchanged and correct (`Plan §12`). The M11
+> board and the notification ladder survive inside M16/M17; the parallel entity model does not.
+
+And its sibling, which is `runner-engineer`'s to keep true: **`POST /api/run/:runId/input` is
+never built.** ADR-023 supersedes it. It is not in `api-contracts.md` today, and M16 should
+leave behind a **test asserting it is absent** rather than a comment saying it should be —
+the `cascade-ceiling.test.ts` precedent from M15: assert the boundary, not the intent.
+
+#### ADR-028 — what P2 actually needs, decided
+
+`Plan §18` lists ADR-028 as blocking **P2 and P4**. Asked whether P2 needs all three new widget
+types: **no, and the ADR is still written once, in M16.** Splitting it three ways would make one
+rule into three, and the rule is the valuable half.
+
+| | In ADR-028 (M16) | Built in |
+|---|---|---|
+| **The cap** — exactly three new types ever; everything else composes from the existing seven (§23.7) | **yes, this is the decision** | — |
+| `thread-feed` — full schema | **yes** | **M16** |
+| `board` — named and reserved, schema deferred | named only | M17 / *Any* (§23.12) — needs ADR-029's drag primitive, which is unwritten |
+| `calendar` — named and reserved, schema deferred | named only | M18 / P4 — its data is `ops.schedule`, which does not exist |
+
+Reason for the split, so it is not re-litigated: **writing a widget schema for a table that
+does not exist produces a plausible spec**, and `WidgetView`'s exhaustive `switch` with the
+`never` fallthrough should not gain arms for types nothing can render. The compiler naming
+every site is the safety property; adding two unrenderable arms spends it early.
+
+#### Deliberately out of M16 scope
+
+Nothing from `Plan §13`–§17. Specifically, and because each has already been proposed once:
+
+- **No presence, no work products, no worktree isolation, no diff review** (§13 → M17).
+- **No scheduler, no triggers, no `calendar`, no `next up` strip** (§14 → M18).
+- **No memory tiers** (§15 → M20), **no Expo or Tauri client** (§16 → M19/M21), **no Chief of
+  Staff routing** (§17 → M22). Bare-address-means-Chief-of-Staff is a **grammar rule** in
+  ADR-023; the router that would answer it is M22's. M16 defines the address and refuses it
+  honestly.
+- **No BOARD view**, no `board` or `calendar` widget implementation, no drag primitive
+  (ADR-029, unwritten).
+- **No search-index extension to threads** (§23.10 — chrome, any phase, and it is a fourth
+  consumer of a schema that will still be moving).
+- **No CHART → ROLLOUT rename** (ADR-030, optional).
+
+---
+
 ## Part Two roster — defined, not yet rostered
 
 These five have definitions in `.claude/agents/` (`Plan §22`) and are **deliberately not on
@@ -246,11 +417,21 @@ constraint / CLAUDE.md rule 9).
 They join the roster table, gain a status file and gain their contracts on the session they
 first become spawnable. Until then their work is assigned to existing owners.
 
+**Amended 2026-08-17: they became spawnable, and that is not the same as rostered.** The
+gating fact changed — these definitions can now be run. What did *not* change is the pairing
+`check-comms.mjs` enforces: **a roster slug with no `comms/status/<slug>.md` fails
+`npm run validate:comms`, and writing that file on the agent's behalf is a fake heartbeat.**
+So admission is now bound to **dispatch**, not to spawnability: an agent joins the roster in
+the same act as writing its own first status file, and can be messaged from that moment. Until
+then it can *own* work on this board (see M16) but cannot receive an inbox message — milestone
+announcements go to `inbox/_all/`. Ownership and reachability are two facts and this board had
+been treating them as one.
+
 | Defined agent | Owns (`Plan §`) | Contract it will own | Held in trust by |
 |---|---|---|---|
 | platform-projects-engineer | §9 · §10 — `ops.project`, cascade mount, library sync, project switching | `contracts/project-scoping.md` | `runner-engineer` |
 | *(cascade resolution)* | §10 — resolution, resolved identity, promote/fork | `contracts/agent-cascade.md` | `agent-library-curator` — **stays with them**, per ADR-013 |
-| thread-model-engineer | §12 — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` | not yet written |
+| thread-model-engineer | §12 — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` | **nobody — owns M16 outright**, rostered at dispatch |
 | scheduler-engineer | §14 — coordinator clock, six trigger types, fire ledger, calendar widget | `contracts/scheduling.md` | not yet written |
 | client-platform-engineer | §16 · §23.9 — Expo mobile, Tauri desktop, push, offline replica | `contracts/client-sync.md` | not yet written |
 | chief-of-staff-architect | §17 — routing, delegation limits, standups, trust ladder, Morning Briefing | `contracts/orchestration.md` | not yet written |
@@ -320,8 +501,8 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 012 | — | — | **vacant, deliberately** |
 | 013 | Part Two's standing + the coverage gate | `commandcenter-orchestrator` | accepted |
 | 014 | Agent cascade resolution | `agent-library-curator` | proposed |
-| 015 | Project scoping — third plane, `ops.project`, routes | `runner-engineer` | claimed, unwritten |
-| 016 | Identity vs device vs billing account | `identity-access-engineer` *(defined, not dispatched)* | claimed, unwritten |
+| 015 | Project scoping — third plane, `ops.project`, routes | `runner-engineer` | **proposed** — file exists, `ADR-015-project-scoping.md`, 2026-08-17 |
+| 016 | Identity vs device vs billing account | `identity-access-engineer` | **proposed** — file exists, `ADR-016-identity-device-billing-account.md`, 2026-08-17 |
 
 | 017 | Two planes — Library (git) + Operations (Postgres) · *`Plan §3` calls this "ADR-009"* | — | **reserved, unwritten** |
 | 018 | MCP runtime and credential custody · *`Plan §3` calls this "ADR-010"* | — | **reserved, unwritten** |
@@ -329,20 +510,29 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 020 | Task-board semantics · *`Plan §3` calls this "ADR-012"* | — | **reserved, unwritten** |
 | 021 | Auth exists in v2 — accounts inside the tailnet · *`Plan §3` calls this "ADR-013"* | `identity-access-engineer` | **reserved, unwritten** |
 | 022 | Foundry token-budget policy · *`Plan §3` calls this "ADR-014"* | `agent-foundry-architect` *(undefined)* | **reserved, unwritten** |
-| 023 | Thread unification, addressing, mailbox · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **reserved** |
+| 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its three interrupt levels (`note` · `steer` · `halt`); **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **claimed 2026-08-17, unwritten** — blocks all of P2 |
 | 024 | Scheduler ownership, six trigger types · *`Plan §18` "ADR-019"* | `scheduler-engineer` | **reserved** |
 | 025 | Client strategy — Expo, Tauri, contentless push · *`Plan §18` "ADR-020"* | `client-platform-engineer` | **reserved** |
 | 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | — | **reserved** |
 | 027 | Chief of Staff — routing, delegation, trust ladder · *`Plan §18` "ADR-022"* | `chief-of-staff-architect` | **reserved** |
-| 028 | Three new widget types — `board`, `calendar`, `thread-feed` · *`Plan §18` "ADR-023"* | `dashboards-engineer` | **reserved** |
+| 028 | **Three new widget types** — `board`, `calendar`, `thread-feed` — and the rule that everything else composes from the existing seven (§23.7) · *`Plan §18` "ADR-023"* | `dashboards-engineer` | **claimed 2026-08-17, unwritten** — blocks P2 and P4. **M16 writes it once and builds only `thread-feed`;** `board` and `calendar` are named and reserved, schemas deferred to M17 and M18. See the M16 section. |
 | 029 | Drag without a dependency · *`Plan §18` "ADR-024"* | `design-system-guardian` | **reserved** |
 | 030 | *(optional)* Rename CHART → ROLLOUT · *`Plan §18` "ADR-025"* | `chart-matrix-engineer` | **reserved** |
 
 | 031 | Where §9's AA floor supersedes a spec-named text token | `design-system-guardian` | **claimed, unwritten** |
 | 032 | The session envelope allowlist — `account_id` refused (§3.1, `Plan §11` Q19) | `sessions-relay-engineer` | **claimed** — ruling already binding in `envelope.ts` + 2 tests; ADR transcribes it |
+| 033 | **Provenance is chrome: the badge is monochrome and drift is not a status** — a departure from `Plan §10`'s *"staleness dot — the same honesty rule as connector health"*, on the visual register only. Also: exclusions are not a sixth badge state, and the primitive count moved 8 → 9 | `design-system-guardian` | **claimed 2026-08-17** — content live as `contracts/design-tokens.md` §10; ADR transcribes it |
 
-033+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
+034+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
 translate it through `comms/decisions/README.md` first.
+
+**023 and 028 were claimed on 2026-08-17 with M16's frame, before any M16 file existed** — and
+that is the rule working rather than an exception to it. `decisions/README.md` says allocation
+is claimed on BOARD *before* the file is written; a milestone's numbers are therefore claimed
+when the milestone is framed, not when its author sits down. Both numbers were translated
+through the concordance (`Plan §18`'s "ADR-018" → **023**; its "ADR-023" → **028**) and
+verified against that table rather than taken from the plan. The draft-naming rule still
+applies: drafts are `ADR-draft-<topic>-<author-slug>.md` and the number is fixed at acceptance.
 
 *Both 031 and 032 were requested within seven minutes and both requesters guessed "031" and
 then refused to take it. Tie broken by arrival time — `design-system-guardian` 23:59,
@@ -597,7 +787,7 @@ because a gap is visible.
 | §9 · §10 — three planes, `ops.project`, the cascade mount | `runner-engineer` | platform-projects-engineer |
 | §10 — cascade resolution, provenance, promote/fork | `agent-library-curator` — **claimed and designed**, `agent-cascade.md` proposed | stays |
 | §11 — identity · device · billing account | **split, one third unowned** — see M15 | identity-access-engineer |
-| §12 — threads, addressing, mailbox | **unclaimed** | thread-model-engineer |
+| §12 — threads, addressing, mailbox | `thread-model-engineer` — **claimed 2026-08-17 with M16's frame**, nothing written | *is the owner* |
 | §13 — presence, work products, diff review | **unclaimed** | `drawer-engineer` |
 | §14 — the scheduling plane | **unclaimed** | scheduler-engineer |
 | §15 — memory at five tiers, KB index | **unclaimed** | memory-index-engineer |
@@ -610,7 +800,7 @@ because a gap is visible.
 | §23 — the UI rescan | **split per §23.12**, unclaimed outside M15 | per phase |
 | §24 — deliberately not in Part Two | `commandcenter-orchestrator` | stays |
 
-**Nine of fifteen rows are unclaimed and that is correct right now** — they belong to
+**Eight of fifteen rows are unclaimed and that is correct right now** — they belong to
 milestones nobody has opened. An unclaimed row here is a scheduling fact, not a gap; an
 unclaimed row in the machine-checked table above is a build failure. Keeping the two tables
 apart is what preserves that difference.
