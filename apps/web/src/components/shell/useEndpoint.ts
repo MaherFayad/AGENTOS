@@ -126,6 +126,22 @@ export function useEndpoint<T>(url: string | null, options: EndpointOptions<T>):
 
   useEffect(() => {
     const controller = new AbortController();
+
+    /**
+     * Drop the previous target's answer **before** asking about the new one.
+     *
+     * Without this, switching project leaves the last project's `ready` data on screen for
+     * a whole round trip while the breadcrumb, the switcher and `data-cost-scope` already
+     * say the new one — one client's number rendered under another client's name, which is
+     * the exact failure the whole project axis exists to prevent (`project-scoping.md`
+     * §5.1 Q2), arriving through a React state variable instead of through a URL.
+     *
+     * It is unreachable today because the coordinator mounts one project and refuses every
+     * other with `project_not_mounted`. It becomes reachable the day a second library is
+     * mounted, and by then nobody would be looking at this hook. `loading` is the honest
+     * state for "we have not been told yet", and every consumer already renders it.
+     */
+    setResource({ state: 'loading' });
     void read(controller.signal);
 
     const tick = (): void => {
