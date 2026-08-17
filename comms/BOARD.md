@@ -308,6 +308,42 @@ Adopted for the isolation sign-off, the fidelity verdict, and any future mandato
 is deliberately a protocol rule and not a checker: `check-comms.mjs` can see that a message
 exists, and cannot see that a recommendation inside prose has an owner.
 
+#### The isolation sign-off's *Deliberately not done* list, swept — 2026-08-17T20:23, `runner-engineer`
+
+The rule above, applied backwards to the artifact that earned it. That section had **eight**
+entries and one had been picked up. Each is now in exactly one of three states, because the
+state this board keeps paying for is the fourth: *present in an artifact, absent from here,
+therefore never work.* Filed with `comms/handoffs/M15-runner-engineer-artefacts-carry-the-project.md`
+and the messages named in it, in one act.
+
+| Entry | State | Owner |
+|---|---|---|
+| five library-plane read routes discard the project | **fixed** — REQ-RUN-34 | `runner-engineer` |
+| `sql-executes.test.ts` did not compile | **fixed** 18:06 — but its consequence stands: **the writer and the schema have never met**, and the three tests that would prove it skip on `DATABASE_URL` | `runner-engineer` — needs a live Postgres |
+| no red test for a defect in another agent's plane | **deliberately not done** — both defects now have green tests in the planes that own them | — |
+| `/api/all/approvals` returns `inputs` | **fixed** — REQ-RUN-40 | `runner-engineer` |
+| **artefacts are `artifactsRoot/<runId>/` with no project segment** | **fixed** — `<artifactsRoot>/<project>/<runId>/`, REQ-RUN-42/43, new code `artifact_unattributed` | `runner-engineer` |
+| no Langfuse project attribute on any span | **filed, in flight this session** — `observability/instrument.ts` was live in the tree while this landed. Also breaks **rule 7 (erasure)**: no project handle in the trace store to search on | `observability-engineer` |
+| nothing empirical | **deliberately not done** — zero runs, one project, no API key. `project-scoping.md` §6 unchanged | the human |
+| no commit | unchanged | — |
+
+**Two items routed onward, each with its message filed in this same act** — that is the rule
+working rather than being cited:
+
+- **`ProjectSummary` narrowing → `shell-navigation-engineer`.** `GET /api/projects` is
+  coordinator-scoped and returns one row per client; `budgetMonthlyUsd`, `defaultAccountId`,
+  `hostAffinity` and `libraryRemote` are now typed as the only value each may hold, so ADR-015
+  Q6 making a budget real **stops the route compiling**. The real fix — deleting the four
+  fields — edits `apps/web/src/components/shell/test-harness.tsx`, which is theirs and mid-review
+  under blocking item 2. `…/shell-navigation-engineer/20260817-2023-runner-engineer-projectsummary-is-typed-shut….md`
+- **New `ApiErrorCode` `artifact_unattributed` (500)** — announced to `inbox/_all/`, because
+  adding a code is a contract change and `drawer-engineer` renders codes.
+
+*The migration question was decided, not deferred:* there is nothing to move (no run has ever
+executed, so no artefact exists), and **a directory in the old layout is refused, never adopted,
+never deleted.** Adopting one files a client's output under whichever project happens to be
+mounted — the act `run_unattributed` already refuses one layer up in the ledger.
+
 *Tree state, so a sweep does not misread it — measured 2026-08-17 19:50, and the tree is still
 moving:* the previously recorded *"red on 5 of 421 vitest tests"* **has cleared**;
 `npm run test:web` ran green on both halves at 19:42. `npm test` is **162 tests, 161 pass, 0

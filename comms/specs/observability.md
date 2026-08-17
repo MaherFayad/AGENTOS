@@ -45,7 +45,10 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
 4. **Env names follow compose, which we do not edit.** `APP_DATABASE_URL` and
    `LANGFUSE_HOST` are accepted as aliases of `DATABASE_URL` / `LANGFUSE_BASE_URL`.
 5. **Retention windows are [ADR-008](../decisions/ADR-008-observability-retention.md)
-   (proposed).** 90d spans / 400d ledger / forever daily rollup, pending the human.
+   (accepted 2026-08-15).** 90d spans / 400d ledger / forever daily rollup. *(This line
+   read "proposed … pending the human" until 2026-08-17; ADR-008's own status field has
+   said `accepted` since it was written. A spec that disagrees with its own ADR about
+   whether a decision is made is the kind of small drift that gets cited later.)*
 6. **Cloud Langfuse regions are refused at sink construction.** Part VII.4 is a flag,
    not boilerplate.
 7. **Every metrics route names its project in its path** (`Plan §10`, ADR-015 Q1) — and
@@ -69,6 +72,35 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
     `accountsRegistered` alongside so an empty split cannot be read as "one account paid
     for everything". `ops.billing_account` has zero rows and no run has ever recorded a
     payer — see `contracts/project-scoping.md` §6.
+11. **The project axis on the trace plane is a type, not a convention.**
+    `OtelSpan.attributes` is `SpanScope & Record<string, AttrValue>`, so a span that
+    cannot name its project **does not compile**; `RunInit` requires `projectId`,
+    `agentRef` and `sourceRef`, so a run that cannot name its project does not compile
+    either. This reverses the earlier optional-on-`RunInit` decision, whose stated reason
+    ("the ledger's `assertAttributed` refuses it at runtime") guarded Postgres and left
+    the *trace store* and the *artefact directory* unguarded — and a trace shipped without
+    a project is a leak that has already happened by the time the ledger refuses.
+    `assertAttributed` stays: the type stops it being written, the runtime check catches an
+    `as` cast or a value that is present and empty.
+12. **Redaction is applied to derived text, not only received text.** The activity line
+    (`activity_event` / `activity_detail`) is composed from an agent-chosen `summary` and
+    an agent-chosen artefact *filename*, and went to Postgres and to the §2.5 feed with no
+    redaction pass, because it looked like our own prose rather than someone's payload.
+    It is now redacted at instrumentation like everything else.
+13. **Flattening a payload into prose is not a way past the key denylist.** The key pass
+    walks object keys; a string has none. `buildPlanSummary` flattens run `inputs` into
+    a sentence, which the runner traces as `event:plan` — so `client_name`, `address`,
+    `date_of_birth` and `salary` all survived, and only `contact_email` was caught, and
+    only because its *value* had a shape a regex knows. `redactString` now applies
+    `KEY_DENYLIST` — **unchanged**, and co-owned with `rtl-arabic-pdpl-specialist` — to
+    `key: value` inside strings. Blunt in the safe direction: a value runs to the next
+    `·`, `;`, `|` or newline and **not** to the next comma, because
+    `address: 12 King Fahd Road, Riyadh` must not leave `Riyadh` behind.
+14. **The project attribute is a selector, and a selector is not erasure.** PDPL rule 7
+    needs an *operation* that finds and removes one subject's data across artefacts,
+    traces and Postgres. What §3.5 has after this change is the handle to select on, at
+    **project** granularity, and no delete verb anywhere in the repo for the trace store.
+    See *Erasure* below; it is written as an open item on purpose.
 
 ## Coverage
 
@@ -102,6 +134,13 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
 | REQ-OBS-26 | §3.5 | A run id belonging to another project answers `404 run_not_in_project`, not an empty span list | `apps/runner/src/db/queries.ts` · `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
 | REQ-OBS-27 | §3.5 | *(`Plan §11` — the gate reads the spec of record only, per ADR-013, so this is filed under §3.5, the cost surface it extends)* Cost surfaces split by billing account with an explicit `unattributed` bucket, and report how many accounts are registered | `apps/runner/src/db/queries.ts` · `apps/runner/src/db/registry.ts` · `apps/runner/src/routes/metrics.ts` | `apps/runner/src/observability/__tests__/metrics.test.ts` |
 | REQ-OBS-28 | §3.5 | `check-metrics` prints a provenance banner on every run, green or red (tokens contract §8b) | `scripts/check-metrics.mjs` · `scripts/lib/provenance.mjs` | — *(banner is the evidence; `provenance.mjs` itself is pinned by `scripts/__tests__/provenance.test.mjs`)* |
+| REQ-OBS-29 | §3.5 | Every span a run emits — root, tool, generation and event alike — carries `agnetos.project.id` and `agnetos.agent.ref` | `apps/runner/src/observability/instrument.ts` · `apps/runner/src/observability/langfuse.ts` | `apps/runner/src/observability/__tests__/instrument.test.ts` |
+| REQ-OBS-30 | §3.5 | A span that cannot name its project is a **compile** error (`SpanScope` on `OtelSpan.attributes`), not a convention | `apps/runner/src/observability/langfuse.ts` | `apps/runner/src/observability/__tests__/instrument.test.ts` *(`@ts-expect-error`; enforced by `npx tsc --noEmit -p apps/runner/tsconfig.json`)* |
+| REQ-OBS-31 | §3.5 | A run that cannot name its project, agent ref and source ref is a compile error; `assertAttributed` stays as the second, runtime mechanism | `apps/runner/src/observability/types.ts` · `apps/runner/src/db/ledger.ts` | `apps/runner/src/observability/__tests__/instrument.test.ts` · `apps/runner/src/db/__tests__/ledger-project-axis.test.ts` |
+| REQ-OBS-32 | §3.5 | The trace carries a **trace-level** project handle (`langfuse.trace.metadata.project` / `.agent_ref` / `.source_ref`), so a trace list can be filtered to one client | `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/instrument.test.ts` |
+| REQ-OBS-33 | §3.5 | The activity line is redacted at instrumentation, before the ledger row and before the §2.5 feed — including the artefact filename it is derived from | `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/instrument.test.ts` |
+| REQ-OBS-34 | §3.5 | A denylisted key redacts its value inside a **string** too, so flattening a payload into prose does not get it past the key pass | `apps/runner/src/observability/redact.ts` | `apps/runner/src/observability/__tests__/redaction.test.ts` |
+| REQ-OBS-35 | §3.5 | Erasure (PDPL rule 7) executes as a **project-scoped** operation across ledger, outputs, traces and artefacts | — *(not built — see `## Erasure`)* | — |
 
 ## Interfaces we expose
 
@@ -175,6 +214,67 @@ Anything not listed is private.
   live project so it matches `ops.agent_run_tools`.
 - **Company.md redaction-rule inheritance.** Coordinate with
   `rtl-arabic-pdpl-specialist`; the rule list is in `redaction-rules.ts`.
+- **The project attribute on `lib/langfuse.ts`.** That is the runner's *second* emitter,
+  the deprecated `/api/public/ingestion` one, and it fires whenever `services.obs` is
+  absent — which is every `--profile dev` run, i.e. the only profile that exists today.
+  It posts `{name, tags, metadata:{durationMs, costUsd, toolsUsed, brainInjected}}` and
+  **no project**, so "every span the runner emits names its project" is true of this
+  module and not yet true of the runner. It is `runner-engineer`'s file; proposed to
+  them with the diff written out, not edited here.
+- **Erasure itself.** Below.
+
+## Erasure (PDPL rule 7) — the selector landed; the operation did not
+
+Recorded here rather than in a handoff, because the next person to read "traces carry a
+project now" will otherwise read it as this being solved.
+
+**Can we name an operation that finds one subject's data across artefacts, traces and
+Postgres, and does it terminate?** At **project** granularity: nearly — three of four
+planes have the selector, one has no delete verb. At **subject** granularity: no, and the
+reason is structural rather than a missing feature.
+
+| Plane | Select by project? | Delete verb exists? |
+|---|---|---|
+| `ops.agent_runs` · `ops.agent_run_tools` | yes — `project_id`, NOT NULL, FK'd | prune is by **age**, not by project. `DELETE … WHERE project_id = $1` is one statement and is not written |
+| `app.agent_outputs` | yes — `project_id` in the unique index | same |
+| Langfuse traces | **yes, as of this change** — `langfuse.trace.metadata.project` + `agnetos.project.id` on every span | **no.** Nothing in this repo calls a Langfuse delete endpoint. We can now *find* them and cannot *remove* them |
+| Artefacts on disk | **no** — `artifactsRoot/<runId>/` has no project segment (`runner-engineer`, in flight) | `rm -rf` of a directory that does not exist yet |
+
+**Subject-level erasure does not reduce to a search, and this is the part worth stating
+plainly.** Redaction runs at instrumentation with no unredact path, so a data subject's
+name is *not in the trace* — which is excellent minimisation and is exactly what makes
+"find John Smith's spans" unanswerable. The two outcomes are:
+
+- for every field the rules catch, erasure is satisfied **by construction**: there is
+  nothing there to erase, and that is the strongest possible answer;
+- for any field that slipped through, erasure is **impossible by search**, because the
+  handle we would have searched on is the thing we removed.
+
+So the only erasure unit this architecture can actually execute is **the project** — erase
+everything for that client, or demonstrate the subject's data was never in the trace store.
+That terminates: it is bounded by one project's traces, one `DELETE` per table, and one
+directory. Subject-level does not, and no attribute added later fixes that without
+un-minimising the traces, which would be the wrong trade.
+
+**What is missing, in the order it should land:**
+
+1. A **delete verb for Langfuse** — a `deleteProject(projectId)` on the sink, calling
+   Langfuse's trace-delete API with the trace ids the metadata filter returns. This is
+   the gap that makes the whole chain non-executable today.
+2. **Artefacts under `artifactsRoot/<project>/<runId>/`** — `runner-engineer`, in flight
+   from the same sign-off. Until then the durable bytes have no project handle at all.
+3. **`DELETE FROM … WHERE project_id = $1`** for `ops.agent_runs`, `ops.agent_run_tools`
+   and `app.agent_outputs`, behind one named operation rather than three ad-hoc statements.
+4. An answer to **what `app.agent_outputs.payload` erasure means per `kind`** — that
+   table holds business rows a client is entitled to have deleted, and "delete the whole
+   project" is the only granularity anyone has specified.
+5. **Whether a Langfuse trace deleted through its API is actually gone** from its Postgres
+   *and* its ClickHouse/blob storage. Unverified, and it is the difference between
+   erasure and a hidden row.
+
+Items 1, 3 and 4 are mine. None of them is in M15's scope and none should be smuggled in:
+each one is a destructive operation and the first destructive operation in this product
+should not land in the same change as the attribute that makes it possible.
 
 ## Retention (ADR-008 accepted)
 

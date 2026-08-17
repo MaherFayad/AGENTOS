@@ -104,6 +104,18 @@ makes that a decision rather than an accident. `scopeEnforced` is `null` — not
 there is no ledger to ask: with no database we have not *learned* that isolation is bypassed,
 we have failed to ask, and those are different facts.
 
+**The four empty fields are typed as the only value they may hold, and that is load-bearing.**
+This route is `coordinator`-scoped and is the *other* route that returns one row per client.
+`budgetMonthlyUsd` is `null`, `defaultAccountId` is `null`, `hostAffinity` is `readonly []`,
+`libraryRemote` is `null` — literal types, not "currently empty". The day ADR-015 Q6 makes a
+budget real, this route would hand **every client's monthly budget to any caller**, which is
+the `/api/all/approvals` defect arriving through a field that already exists rather than a
+route someone adds. So: **producing a real value here does not compile.** Whoever makes the
+field real narrows this row in the same commit and serves the figure from
+`/api/p/:project/…`, or widens the type in a reviewable diff and says why every caller may
+see it. A consumer must not read these fields as "the budget is unset" — they mean *this
+route does not carry budgets*.
+
 ---
 
 ## `POST /api/p/:project/run` → SSE
@@ -179,6 +191,36 @@ Because `EventSource` cannot POST, the reconnect path is a **GET**:
 |---|---|
 | `GET /api/run/:runId/stream` | re-attach to a live or just-finished run; honours `Last-Event-ID` (header or `?lastEventId=`) |
 | `GET /api/run/:runId/artifact` | download the saved artifact |
+
+*(Both carry the project segment: `/api/p/:project/run/:runId/…`. The table names the tail so
+it reads next to the SSE frames above.)*
+
+### Where a saved artefact lives, and what happens to bytes that cannot say whose they are
+
+**`<artifactsRoot>/<project>/<runId>/<file>`**, and the scratch workspace alongside it at
+`<scratchRoot>/<project>/<runId>/`. The `artifact` frame's `path` is library-relative and
+therefore carries the project segment; consumers must treat it as an opaque label and use
+`url` to fetch.
+
+It was `artifactsRoot/<runId>/` until 2026-08-17 — two clients' durable output in one
+directory tree, distinguished only by a run id that nothing on disk relates back to a
+project. The download's isolation was then a property of the **in-memory run store** (bounded
+at 200, gone on restart) rather than of the store on disk. A filesystem has no constraint
+that can refuse a write, so the mechanism is that the destination is *derived* from
+`MountedProject`; `apps/runner/src/lib/artifacts.ts` cannot name `RunnerConfig`.
+
+Two refusals on the download, and they are deliberately different:
+
+| situation | code | why |
+|---|---|---|
+| the run belongs to another project | `run_not_found` (404) | a run id is opaque; confirming it exists elsewhere is itself a cross-project disclosure. From outside its project the run does not exist |
+| the bytes are not under this project's artefacts directory | `artifact_unattributed` (500) | not about the caller at all — the runner's own state is inconsistent. **Nothing is deleted**, and the hint names the path |
+
+`artifact_unattributed` is the migration decision made executable. There is nothing to
+migrate today (no run has ever executed, so no artefact exists), and the rule outlives that
+fact: **a directory in the old layout is refused, never adopted, never deleted.** Adopting
+one files a client's output under whichever project happens to be mounted — the act
+`run_unattributed` refuses one layer up in the ledger.
 
 ## `POST /api/schedule`
 
@@ -449,6 +491,7 @@ a stack trace. Codes and their statuses (`ApiErrorCode` / `API_ERROR_STATUS` in
 | `run_not_found` | 404 | unknown `runId`, or its buffer expired |
 | `run_not_pending_approval` | 409 | decided a run that isn't at its gate |
 | `approval_already_decided` | 409 | second decision on the same run |
+| `artifact_unattributed` | 500 | the saved bytes are not under the serving project's artefacts directory — a pre-project-axis `artifactsRoot/<runId>/` directory, or a future writer that escaped the derivation. **Refused, never adopted, nothing deleted**; the hint names the path. Not `run_not_found`: that code is the cross-project refusal and is deliberately opaque, whereas this is a fault in the runner's own state and there is nothing for the caller to have done differently |
 | `invalid_cron` | 400 | not a 5-field cron |
 | `git_write_refused` | 403 | write target outside `agents/**` (ADR-002) |
 | `brain_write_refused` | 403 | the Second Brain write-back was refused **before git was reached** — the tier being written is not this project's (ADR-007, `COMPANY.md` rule 9). Same status as the row above and deliberately a different code: a person reading a log needs to know which file to open |

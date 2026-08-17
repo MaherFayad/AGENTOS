@@ -107,6 +107,24 @@ the coverage checker does not steal them from the heading above.
     became expressible cross-project in the first place. `pendingApprovalRefs()` constructs a
     narrow row field by field, so a field added to `RunState` cannot arrive here by
     inheritance — a subtraction can be forgotten, a construction cannot.
+12. **The durable bytes carry the project too, and a directory that cannot say whose it is is
+    refused rather than adopted.** Artefacts were written to `artifactsRoot/<runId>/` — no
+    project segment anywhere on disk. The download was safe *by cache*: `runInProject` reads an
+    in-memory store bounded at 200 that dies with the process, while the files themselves knew
+    nothing. It is now `<artifactsRoot>/<project>/<runId>/`, derived from `MountedProject`,
+    and `artifacts.ts` does not import `RunnerConfig` — decision 8's mechanism, applied to the
+    one plane that had escaped it. The scratch root moved the same way.
+
+    The half worth writing down is the **migration**, because it is a decision and not a
+    consequence. There is nothing to move: zero runs have executed, so no artefact exists
+    anywhere — and that sentence expires the moment one does, which is why the rule is what
+    ships. **A directory in the old layout is refused, never adopted, and never deleted**
+    (`artifact_unattributed`, 500, naming the path). Adopting one would file whichever
+    client's output it holds under whichever project happens to be mounted, on the strength of
+    a coincidence — the same act `run_unattributed` refuses one layer up in the ledger, and a
+    filesystem has no constraint that can refuse it on its own behalf. Ignoring it is that act
+    with the evidence hidden; deleting it destroys a client's bytes to tidy a layout, which is
+    not the runner's trade to make.
 
 ## Coverage
 
@@ -118,12 +136,12 @@ the coverage checker does not steal them from the heading above.
 | REQ-RUN-04 | §3.2 | A mid-run tool outside `wired_into` is `tool_not_allowed` | `apps/runner/src/lib/allowlist.ts` | `apps/runner/src/lib/__tests__/allowlist.test.ts` |
 | REQ-RUN-05 | PART IV | Unknown `wired_into` names are `unknown_connector` (422), never dropped | `apps/runner/src/lib/allowlist.ts` | `apps/runner/src/lib/__tests__/allowlist.test.ts` |
 | REQ-RUN-06 | §3.2 | Connector registry data half (`connectors.json`) and code half have identical keys | `agents/_registry/connectors.json` | `apps/runner/src/lib/__tests__/allowlist.test.ts` |
-| REQ-RUN-07 | §3.2 | cwd is a fresh per-run scratch workspace, destroyed after artifact extraction | `apps/runner/src/lib/artifacts.ts` | — |
+| REQ-RUN-07 | §3.2 | cwd is a fresh per-run scratch workspace, destroyed after artifact extraction | `apps/runner/src/lib/artifacts.ts` | `apps/runner/src/lib/__tests__/workspace-confinement.test.ts` |
 | REQ-RUN-08 | §3.2 | Headless session is `@anthropic-ai/claude-agent-sdk` with `permissionMode: dontAsk` and `canUseTool` | `apps/runner/src/lib/agentSession.ts` | — |
 | REQ-RUN-09 | §3.2 | SSE events are only `start` `token` `tool` `plan` `artifact` `done` `error` | `apps/runner/src/lib/sse.ts` | `apps/runner/src/lib/__tests__/sse.test.ts` |
 | REQ-RUN-10 | §3.2 | `start.tools[]` is the resolved allowlist | `apps/runner/src/lib/runService.ts` | `apps/runner/src/lib/__tests__/runService.test.ts` |
 | REQ-RUN-11 | §3.2 | `GET /api/run/:runId/stream` honours `Last-Event-ID` (header or `?lastEventId=`) for 5 minutes past end | `apps/runner/src/lib/sse.ts` | `apps/runner/src/lib/__tests__/sse.test.ts` |
-| REQ-RUN-12 | §3.2 | Artifact (md/pdf/json/txt) is saved and `GET /api/run/:runId/artifact` serves it | `apps/runner/src/lib/artifacts.ts` | — |
+| REQ-RUN-12 | §3.2 | Artifact (md/pdf/json/txt) is saved and `GET /api/p/:project/run/:runId/artifact` serves it | `apps/runner/src/lib/artifacts.ts` | `apps/runner/src/routes/__tests__/artifact-isolation.test.ts` |
 | REQ-RUN-13 | §3.2 | Delivery follows `deliver:` (Slack when webhook set; email declared unsupported) | `apps/runner/src/lib/deliver.ts` | — |
 | REQ-RUN-14 | §3.2 | `approval: required` pauses at `plan`, listed on `GET /api/p/:project/approvals`, resumed or aborted by `POST /api/p/:project/approvals/:runId` | `apps/runner/src/lib/runStore.ts` | `apps/runner/src/routes/__tests__/approvals-payload.test.ts` · `apps/runner/src/lib/__tests__/company-interview.test.ts` |
 | REQ-RUN-15 | §3.2 | A denied run ends `done{status:denied, denialNote}` — data, not a discard | `apps/runner/src/lib/runService.ts` | `apps/runner/src/lib/__tests__/company-interview.test.ts` |
@@ -153,6 +171,11 @@ the coverage checker does not steal them from the heading above.
 | REQ-RUN-39 | §3.3 | A brain write-back aimed at the global tier throws `brain_write_refused` (403), not a silent `null` | `apps/runner/src/lib/brain.ts` | `apps/runner/src/lib/__tests__/brain.test.ts` |
 | REQ-RUN-40 | §3.2 | `GET /api/all/approvals` carries no run `inputs` and no plan `summary` — a `scope: 'cross-project'` row is ids, frontmatter, a timestamp and `inputCount`; the values stay on the project-scoped route | `packages/contracts/src/api.ts` · `apps/runner/src/lib/runStore.ts` · `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/__tests__/approvals-payload.test.ts` |
 | REQ-RUN-41 | §3.5 | Every column and conflict target the ledger writer names exists in a migration, and every function it calls is defined by one — checked with no database, so the writer/schema class is caught on a laptop | `apps/runner/src/db/ledger.ts` · `apps/runner/src/db/migrations` | `apps/runner/src/db/__tests__/writer-schema-agreement.test.ts` |
+| REQ-RUN-42 | §3.2 | A run's saved artefact is written to `<artifactsRoot>/<project>/<runId>/` and its scratch workspace to `<scratchRoot>/<project>/<runId>/` — both derived from `MountedProject`, which `artifacts.ts` cannot substitute with the coordinator's config | `apps/runner/src/lib/artifacts.ts` · `apps/runner/src/lib/project.ts` | `apps/runner/src/routes/__tests__/artifact-isolation.test.ts` |
+| REQ-RUN-43 | §3.2 | The artifact download refuses bytes outside the serving project's artefacts directory with `artifact_unattributed` (500) and deletes nothing — a pre-M15 `artifactsRoot/<runId>/` directory is refused, never adopted | `apps/runner/src/lib/artifacts.ts` · `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/__tests__/artifact-isolation.test.ts` |
+| REQ-RUN-44 | PART VII.4 | `GET /api/projects` (coordinator scope) carries no client-shaped value: `budgetMonthlyUsd`, `defaultAccountId`, `hostAffinity` and `libraryRemote` are typed as the only value each may hold, so making one real stops the route compiling | `packages/contracts/src/project.ts` · `apps/runner/src/lib/project.ts` | `apps/runner/src/routes/__tests__/projects-payload.test.ts` |
+| REQ-RUN-45 | §3.5 | Every `NOT NULL`-without-default column is *named* by the writer's insert, and every `ON CONFLICT` target is a unique index or constraint a migration declares, with matching partiality — still with no database | `apps/runner/src/db/ledger.ts` · `apps/runner/src/db/migrations` | `apps/runner/src/db/__tests__/writer-schema-agreement.test.ts` |
+| REQ-RUN-46 | PART VII.4 | The `plan` and `approval-requested` spans carry the agent, the tools and the input **keys** — never `buildPlanSummary`'s flattened prose, which is the inputs plus the `deliver:` targets and defeats the redactor's key pass. The human-readable summary stays on the SSE frame, inside the project | `apps/runner/src/lib/runService.ts` | `apps/runner/src/lib/__tests__/plan-span-payload.test.ts` |
 
 ## Interfaces we expose
 
@@ -197,8 +220,29 @@ the coverage checker does not steal them from the heading above.
   believed comments would invent a column and then pass a writer that used it.
   **Verified by planting `account_sourse` in the 31-column insert: FAIL, naming the column;
   reverted, tree clean.** It is a lower bound on agreement and not a substitute for
-  `sql-executes.test.ts` — it cannot see types, `NOT NULL`, `CHECK`, or whether the partial
-  unique index `ON CONFLICT` infers actually exists. The three skipped tests stay owed.
+  `sql-executes.test.ts`. The three skipped tests stay owed.
+
+  **The lower bound was raised on 2026-08-17, and two of the four things it "cannot see" it
+  now can.** Both were text all along, and both are the *permissive* direction:
+
+  - **`NOT NULL` by omission.** The columns-exist check only sees names the writer supplies,
+    and the original defect was the opposite shape — 0005 made four columns mandatory and
+    `recordRun` named none of them, so every name it *did* use was valid. Every `NOT NULL`
+    column with no default must now be named. Serial and `GENERATED` columns are excluded on
+    purpose (`app.agent_outputs.id` is `bigserial`); a checker that cries wolf gets loosened
+    within a week. **Falsified:** dropping `project_id` from the insert FAILs, naming it.
+  - **Whether an `ON CONFLICT` target exists at all.** The migrations declare their unique
+    indexes and constraints, `DROP INDEX` is applied in file order, and partiality is
+    tracked — so `writeOutput` targeting the index 0005 dropped, or omitting the predicate a
+    partial index requires, both FAIL by name. **Falsified both ways**, and each reproduces a
+    `42P10` this repo has actually shipped.
+
+  What is left is genuinely not text, and the sentence stays: it cannot see **types** (the
+  `make_interval(hours => $4::float8)` class), it cannot see **`CHECK`** (a legal insert every
+  row violates), it reads migrations as *files* so it cannot see an index created by hand on a
+  live database, and it compares column **sets**, so an expression index or a different
+  operator class would satisfy it here and not in Postgres. **This is a lower bound on
+  agreement, not a proof, and it is not the three skipped Postgres tests.**
 - **Not automatable here:** a live SDK session against Anthropic (needs the runner's
   capped key); ofelia HUP inside compose (runner has no docker.sock — infra); push
   notifications on the approval gate (sessions-relay); the 1440px fidelity screenshot
@@ -257,15 +301,19 @@ the coverage checker does not steal them from the heading above.
   `summary` and `inputs`, and a consumer that wants them is already going to that project to
   press the button. Adding `GET /api/p/:project/run/:runId` for a need no consumer has stated
   would be a route invented to justify a deletion.
-- **`GET /api/projects` was audited in the same pass and left alone — clean today, for a
-  reason that expires.** It is `scope: 'coordinator'`, but it is the other route returning one
-  row per client. `toProjectSummary` hardcodes `budgetMonthlyUsd`, `defaultAccountId`,
-  `hostAffinity` and `libraryRemote` to empty values and `useProjects.ts` says it does not read
-  them, so nothing client-shaped crosses. **The day ADR-015 Q6 makes `budgetMonthlyUsd` real,
-  this route hands every client's monthly budget to any caller** — the same defect as
-  `/api/all/approvals`, arriving through a field that already exists rather than a route
-  someone adds. Recorded in `packages/contracts/src/project.ts` next to the field. Not fixed
-  here: a filter over four hardcoded nulls is untestable, and `ProjectSwitcher` is mid-review.
+- **`GET /api/projects` is no longer only a comment — but it is not narrowed either.**
+  Last night's note said the route is clean today *for a reason that expires*: the day
+  ADR-015 Q6 makes `budgetMonthlyUsd` real, a coordinator-scoped route hands every client's
+  monthly budget to any caller. The judgement asked for, and taken: **a comment asking the
+  next author to remember is the weakest instrument here**, so the four declared-but-unread
+  fields are now typed as the only value each may hold (`null`, `readonly []`, `false`) and
+  `projects-payload.test.ts` asserts the served row key by key. Making the budget real now
+  stops `toProjectSummary` compiling *on the line that leaks*, and the key-set assertion
+  catches the other shape of the same mistake — a new client-shaped field on the row.
+  **What is still not done is the narrowing itself**: deleting those four fields from
+  `ProjectSummary` is the eventual fix, and it edits `apps/web/src/components/shell/test-harness.tsx`,
+  which is `shell-navigation-engineer`'s and mid-review under M15 blocking item 2. Filed to
+  them rather than taken. The type makes the deferral safe; it does not end it.
 - **Nothing was proven empirically.** No second project is mounted, so "project A's inputs do
   not reach a caller in project B" is still argued from one project's row not carrying inputs
   *at all*, which is stronger than a filter but is not the same as two projects on one box.
