@@ -149,6 +149,27 @@ export const VALUE_RULES: ValueRule[] = [
  * Deliberately NOT here: `name`, `title`, `label`, `description`. Those carry agent,
  * tool and department names on every single span — denylisting them would redact the
  * trace into uselessness and teach everyone to distrust the redactor.
+ *
+ * `body` IS here, and it is the one entry whose reasoning differs from every other.
+ * Added 2026-08-18 by `rtl-arabic-pdpl-specialist` (the rule-set owner) under the §9.3
+ * ruling; routed to `observability-engineer` as a decision-request, not a silent edit.
+ * Every other key on this list names a value with a *known shape* — an IBAN, a national
+ * id, a phone. `body` names the opposite: it is the key under which **free text a human
+ * typed** conventionally travels, in `ops.message`, in an email tool's output, in an HTTP
+ * response from a client's CRM. `contracts/thread-model.md` §7 rules that such text may
+ * never leave the process as observability data at any granularity, and the primary
+ * defence is structural (`messageSpanAttributes` is a type with no `body` field). This is
+ * the **backstop for when that discipline is bypassed**: before it existed, passing a
+ * whole `ThreadMessage` to `trace.event()` shipped the body verbatim in three places, and
+ * nothing went red. It does not carry our own identifiers the way `name` does — nothing in
+ * this product's chrome puts a `body` key on a span — so the trace-legibility cost that
+ * keeps `name` off this list does not apply.
+ *
+ * Note what it does NOT reach, because a backstop that is mistaken for the defence is
+ * worse than none: a body composed into prose under any other key (`{ frame: '[note from
+ * human:maher: …]' }`) has no `body:` separator and leaks in full. Flattening still wins
+ * against a key rule. `body` on this list narrows the accident; only the structural rule
+ * closes it.
  */
 export const KEY_DENYLIST: string[] = [
   // credentials
@@ -167,6 +188,10 @@ export const KEY_DENYLIST: string[] = [
   'address', 'streetaddress', 'postalcode', 'homeaddress',
   'clientname', 'customername', 'contactname', 'patientname', 'fullname',
   'firstname', 'lastname', 'middlename',
+  // free text a human typed — see the note above. `bodyChars` normalises to `bodychars`
+  // and is deliberately NOT matched: a length is not content, and the sanctioned
+  // projection has to keep working or the rule gets routed around.
+  'body', 'messagebody', 'emailbody', 'bodytext', 'messagetext',
   // special categories (PDPL Art. 1 "sensitive data")
   'medicalrecord', 'healthdata', 'religion', 'ethnicity', 'biometric',
 ];

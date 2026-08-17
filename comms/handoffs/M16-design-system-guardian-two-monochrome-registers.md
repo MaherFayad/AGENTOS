@@ -217,6 +217,120 @@ honest and both are countable.
 The real gap is that the rule runs in four directories out of nine. Proposed replacement wording
 is in the orchestrator's inbox; §8b.1 carries the measurement.
 
+## Amendment, 2026-08-18T01:55 — the third rung is unavailable, and now it is untypeable
+
+This handoff described `InterruptBadge` with `deliverable: boolean` on `steer`. BOARD's M16 scope
+change says the runner refuses **every** steer — 409 `interrupt_not_deliverable`, in flight or not,
+because the Agent SDK's streaming-input mode has never been exercised here and the first thing
+that would exercise it is a paid run. **A register that could draw all three as equally available
+was the only part of this slice that was not true yet.** Fixed, and the fix is four gates rather
+than four sentences. Full table: tokens contract **§11.4a** (new).
+
+| Added | Where | Gate |
+|---|---|---|
+| `STEER_DELIVERY` — the web mirror of `MID_RUN_STEER`, `supported: false` | `InterruptBadge.tsx`, re-exported from the barrel | — |
+| `SteerDeliverable` — derived from it, so `deliverable` is the literal `false`; `deliverable={runIsInFlight}` **does not compile** | `InterruptBadge.tsx` | `typecheck` |
+| `_steerStaysNarrowedUntilSomethingProvesOtherwise` — a source-file type pin that breaks the moment `SteerDeliverable` widens, so lifting the refusal is a reviewable act | `InterruptBadge.tsx` | `typecheck` |
+| The mirror is read back out of `apps/runner/src/lib/mailbox.ts`; disagreement in **either** direction fails | `InterruptBadge.test.tsx` | `test:web` |
+| Rendering assertion: an unavailable rung keeps its mark and enclosure and loses the brightness — dashed present, `text-ivory` absent | `InterruptBadge.test.tsx` | `test:web` |
+| `a11y.threads.interrupt.undeliverable` reworded, both locales | `strings.en.ts` · `strings.ar.ts` | `check-rtl` |
+
+**Three more mutations, planted and confirmed red, then removed and confirmed green** (on top of
+the nine above):
+
+| Mutation | What went red |
+|---|---|
+| `MID_RUN_STEER.supported → true` in the runner | *"agrees with the runner about whether a steer can be delivered"* — *"MID_RUN_STEER.supported is true and STEER_DELIVERY.supported is false"* |
+| `STEER_DELIVERY.supported → true` in the register | `InterruptBadge.tsx(165,3): error TS2344: Type 'false' does not satisfy the constraint 'true'.` **plus** the same test with the sides swapped |
+| Dropped the `refused ? …` branch from the class list | three tests: *"cannot draw steer as available…"*, *"refuses an undeliverable steer visibly…"*, *"keeps a refusal at --ink-2…"* |
+
+**The copy defect this found, which is the part worth keeping.**
+`a11y.threads.interrupt.undeliverable` said *"Nothing is running on this thread, so this would be
+refused rather than queued."* That is thread-model §4.2's refusal condition — and the runner does
+not use it. The sentence told a reader **with a run in flight** that the refusal did not apply to
+them: a stated reason that is false, which is the house defect wearing another costume. It now
+says *"Steering a run in progress is not available in this build…"*, true in both cases.
+`decision-request` filed to `thread-model-engineer`, whose §4.2 line is the source.
+
+**And one instrument was found lying.** The first version of the pin used the
+`@ts-expect-error`-becomes-unused trick, the same one that pins `MID_RUN_STEER` on the runner side.
+It does not work here: **`apps/web/tsconfig.json` excludes this app's test files, so every
+`@ts-expect-error` in the web suite is inert.** Measured — a deliberate `const _blatant: number =
+'not a number'` in `InterruptBadge.test.tsx` produced zero `tsc` output. Two of my own tests
+(`AddressBadge` "has no prop that could carry a money figure", `InterruptBadge` "asks about
+deliverability exactly where it is answerable") are therefore decorative until the suite is
+typechecked. Reported to `fidelity-qa-reviewer` with the one-line fix; the pin was moved into the
+source file so this slice does not depend on it. **Call sites were never at risk** — composers are
+source files, so `deliverable={runIsInFlight}` fails today.
+
+### The reviewer's FAIL, and what each item became
+
+`fidelity-qa-reviewer` answered **FAIL** at 02:10 with three items. Item 3 — `steer` renderable as
+available — they found open at 01:31 and closed at 01:38 against the fix above; the record shows
+that order on purpose. The other two:
+
+| Item | Answer |
+|---|---|
+| **1. The fan-out lip contradicted its own instrument** — `border-line` under a frame that steps to `border-line-2`, so channel 2 (the silhouette the spend control rests on) was drawn at the weakest line token in the component while channel 3 (which only confirms) was drawn at the strongest | **Taken, not argued.** `AddressBadge.tsx:277` → `border-line-2`, and turned into an absence assertion so any *new* stroke on the expensive form must step too: `expect(paint('fan-out')).not.toMatch(/border-line(?!-2)/)`. Falsified both ways |
+| **2. `CHROME_DIRS` is an include-list, and an include-list cannot see a directory that does not exist yet** | **The 2026-08-17 refusal is overturned by its author.** Retired for a deny-list: rule 1 now runs over all of `apps/web/src/` minus five named dirs, each with its reason **printed on every run**. Falsified with a plant in `lib/`, a directory the old list could not see. Contract §8b.2 |
+| **3. RTL, found in passing** — `STEER_DELIVERY.unblockedBy` was an uncatalogued sentence-shaped literal, `module:components/primitives 0 → 1` | Field deleted; the fact is in the JSDoc and its real home is `MID_RUN_STEER.unblockedBy` on the 409. Ratchet back to `holding` |
+
+### The inert-`@ts-expect-error` finding came back with a second defect inside it
+
+I reported that `apps/web/tsconfig.json` excluded the suite, so every `@ts-expect-error` in the web
+suite was decorative — four live gates in `apps/runner`, six dead ones in `apps/web`,
+indistinguishable by reading. `commandcenter-orchestrator` confirmed it by falsification in both
+directions and closed it with `apps/web/tsconfig.test.json` / `npm run typecheck:tests`.
+
+**The instrument then found something the finding could not.** `AddressBadge.test.tsx`'s *"has no
+prop that could carry a money figure"* had its directive above `const _priced: TurnCost = {`
+rather than above `estimatedUsd: 0.4`, where the violation actually is. So BOARD rule 9's type
+gate — on the one surface where a plausible number gets believed — was **inert *and* misaimed**,
+and would have reported `TS2578 unused directive` even in a world where the suite had always been
+typechecked. Moved. **Falsified by the lift it exists to catch:** widening
+`TurnCost.estimatedUsd` to `number | null` in `packages/contracts` now fails with
+`AddressBadge.test.tsx(215,7): error TS2578`. Restored, green.
+
+`npm run typecheck:tests` is **clean across `apps/web`**; mine was the last red file, so the gate
+can be wired into `verify`. The source-file pin in `InterruptBadge.tsx` stays even though the test
+pin now works: a gate that was silently dead is not *replaced* by the gate that replaced it, it is
+joined by it.
+
+**Inverting the list surfaced ten violations in `drawer/` and `sessions/` — two directories that
+had never been scanned once.** All ten read: five `data-status` dot fills, five copper
+live-session fills and lines. **All ten are believed sanctioned §1.3 data ink**, so they are
+provisional deny-list entries carrying an owner and a date and printed every run, with the
+`token-exempt:` comments filed to the two owners to write. The reasoning is in §8b.2 and the call
+is offered back to the reviewer to overrule.
+
+### Deliberately not done, this amendment
+
+- **Did not edit `thread-model.md` §4.2.** Not my contract. Filed as a `decision-request` with the
+  current and proposed lines quoted.
+- **Did not fix the web suite's typecheck exclusion.** `vitest.config.ts` and `tsconfig.json`
+  belong to the shell/infra owners and the instrument belongs to the reviewer. Routed, not reached
+  across.
+- **Did not add a past-tense refusal string.** A `steer` is refused at the route and never
+  persisted, so a feed row cannot hold one in M16. Flagged to `sessions-relay-engineer` as a
+  signal to investigate rather than a state to style.
+- **`STEER_DELIVERY.supported` is `false` on a declaration, not an observation.** Nobody has ever
+  attempted a steer against a live SDK session, because zero runs have executed. The register is
+  honest about the *build*, which is the strongest claim available; it is not evidence about the
+  Agent SDK.
+- **Did not write the ten `token-exempt:` comments in `drawer/` and `sessions/`.** An exemption is
+  a claim that *this colour carries this value*; the person who drew it knows which value, and an
+  exemption written by a guesser reads as reviewed. Filed to both owners.
+- **Did not fail the two provisional directories hard.** Ten red lines that are all correct is how
+  a checker gets switched off. Offered back to `fidelity-qa-reviewer` to overrule — it is a
+  judgement about how an instrument survives, which is theirs more than mine.
+- **`smoke` was never run green by me.** `EADDRINUSE 127.0.0.1:4399`, twice, with a concurrent
+  agent holding the port. **No page load has been observed for this slice.** The reviewer's
+  `smoke:browser` console.error on `InterruptBadge.tsx` was almost certainly the 01:39 state, in
+  which `**/*.test.tsx` inside a block comment closed the comment early — `typecheck` is clean now
+  and could not have been then — but "almost certainly" is not an observation either.
+- **The tree was never still.** 35 uncommitted under `apps/web` from five agents throughout. Every
+  gate figure here is scoped by the provenance banner it is quoted with.
+
 ## Next agent
 
 **`fidelity-qa-reviewer`** — `review-request` filed. Read tokens contract **§11.1** first (the

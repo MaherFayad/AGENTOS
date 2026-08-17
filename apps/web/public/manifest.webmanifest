@@ -18,7 +18,7 @@
   ],
   "shortcuts": [
     { "name": "Map", "url": "/map" },
-    { "name": "Sessions", "url": "/sessions" },
+    { "name": "Threads", "url": "/threads" },
     { "name": "Dashboards", "url": "/dashboards" }
   ]
 }

@@ -100,14 +100,47 @@ interview may add to it; nothing may soften it (Part VII.4, §3.5).
    trace payloads.
 6. **Retention:** run artefacts and scratch workspaces are disposable and expire; anything
    that must persist is written deliberately to a named location, not left in a trace.
-7. **Right to erasure is executable.** If a data subject requests deletion, we must be able
-   to find and remove their data across artefacts, traces and Postgres. Anything that makes
-   that impossible — an unredacted trace, a copied transcript — is prohibited for that
-   reason alone.
-8. **Cross-border:** processing and storage stay in-region. An agent may not send client
+7. **Right to erasure — what is executable, and what is not.** Corrected 2026-08-18 by
+   `rtl-arabic-pdpl-specialist`; this rule previously asserted a working erasure capability,
+   which was **false in this build** — the house defect (a declared value read as an observed
+   one) sitting in the one file every run inherits. The old sentence is not reproduced here,
+   because a false claim quoted inside its own correction is still a sentence a model reads out
+   of context. The true position, by tier:
+   - **Selectable and executable:** nothing. **No plane in this repo has a delete verb.**
+   - **Selectable, not executable:** the *project* (one predicate, one row set) and a named
+     *author* (`author = 'human:{identity}'`). A delete verb would discharge these. Deleting
+     a project is separately refused while history exists (ADR-015 Q4).
+   - **Not selectable at any price:** a third party named only *inside* free text — a message
+     body, an agent summary, an artefact filename. **A delete verb does not fix this tier**,
+     because erasure requires selection first and prose has nothing to select on. This is the
+     tier that matters most in our market, because it is the client's customers.
+   The operative consequence, and the reason this is policy rather than a note: **the only
+   defence for tier three is not accumulating it.** Minimise at the point of writing, keep
+   free text out of every derived plane, and never create a second copy of a body.
+8. **Never put a human's message into a trace, a log, or a push payload** — not truncated,
+   not summarised, not "just the first line". Reference it by id. A message body is free text
+   a person typed; it has no keys to deny and no shape a regex knows, so the redactor is not a
+   partial defence there — it is not a defence at all. Enforced by construction where it can
+   be (`messageSpanAttributes()` is a type with no `body` field) and backstopped by the `body`
+   key on the redaction denylist; still **not** enforced for free text pasted into an error
+   string, which is why this line is a rule you follow rather than one a tool applies.
+9. **Do not flatten a structured payload before tracing or logging it.** Pass the object.
+   Key-based redaction walks object keys and a string has none: as `{client_name, address,
+   date_of_birth, salary}` four keys redact; composed into one sentence first, four of five
+   leak. Compose prose at the point of display, never before the point of storage.
+10. **The model is a processor, and a thread's history goes to it.** A run's prompt carries
+   the thread's prior message bodies by design (`lib/prompt.ts` — *"it is going into a model,
+   which is the point"*). *"Traces stay local"* is true and is **not** the whole egress story:
+   traces and Postgres are ours, the model endpoint is not. **This repo asserts no processing
+   region for the model endpoint** — there is no region or base-URL configuration anywhere in
+   it — so rule 11's *"if a connector's region is unclear it does not belong in `wired_into`"*
+   currently has an exception that is unwritten. Naming it here rather than leaving it in the
+   gap between two rules; it is settled in the data-egress ADR, with the human.
+11. **Cross-border:** processing and storage stay in-region. An agent may not send client
    data to a tool whose processing location is unknown; if a connector's region is
-   unclear, it does not belong in a `wired_into` list.
-9. **This file is two tiers, and only one of them is global.** Under N projects
+   unclear, it does not belong in a `wired_into` list. See rule 10 for the one processor
+   this rule does not currently bind.
+12. **This file is two tiers, and only one of them is global.** Under N projects
    (`Plan §9`–§10) the brain splits: a **global tier — this file, sections 5 and 7 —
    holding facts about *us*, and a **project tier**, `<project>/company/COMPANY.md`,
    holding facts about *that client*. §3.3 injects both into every run of that project;
@@ -123,7 +156,7 @@ Tool-level consequence: `wired_into` is the runner's allowlist (§3.2). A connec
 processes client data outside the region is not a configuration question — it is a red
 line, and the fix is removing the name from the frontmatter.
 
-Write-path consequence of rule 9, because a rule that names no enforcer enforces nothing:
+Write-path consequence of rule 12, because a rule that names no enforcer enforces nothing:
 the interview's write-back (`apps/runner/src/lib/brain.ts`, ADR-007) is gated on an agent
 **slug** and confined to one **configured** company directory. Under a cascade every
 project has its own `intelligence/company-interview`, and both halves of that gate are

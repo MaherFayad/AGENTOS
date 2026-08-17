@@ -340,29 +340,63 @@ different shape:**
 > Planted in `drawer/sections/Header.tsx` as real code rather than a comment,
 > `border-ink-teal bg-ink-coral-fill` produced **0 violations**.
 
-**And widening it is refused, with the reason.** `map/`, `drawer/`, `dashboards/`, `chart/` and
-`sessions/` each contain **both** chrome and data ink, legitimately and in the same file — a
-status chip beside a panel border, a series stroke beside a tab. A static scan cannot tell which
-element a class lands on, and a rule that fires on the legitimate half would be turned off or
-exempted into meaninglessness within a week. That is `Chip.tsx`'s exemption generalised to five
-directories, which is not an exemption any more; it is a repeal.
+**Widening it was refused on 2026-08-17, and that refusal was overturned on 2026-08-18.** The
+refusal argued that `map/`, `drawer/`, `dashboards/`, `chart/` and `sessions/` each contain both
+chrome and data ink legitimately, so a rule firing on the legitimate half would be exempted into
+meaninglessness — `Chip.tsx`'s exemption generalised to five directories, which is a repeal rather
+than an exemption.
 
-So the honest statement, and it is written here rather than inferred from a green exit code —
+**`fidelity-qa-reviewer` overturned it with an argument the refusal had no answer to, and it is
+worth keeping in full because the shape recurs:** *"an include-list cannot see a directory that
+does not exist yet."* Demonstrated on the tree that carried the finding —
+`apps/web/src/app/(views)/p/[project]/threads/` and `dashboards/components/ThreadFeed.tsx` were
+created **during** the review, and `drawer/` had never been covered at all. The failure mode was
+never that someone widens the list badly; it is that **nobody remembers the list exists**. The
+refusal was answering the wrong risk.
+
+#### 8b.2 The rule is now a deny-list — chrome by default, exceptions named and printed
+
+`CHROME_DIRS` is retired. `chrome-is-monochrome` runs over **all of `apps/web/src/`** except the
+directories named in `DATA_INK_DIRS`, each with its reason, **all printed on every run** under
+`rule 1 scope` / `not-chrome`. A directory created tomorrow is chrome by default, which is what
+§1.3 states.
+
+| Dir | Why it is not chrome |
+|---|---|
+| `map/` | node fills, department hues and the copper live-ring **are** the datum (§2.1) |
+| `chart/` | series colour is the series (§2.6) |
+| `dashboards/` | widget internals paint values — bars, deltas, sparkline fills (§2.5) |
+| `drawer/` | **PROVISIONAL.** Owner `drawer-engineer` |
+| `sessions/` | **PROVISIONAL.** Owner `sessions-relay-engineer` |
+
+**The two provisional entries are the honest part and they are debt, not policy.** Inverting the
+list surfaced **ten** violations in the two directories that had never been scanned. Every one was
+read, not assumed: five are `data-status` dot fills (`.dot[data-status='ok'|'error'|'running'|
+'awaiting-approval']`) and five are copper live-session fills and lines. **All ten are sanctioned
+data ink under §1.3** — a status and an *alive* thing — so none is a breach; each wants a
+`token-exempt:` line comment naming the value it carries, and that comment belongs to the owner of
+the file, not to me. Failing two concurrent agents' trees over ten lines that are all correct is
+how a checker gets switched off. Filed to both owners; **delete the two entries when the line
+exemptions land.**
+
+So the honest statement, written here rather than inferred from a green exit code —
 `check-rtl`'s `assembled-template` blind spot was **declared**, and the declaration is what let
 three sentences ship untranslated, so a declared blind spot is only worth anything if it is
 declared *loudly*:
 
 | | Status |
 |---|---|
-| Data ink on a fill/border/ring **inside `CHROME_DIRS`** | **mechanical.** Falsified in both directions today. |
-| Data ink on a fill/border **anywhere else** | **not checked, and deliberately not going to be.** Those directories mix chrome and data by design. |
+| Data ink on a fill/border/ring **anywhere under `apps/web/src/`** | **mechanical**, except in the five named dirs. Falsified in both directions: BOARD's own two examples caught, and a `background: var(--ink-teal)` planted in `lib/` — a directory the old include-list could not see — now fails. |
+| Data ink on a fill/border in `map/` · `chart/` · `dashboards/` | **not checked, correctly.** These paint values. |
+| Data ink on a fill/border in `drawer/` · `sessions/` | **not checked, and that is debt with an owner and a date**, not a design decision. Ten known lines, all believed sanctioned, none carrying its exemption comment yet. |
 | *"Is this particular element chrome or is it data?"* | **not statically answerable at all.** This is `fidelity-qa-reviewer`'s hand inspection and mine, and there is no version of `check-tokens` that replaces it. |
 
-**Therefore: `0 violations` means BOARD rule 8 holds. It does not mean rule 1 holds**, and the
-gap is five directories wide. The tree is clean on §1.3 today by inspection, not by any gate, and
-the only sanctioned data-ink-on-chrome anywhere is `Chip.tsx`, whose exemption is printed on
-every run. **A reviewer citing a token result must cite this row with it**, the same way they
-cite the `scanned at` line: a count with no stated width is a sentence, not evidence.
+**Therefore: `0 violations` means BOARD rule 8 holds, and now means rule 1 holds across every
+directory but five — two of which are debt.** It still does not mean the *judgement* is right,
+because no static rule can tell chrome from data on a given element. **A reviewer citing a token
+result must cite this row with it**, the same way they cite the `scanned at` line: a count with no
+stated width is a sentence, not evidence. The width is now printed by the checker itself, so
+quoting the banner carries it.
 
 ### 8c. Motion and theme in JavaScript
 
@@ -1079,13 +1113,61 @@ The question a reader must resolve **before they commit**:
 | Level | Mark | Enclosure | Text | Consequence |
 |---|---|---|---|---|
 | `note` | unbroken stem, full height | **none** | `--ivory-2` | queued; read at the next tool boundary |
-| `steer` | stem **steps sideways** and continues | **leading rule** (`border-s`) | `--ivory` | injected into the live session now |
+| `steer` | stem **steps sideways** and continues | **leading rule** (`border-s`), **dashed in M16** | `--ivory` *(never drawn in M16 — see 11.4a)* | injected into the live session now |
 | `halt` | stem stops at a bar; **top of the box empty** | **full box** | `--ivory` | stop, checkpoint, ask |
 
 All three channels answer `interruptsWorkInProgress()` identically, and the test asserts that
 agreement rather than restating it: a reader who scans the shape and a reader who scans the
 brightness must reach the same conclusion, or one of them is being misled. The enclosure ramp is
 asserted **monotone** — nothing, a rule, a box — because that ordering is the escalation.
+
+#### 11.4a The ramp has one rung that is currently unavailable, and the type is what says so
+
+**M16 ships two interrupt levels and a refusal, not three.** The runner answers **every** `steer`
+with `interrupt_not_deliverable` (409), in flight or not: `createSdkSession` drives the Agent SDK
+with a *string* prompt, injecting another user turn needs its streaming-input mode, that mode has
+never been exercised here, and the first thing that would exercise it is a **paid** run. BOARD
+records this as the M16 scope change; `MID_RUN_STEER.supported` is the runner's declaration.
+
+A register that drew all three as **equally available** would be the only part of the design that
+is not true yet, so this is a **monotone ramp with one rung unavailable** — not a two-rung ramp,
+because `steer` is a real level that is coming back, and not three equal rungs, because it does
+not work today. The unavailable rung keeps its place in the ordering and its own mark and
+enclosure, and loses only the brightness that would read as *"this will land"*.
+
+| | Mechanism | Where |
+|---|---|---|
+| A caller may not **claim** a steer will land | `SteerDeliverable` is derived from `STEER_DELIVERY.supported`, so today it is the literal `false`. `deliverable={runIsInFlight}` **does not compile** | `InterruptBadge.tsx`; `typecheck` |
+| The refusal may not be **lifted quietly** | Two gates: `_steerStaysNarrowedUntilSomethingProvesOtherwise`, a type-level pin in the **source** file, and the test's `@ts-expect-error` becoming an unused directive. Both stop compiling the moment `SteerDeliverable` widens | `InterruptBadge.tsx`; `typecheck` · `InterruptBadge.test.tsx`; `typecheck:tests` |
+| The web mirror may not **drift from the runner** | The test reads `apps/runner/src/lib/mailbox.ts` and fails if `MID_RUN_STEER.supported` and `STEER_DELIVERY.supported` disagree — in **either** direction | `InterruptBadge.test.tsx`; `test:web` |
+| An unavailable rung may not be **dressed as available** | Rendering assertion: dashed enclosure present, `text-ivory` absent | `InterruptBadge.test.tsx`; `test:web` |
+
+**Why the pin is in the source file as well as in the test, and the hour in which one of them was
+a lie.** The first draft used only the `@ts-expect-error`-becomes-unused trick, which is how the
+runner pins `MID_RUN_STEER`. It did nothing here: `apps/web/tsconfig.json` excluded this app's
+test files, so **every `@ts-expect-error` in the web suite was inert** — four live gates in
+`apps/runner`, six decorative ones in `apps/web`, indistinguishable by reading. Measured rather
+than assumed: a deliberate `const _blatant: number = 'x'` in `InterruptBadge.test.tsx` produced
+zero `tsc` output, while the identical probe in `apps/runner` was caught at once.
+
+`commandcenter-orchestrator` closed it with `apps/web/tsconfig.test.json` /
+`npm run typecheck:tests`, and the instrument immediately found a **second** defect nobody could
+have seen: §11.3's *"has no prop that could carry a money figure"* had its directive on the
+`const _priced: TurnCost = {` line rather than on `estimatedUsd: 0.4`, where the violation is. So
+BOARD rule 9's type gate on the one surface where a plausible number gets believed was **inert and
+misaimed at once**. Fixed; falsified by widening `TurnCost.estimatedUsd` to `number | null` in
+`packages/contracts`, which now fails with `TS2578 Unused '@ts-expect-error' directive`.
+
+**The rule this leaves behind:** the source-file pin stays even though the test pin now works.
+A gate that was silently dead for a week is not replaced by the gate that replaced it — it is
+joined by it.
+
+**The stated reason had to change too, and the old one was the wrong reason.**
+`a11y.threads.interrupt.undeliverable` used to say *"Nothing is running on this thread"* — which
+is thread-model §4.2's refusal, the one that applies when there is no run in flight. Under the
+runner's actual behaviour that sentence tells a reader **with** a run in flight that the refusal
+does not apply to them. §4.2 describes the **level**; `STEER_DELIVERY` describes this **build**,
+and the register may only draw what the build can do.
 
 **What separates `halt` from `steer` at 12px without reading either label is an absence**: steer's
 line reaches the top of the box; halt's stops against a bar with nothing above it. An absence
@@ -1099,7 +1181,8 @@ and invariant 7: a `steer` with no run in flight is **refused**, never silently 
 discriminated union: a caller offering `steer` **must** answer *"is a run in flight?"*, and a
 caller offering `note` **cannot**. A boolean defaulting to `true` would have been a
 deliverability claim spent by a call site that never made it — §9.6a's lesson, which was about a
-colour, applied to a semantic prop exactly as `ProvenanceBadge.state` applies it.
+colour, applied to a semantic prop exactly as `ProvenanceBadge.state` applies it. **And today the
+only admissible answer is `false`** — see 11.4a.
 
 A refused steer renders with a **dashed** enclosure and stays at `--ink-2`. §9.3 homes `--ink-3`
 at disabled controls and this looks like one; **§9.2's delete-the-text test overrules that** —

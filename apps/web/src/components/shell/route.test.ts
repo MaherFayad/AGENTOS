@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   breadcrumbFor,
+  MAX_SEGMENTED_TABS,
   parseShellRoute,
   projectPrefix,
   projectTrail,
   searchPlaceholder,
   splitProject,
   switchProjectHref,
+  VIEW_LABELS,
   VIEWS,
   viewHasLiveCounter,
   viewHasZoom,
@@ -16,8 +18,8 @@ import {
 } from './route';
 
 describe('parseShellRoute', () => {
-  it('has exactly four views, SESSIONS fourth', () => {
-    expect(VIEWS).toEqual(['map', 'dashboards', 'chart', 'sessions']);
+  it('has exactly four views, THREADS fourth', () => {
+    expect(VIEWS).toEqual(['map', 'dashboards', 'chart', 'threads']);
   });
 
   it('treats / as the map', () => {
@@ -34,10 +36,10 @@ describe('parseShellRoute', () => {
     expect(route).toMatchObject({ department: 'sales', agent: 'account-enrichment' });
   });
 
-  it('reads /dashboards/:id and /chart/:department and /sessions/:id', () => {
+  it('reads /dashboards/:id and /chart/:department and /threads/:id', () => {
     expect(parseShellRoute('/dashboards/pipeline')).toMatchObject({ view: 'dashboards', panel: 'pipeline' });
     expect(parseShellRoute('/chart/marketing')).toMatchObject({ view: 'chart', department: 'marketing' });
-    expect(parseShellRoute('/sessions/abc123')).toMatchObject({ view: 'sessions', session: 'abc123' });
+    expect(parseShellRoute('/threads/3f9a')).toMatchObject({ view: 'threads', thread: '3f9a' });
   });
 
   it('falls back to the map for an unknown path', () => {
@@ -46,7 +48,86 @@ describe('parseShellRoute', () => {
   });
 
   it('builds tab hrefs', () => {
-    expect(viewHref('sessions')).toBe('/sessions');
+    expect(viewHref('threads')).toBe('/threads');
+  });
+});
+
+/**
+ * `Plan §23.5` — *"the shell cannot hold six tabs"*. The rule that made this slice a
+ * replacement rather than an addition, made into something that can go red.
+ *
+ * A comment is not a mechanism: the last two times a rule in this repo named no enforcer
+ * it was violated (`workspace` confinement, the duplicate barrel export). The next agent
+ * to want a tab — BOARD in M17, CALENDAR in M18 — meets this test, not a paragraph, and
+ * §23.5's answer for both of them is the top-right cluster.
+ */
+describe('the segmented control stays at four tabs (Plan §23.5)', () => {
+  it('refuses a fifth view', () => {
+    expect(VIEWS.length).toBeLessThanOrEqual(MAX_SEGMENTED_TABS);
+  });
+
+  it('keeps the label strip inside the width §23.5 measured', () => {
+    // §23.5's argument is width, not count: four wide-tracked 11px caps at +0.25em come
+    // to ~400px and `TopBar` reflows below `sm` to fit exactly that. Counting characters
+    // is the cheap proxy — MAP·DASHBOARDS·CHART·SESSIONS was 27 and THREADS made it 26,
+    // so M16 spent nothing. A five-tab bar fails the case above; a four-tab bar with a
+    // label nobody measured fails this one.
+    const glyphs = VIEWS.reduce((n, v) => n + VIEW_LABELS[v].length, 0);
+    expect(glyphs).toBeLessThanOrEqual(27);
+  });
+
+  it('gives every view a label, so a tab can never render blank', () => {
+    for (const view of VIEWS) expect(VIEW_LABELS[view]).toMatch(/^[A-Z]+$/);
+  });
+});
+
+/**
+ * M16 — THREADS replaced SESSIONS in the tab bar (`Plan §23.5`, `Plan §23.8`), and §3.1's
+ * two session paths survive underneath it rather than being redirected or removed.
+ */
+describe('/sessions after the M16 tab change', () => {
+  it('selects THREADS instead of falling through to the map', () => {
+    // Without the alias, `/sessions/abc` — the path every already-delivered push
+    // notification deep-links into (§3.6) — would parse to `map`, and the shell would
+    // light a tab you are not on.
+    expect(parseShellRoute('/p/agentos/sessions/abc123')).toMatchObject({
+      view: 'threads',
+      session: 'abc123',
+      isDrillIn: true,
+    });
+    expect(parseShellRoute('/p/agentos/sessions')).toMatchObject({
+      view: 'threads',
+      session: null,
+      isDrillIn: false,
+    });
+  });
+
+  it('never lets a session id arrive as a thread id, or the reverse', () => {
+    // The two namespaces are the reason `/sessions/:id` is not rewritten to
+    // `/threads/:id`: a relay session id is not an `ops.thread` uuid
+    // (`contracts/thread-model.md` §5.1, §9.1 open). One field each, so a URL cannot
+    // acquire two readings.
+    expect(parseShellRoute('/p/agentos/sessions/abc123').thread).toBeNull();
+    expect(parseShellRoute('/p/agentos/threads/3f9a').session).toBeNull();
+  });
+
+  it('sends both id namespaces up to the thread list', () => {
+    expect(breadcrumbFor(parseShellRoute('/p/agentos/sessions/abc123'))).toEqual({
+      label: 'ALL THREADS',
+      href: '/p/agentos/threads',
+    });
+    expect(breadcrumbFor(parseShellRoute('/p/agentos/threads/3f9a'))).toEqual({
+      label: 'ALL THREADS',
+      href: '/p/agentos/threads',
+    });
+  });
+
+  it('drops the session when the project changes, exactly as it always did', () => {
+    // `switchProjectHref` keeps view + department and nothing else. A session id is not
+    // portable across projects and neither is a thread id.
+    expect(switchProjectHref(parseShellRoute('/p/agentos/sessions/abc123'), 'client-x')).toBe(
+      '/p/client-x/threads',
+    );
   });
 });
 
@@ -131,9 +212,12 @@ describe('switchProjectHref — what survives a project change', () => {
     expect(switchProjectHref(parseShellRoute('/p/a/map/sales/account-enrichment'), 'b')).toBe('/p/b/map/sales');
   });
 
-  it('drops the panel and the session', () => {
+  it('drops the panel, the thread and the session', () => {
     expect(switchProjectHref(parseShellRoute('/p/a/dashboards/pipeline'), 'b')).toBe('/p/b/dashboards');
-    expect(switchProjectHref(parseShellRoute('/p/a/sessions/xyz'), 'b')).toBe('/p/b/sessions');
+    expect(switchProjectHref(parseShellRoute('/p/a/threads/3f9a'), 'b')).toBe('/p/b/threads');
+    // The session path lands on THREADS in the destination: the tab survives a project
+    // switch even though the leaf cannot.
+    expect(switchProjectHref(parseShellRoute('/p/a/sessions/xyz'), 'b')).toBe('/p/b/threads');
   });
 
   it('works from an unscoped URL, which is how the first switch ever happens', () => {
@@ -168,7 +252,7 @@ describe('searchPlaceholder', () => {
   });
 
   it('follows the same grammar on our fourth tab', () => {
-    expect(searchPlaceholder('sessions')).toBe('Search sessions');
+    expect(searchPlaceholder('threads')).toBe('Search threads');
   });
 });
 
@@ -201,12 +285,12 @@ describe('per-view capabilities', () => {
     expect(viewHasZoom('map')).toBe(true);
     expect(viewHasZoom('chart')).toBe(true);
     expect(viewHasZoom('dashboards')).toBe(false);
-    expect(viewHasZoom('sessions')).toBe(false);
+    expect(viewHasZoom('threads')).toBe(false);
   });
 
   it('gives the live counter to the canvas views only', () => {
     expect(viewHasLiveCounter('map')).toBe(true);
-    expect(viewHasLiveCounter('sessions')).toBe(false);
+    expect(viewHasLiveCounter('threads')).toBe(false);
   });
 });
 
@@ -220,7 +304,7 @@ describe('viewSurface — the §2.0 offset contract', () => {
     // The bug this replaced: CHART printed its department tabs on the same row as the
     // search pill, because nothing reserved the band the floating bar occupies.
     expect(viewSurface('chart')).toBe('flow');
-    expect(viewSurface('sessions')).toBe('flow');
+    expect(viewSurface('threads')).toBe('flow');
   });
 
   it('defaults every view to flow, so a new view is safe on the day it is added', () => {

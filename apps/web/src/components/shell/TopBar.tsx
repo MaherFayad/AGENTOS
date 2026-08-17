@@ -14,8 +14,9 @@ import { ViewTabs } from './ViewTabs';
  * `grid-cols-[1fr_auto_1fr]` is load-bearing, not stylistic: the centre column is sized
  * by its content and the two `1fr` columns split the rest, so the tab group sits on the
  * true centre line of the viewport whatever the side clusters weigh. That is the
- * mechanism by which our fourth tab (SESSIONS) and the cost ticker "don't disturb the
- * layout" (§2.0).
+ * mechanism by which our fourth tab (SESSIONS until M16, THREADS since) and the cost
+ * ticker "don't disturb the layout" (§2.0). M16 spent the slot rather than adding one, so
+ * the centre column's budget is unchanged — see `MAX_SEGMENTED_TABS` in `route.ts`.
  *
  * **M15 adds the project switcher and spends none of the centre column's budget.**
  * `Plan §23.10` puts it "before the fullscreen toggle" and calls it the highest-frequency

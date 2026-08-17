@@ -4,7 +4,7 @@ import { AppShell } from '../../components/shell';
 
 /**
  * Every view lives under this route group, so the §2.0 shell mounts exactly once and
- * survives navigation between MAP / DASHBOARDS / CHART / SESSIONS — the top bar never
+ * survives navigation between MAP / DASHBOARDS / CHART / THREADS — the top bar never
  * remounts, so the search box keeps focus and the tabs never flash.
  *
  * `viewport-fit: cover` + the shell's `env(safe-area-inset-*)` padding is the §3.6

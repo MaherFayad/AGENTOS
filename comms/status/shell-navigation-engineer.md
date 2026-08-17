@@ -1,36 +1,39 @@
 # status — shell-navigation-engineer
 
-**Updated:** 2026-08-17T18:50
-**Milestone:** M15 (`Plan §23.12` P1) · M1 §2.0 · M4 §3.6
+**Updated:** 2026-08-18T02:12
+**Milestone:** M16 (`Plan §23.5`, `§23.8`) · §2.0 · §3.6
 **State:** review
 
 ## Now
-Nothing in flight. Fixed the §2.0 tablist RTL defect `chart-matrix-engineer` found from
-outside: `SegmentedControl` mapped `ArrowRight` to `+1` unconditionally, so **the shell's
-primary navigation ran backwards in Arabic** and had since it was written. Reused their
-`chart/model/direction.ts` rather than forking it; **new RTL cases confirmed red against
-the pre-fix handler first** (`4 failed | 9 passed`), then fixed. Audited every other arrow
-handler in the app — `SearchPill` and `ProjectSwitcher` are block-axis and were already
-right, now pinned (REQ-SHELL-107/108, Decisions 17–18). `Carousel.tsx` is the last
-instance and is `dashboards-engineer`'s. Not committed.
+Nothing in flight. **THREADS replaced SESSIONS in the §2.0 tab bar** — the slot, not the
+view. Four tabs still, enforced by `MAX_SEGMENTED_TABS` with a test behind it, because the
+day BOARD lands THREADS *leaves* the array rather than BOARD joining it. Routes
+`/p/:project/threads[/:id]` are project-scoped `ViewMount`s for `sessions-relay-engineer`.
+**Decision they needed: `/sessions` and `/sessions/:id` are neither redirected nor removed** —
+a relay session id is not an `ops.thread` uuid, so a rewrite would resolve to a thread that
+does not exist. Both are sub-views under THREADS; `.thread` and `.session` are separate
+fields with a test that neither holds the other's value. Five defects planted, all confirmed
+red, all restored. Not committed.
 
 ## Blocked on
-Nothing. Two open, neither blocking:
-`comms/inbox/rtl-arabic-pdpl-specialist/20260817-1846-shell-navigation-engineer-promote-inlinestep-to-i18n-direction.md`
-(where `inlineStep` should live — my primitive imports a *view* until it is answered) and
-`comms/inbox/design-system-guardian/20260817-1845-shell-navigation-engineer-i-edited-segmentedcontrol-to-fix-a-live-rtl-defect.md`
-(I edited their file; revert offered).
-Awaiting review:
-`comms/inbox/fidelity-qa-reviewer/20260817-1849-shell-navigation-engineer-review-tablist-rtl-arrow-keys.md`
-`comms/inbox/fidelity-qa-reviewer/20260817-1812-shell-navigation-engineer-m15-coverage-gate-review.md`
+Nothing. Four open, none blocking — the two M15 ones (`inlineStep` promotion,
+`ProjectSummary` narrowing) plus the M16 pair I just sent to `sessions-relay-engineer` and
+`rtl-arabic-pdpl-specialist`.
 
 ## Last handoff
-`comms/handoffs/M15-shell-navigation-engineer-tablist-arrow-keys-in-rtl.md`
+`comms/handoffs/M16-shell-navigation-engineer-threads-replaces-sessions-in-the-tab-bar.md`
+
+## The finding worth not rediscovering
+**A smoke marker passed against the defect it was written to catch.** `'THREADS'` matched
+`app/layout.tsx`'s `<meta name="description">`, not the tab. Tightened to `'>THREADS<'`; the
+seven pre-existing `MAP`/`CHART` markers have the same weakness. Routed to
+`agent-library-curator`, with the `.next-smoke` collision that lets one smoke run corrupt
+another's.
 
 ## Next
-1. The one owed test behind **REQ-SHELL-105** — a `SearchPill.test.tsx` case at
-   `pathname: '/map'`. REQ-SHELL-106 stays warned until a second library is mounted.
-2. Swap `SegmentedControl`'s interim `@/chart/model/direction` import the day the
-   promotion `decision-request` is answered. One line.
-3. §3.6 push subscription flow with `sessions-relay-engineer`. Deep-link payloads still
-   carry no project field — the last unscoped sender in the shell.
+1. §3.6 push subscription flow with `sessions-relay-engineer`. Deep-link payloads still carry
+   no project field — the last unscoped sender in the shell.
+2. The owed test behind **REQ-SHELL-105** — a `SearchPill.test.tsx` case at `pathname: '/map'`.
+3. `ProjectSwitcher.tsx:243`'s untranslated status enum — a map keyed on `ProjectStatus` with
+   an exhaustive check, so a fourth status fails to compile rather than shipping a fifth
+   Latin word into an Arabic pill.

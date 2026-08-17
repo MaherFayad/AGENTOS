@@ -1,17 +1,24 @@
 /** @vitest-environment jsdom */
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { INTERRUPT_LEVELS, type InterruptLevel } from '@agnetos/contracts';
 import { I18nProvider } from '@/i18n/provider';
-import { InterruptBadge, interruptsWorkInProgress } from './InterruptBadge';
+import { InterruptBadge, STEER_DELIVERY, interruptsWorkInProgress } from './InterruptBadge';
 
 /**
- * REQ-DS-109…111.
+ * REQ-DS-109…111, REQ-DS-113.
  *
  * The question a reader must answer before they commit: **will this interrupt work
  * in progress, or will it wait?** These tests assert that all three channels answer
  * it the same way, and that the answer is derived from the contract rather than
  * asserted twice.
+ *
+ * REQ-DS-113 is the M16 scope change made mechanical: the register is a monotone ramp
+ * **with one rung currently unavailable**, and a register that drew all three as
+ * equally available would be the only part of the design that is not true yet.
  */
 
 const LEVELS = INTERRUPT_LEVELS as readonly InterruptLevel[];
@@ -20,7 +27,7 @@ const show = (level: InterruptLevel, locale: 'en' | 'ar' = 'en') =>
   level === 'steer'
     ? render(
         <I18nProvider locale={locale}>
-          <InterruptBadge level="steer" deliverable />
+          <InterruptBadge level="steer" deliverable={false} />
         </I18nProvider>,
       )
     : render(
@@ -28,6 +35,14 @@ const show = (level: InterruptLevel, locale: 'en' | 'ar' = 'en') =>
           <InterruptBadge level={level as 'note' | 'halt'} />
         </I18nProvider>,
       );
+
+/**
+ * The levels this build can render in their **available** form. The design ramp is a
+ * property of that form, so the ramp assertions below iterate this list rather than
+ * `LEVELS` — and it is derived from the capability, so the day `steer` is deliverable
+ * the ramp is asserted over all three again with no edit here.
+ */
+const AVAILABLE = LEVELS.filter((level) => level !== 'steer' || STEER_DELIVERY.supported);
 
 const drawn = (root: HTMLElement) =>
   new Set([...root.querySelectorAll('svg path')].map((n) => n.getAttribute('d') ?? ''));
@@ -64,6 +79,11 @@ describe('InterruptBadge — the interrupt register (Plan §12, tokens contract 
     // contract's own ordering rather than restated here. Enclosure and weight must
     // both agree with it: a reader who scans the shape and a reader who scans the
     // brightness must reach the same conclusion, or one of them is being misled.
+    //
+    // Enclosure is asserted over ALL three, because a refusal dashes the enclosure
+    // rather than removing it. Weight is asserted over the AVAILABLE ones only: an
+    // unavailable rung is deliberately NOT at the brighter weight, and that is the
+    // next test's subject rather than an exception to this one.
     for (const level of LEVELS) {
       const { container, unmount } = show(level);
       const cls = rootClass(container);
@@ -73,15 +93,85 @@ describe('InterruptBadge — the interrupt register (Plan §12, tokens contract 
         /\bborder\b|\bborder-s\b/.test(cls),
         `${level}: an enclosure means "this reaches into running work"`,
       ).toBe(interrupts);
-      expect(
-        /text-ivory(?!-2)/.test(cls),
-        `${level}: the brighter rung means "this reaches into running work"`,
-      ).toBe(interrupts);
+      if (AVAILABLE.includes(level)) {
+        expect(
+          /text-ivory(?!-2)/.test(cls),
+          `${level}: the brighter rung means "this reaches into running work"`,
+        ).toBe(interrupts);
+      }
       unmount();
     }
     // And the one that waits is the one the contract says waits.
     expect(interruptsWorkInProgress('note')).toBe(false);
     expect(LEVELS.indexOf('note')).toBe(0);
+  });
+
+  it('cannot draw steer as available while the runner cannot deliver one', () => {
+    // BOARD, M16 scope change: M16 ships TWO interrupt levels and a REFUSAL, not
+    // three. `interrupt_not_deliverable` (409) comes back whether or not a run is in
+    // flight, because the Agent SDK's streaming-input mode has never been exercised
+    // here and the first thing that would exercise it is a paid run.
+    //
+    // So the register is a monotone ramp with one rung UNAVAILABLE, and this is the
+    // line that stops it being drawn otherwise. The failure it closes is concrete: a
+    // composer reads thread-model §4.2 — "refused when no run is in flight" — wires
+    // `deliverable={runIsInFlight}`, and renders an available-looking steer that 409s
+    // on submit. §4.2 describes the LEVEL; `STEER_DELIVERY` describes this BUILD.
+    expect(STEER_DELIVERY.supported).toBe(false);
+
+    // @ts-expect-error — while the runner cannot deliver a steer, `true` is not a
+    // value this prop can take, and neither is a `boolean` read off the run state.
+    // WHEN THIS LINE STOPS ERRORING the expect-error becomes unused and `typecheck`
+    // fails — so lifting the capability cannot be done quietly, in either app.
+    const _claimed = <InterruptBadge level="steer" deliverable />;
+    expect([_claimed].length).toBe(1);
+
+    // And the rendering agrees with the type rather than merely being permitted by it.
+    const { container } = show('steer');
+    expect(rootClass(container), 'an unavailable rung must not be dressed as available')
+      .toContain('border-dashed');
+    expect(rootClass(container)).not.toMatch(/text-ivory(?!-2)/);
+  });
+
+  it('agrees with the runner about whether a steer can be delivered', () => {
+    // `MID_RUN_STEER` is `runner-engineer`'s and lives in an app the web bundle cannot
+    // import from, so `STEER_DELIVERY` is a second copy of somebody else's fact — and
+    // a second copy is only safe when something fails when the two disagree. This is
+    // that something. It closes the failure in the direction a type cannot: the runner
+    // lifts the refusal, this register keeps drawing it forever, and nothing is red.
+    // That is BOARD's "a producer without a consumer" running backwards.
+    // Resolved from this file, not from `process.cwd()`: the cwd is `apps/web` under
+    // `npm run test:web` and the repo root under a root-level `vitest run`, and a
+    // checker that reads the wrong path is a checker that has gone blind. And NOT via
+    // `new URL(rel, import.meta.url)` — Vite rewrites that form into an asset URL, so
+    // it resolves to `http://localhost:3000/...` under the test transform. Measured,
+    // not assumed: it is how the first draft of this test failed.
+    const path = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..', STEER_DELIVERY.mirrorOf);
+    expect(
+      existsSync(path),
+      `${STEER_DELIVERY.mirrorOf} is not at ${path}. This mirror can no longer see the thing ` +
+        `it mirrors — fix the path rather than letting the assertion below pass on nothing.`,
+    ).toBe(true);
+    const src = readFileSync(path, 'utf8');
+
+    const at = src.indexOf(`export const ${STEER_DELIVERY.mirrors.split('.')[0]}`);
+    expect(
+      at,
+      `${STEER_DELIVERY.mirrorOf} no longer exports ${STEER_DELIVERY.mirrors.split('.')[0]}. ` +
+        `This mirror has lost the thing it mirrors — re-point it or delete it, but do not ` +
+        `leave the register asserting a capability nothing checks.`,
+    ).toBeGreaterThan(-1);
+
+    // Skip the type annotation (before the `=`) and read the assigned value.
+    const assigned = /=\s*\{[\s\S]*?\bsupported:\s*(true|false)\b/.exec(src.slice(at))?.[1];
+    expect(assigned, `could not read ${STEER_DELIVERY.mirrors} out of ${STEER_DELIVERY.mirrorOf}`)
+      .toBeDefined();
+    expect(
+      assigned === 'true',
+      `${STEER_DELIVERY.mirrors} is ${assigned} and STEER_DELIVERY.supported is ` +
+        `${STEER_DELIVERY.supported}. The runner and the register disagree about whether a ` +
+        `steer can be delivered, and the register is what a human reads before they commit.`,
+    ).toBe(STEER_DELIVERY.supported);
   });
 
   it('ramps the enclosure monotonically — nothing, a rule, a box', () => {

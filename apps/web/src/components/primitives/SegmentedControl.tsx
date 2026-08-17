@@ -5,7 +5,7 @@ import { elementDirection, inlineStep } from '@/chart/model/direction';
 import { cx } from './cx';
 
 /**
- * SegmentedControl — §2.0, the MAP | DASHBOARDS | CHART | SESSIONS tabs.
+ * SegmentedControl — §2.0, the MAP | DASHBOARDS | CHART | THREADS tabs.
  *
  * Active tab is an ivory pill with dark text; inactive is `--ink-2`; 11px,
  * uppercase, +0.25em. The ivory pill with inverted text is expressed as
@@ -46,7 +46,7 @@ import { cx } from './cx';
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
-  /** Optional badge, e.g. a live count next to SESSIONS. */
+  /** Optional badge, e.g. a live count next to a tab. Chrome, so monochrome (§1.3). */
   badge?: string | number;
 }
 

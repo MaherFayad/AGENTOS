@@ -372,12 +372,19 @@ async function checkReadingBudget(openCount) {
     return;
   }
 
-  // Total lines, not non-blank ones. The first version of this check counted non-blank and
-  // read 143 on a file `wc -l` called 177 — the cap said "150 lines" and measured something
-  // else, so a reader and the gate disagreed about whether the same file was over budget.
-  // That is the house defect (a declared value read as an observed one) inside the gate
-  // written to prevent it. Caught by planting 40 lines and watching this stay green.
-  const lines = text.split('\n').length;
+  // Total lines, not non-blank ones — and counted the way `wc -l` and every editor's gutter
+  // count them, which took two corrections to get right.
+  //
+  // The first version counted non-blank lines and read 143 on a file `wc -l` called 177.
+  // The second counted `split('\n').length`, which is one *more* than `wc -l` for any file
+  // ending in a newline — the trailing '' after the final separator is not a line, and the
+  // gate reported "151 lines" at a file every other tool called 150. Both are the same
+  // defect: **the number a gate prints must be the number its reader can reproduce.** A cap
+  // that is off by one is not a rounding error, it is a gate arguing with `wc`.
+  //
+  // This is the house defect (a declared value read as an observed one) found twice inside
+  // the gate written to prevent it, which is roughly how often it is found everywhere else.
+  const lines = text.replace(/\n$/, '').split('\n').length;
   if (lines > BRIEF_MAX_LINES) {
     fail(
       `${rel} is ${lines} lines, over its ${BRIEF_MAX_LINES}-line cap. ` +

@@ -28,6 +28,11 @@ import { cx } from './cx';
  * escalation, so the type carries the escalation — without hue, because chrome is
  * monochrome (§1.3).
  *
+ * **And in M16 the middle rung is not available.** See `STEER_DELIVERY` below: the
+ * runner refuses every `steer` with `interrupt_not_deliverable` (409), in flight or
+ * not. So this is a monotone ramp **with one rung currently unavailable**, and the
+ * type — not a comment — is what stops a caller drawing it as though it were not.
+ *
  * **This register is a RAMP; the addressing register is a DISCONTINUITY.** That
  * difference is deliberate and it is the reason the two registers do not look
  * alike. `#` and `@@` are not two points on a scale — one costs a run and the
@@ -71,6 +76,10 @@ import { cx } from './cx';
  * call site that never made it — §9.6a's lesson, which was about a colour, applied
  * to a semantic prop exactly as `ProvenanceBadge.state` applies it.
  *
+ * **And today the only admissible answer is `false`** — `SteerDeliverable` is
+ * derived from `STEER_DELIVERY.supported`, so `deliverable` widens back to `boolean`
+ * on the day the runner can deliver one and not a commit before.
+ *
  * An undeliverable steer renders with a **dashed** enclosure and stays at
  * `--ink-2`, not `--ink-3`. §9.3 homes `--ink-3` at disabled controls and this is
  * one — but §9.2's delete-the-text test overrules that here: delete the sentence
@@ -90,6 +99,84 @@ import { cx } from './cx';
  * that module is `thread-model-engineer`'s; offered to them if they want it.
  */
 export const interruptsWorkInProgress = (level: InterruptLevel): boolean => level !== 'note';
+
+/**
+ * **Whether a `steer` can be delivered at all in this build. It cannot.**
+ *
+ * This is the web mirror of `runner-engineer`'s `MID_RUN_STEER` (BOARD, M16 scope
+ * change; `api-contracts.md` §"interrupt levels"). The runner answers **every**
+ * `steer` with `interrupt_not_deliverable` (409) — in flight or not — because
+ * `createSdkSession` drives the Agent SDK with a *string* prompt, injecting another
+ * user turn needs its streaming-input mode, and that mode has never been exercised
+ * here: zero runs have executed, and the first thing that would exercise it is a
+ * **paid** run. Unblocked by `RUNNER_ANTHROPIC_API_KEY` plus a proven streaming-input
+ * session — kept in this comment rather than as an `unblockedBy` field, because
+ * nothing renders it and `check-rtl` correctly reads an uncatalogued sentence-shaped
+ * literal in a component as user-facing copy. Its home is `MID_RUN_STEER.unblockedBy`,
+ * which the runner does surface on the 409.
+ *
+ * Why it is a second copy of somebody else's fact, which normally would be a defect:
+ * `MID_RUN_STEER` lives in `apps/runner/src/lib/mailbox.ts`, an app the web bundle
+ * cannot import from. **A second copy is only safe when something fails when the two
+ * disagree**, so `InterruptBadge.test.tsx` reads that file and fails if it does not
+ * still say `supported: false`. That closes the failure in *both* directions — a
+ * runner that lifts the refusal while this register keeps drawing it forever, with
+ * nothing red, is BOARD's "a producer without a consumer" running backwards.
+ *
+ * Lifting it cannot be done quietly, and **two** independent gates say so — which is
+ * a small story worth keeping, because one of them was a lie for about an hour.
+ *
+ *   1. `_steerStaysNarrowedUntilSomethingProvesOtherwise` below. A type-level pin in
+ *      this **source** file, so `npm run typecheck` has always seen it.
+ *   2. The `@ts-expect-error` on `<InterruptBadge level="steer" deliverable />` in
+ *      `InterruptBadge.test.tsx`, which becomes an *unused directive* — itself an
+ *      error — the moment `SteerDeliverable` widens.
+ *
+ * (2) is the trick the runner uses on `MID_RUN_STEER`, and when this file was first
+ * written it did **nothing here**: `apps/web/tsconfig.json` excluded the app's test
+ * files, so every `@ts-expect-error` in the web suite was decorative. Measured rather
+ * than assumed — a deliberate `const _blatant: number = 'x'` in the test produced zero
+ * `tsc` output, while the identical probe in `apps/runner` was caught at once. That is
+ * why (1) exists and why it stays: it was the gate that worked when the other did not.
+ * `commandcenter-orchestrator` has since built `apps/web/tsconfig.test.json`
+ * (`npm run typecheck:tests`), so (2) is live now, and both are falsified.
+ */
+export const STEER_DELIVERY = {
+  supported: false,
+  /** Repo-relative, and read by the test — the path is the assertion's input, not prose. */
+  mirrorOf: 'apps/runner/src/lib/mailbox.ts',
+  mirrors: 'MID_RUN_STEER.supported',
+} as const;
+
+/**
+ * The only answer `deliverable` may carry, derived rather than declared.
+ *
+ * While `STEER_DELIVERY.supported` is `false` this is the literal `false`, so
+ * `<InterruptBadge level="steer" deliverable />` — and, more importantly,
+ * `deliverable={runIsInFlight}` — **do not compile**. That is deliberate and it is
+ * aimed at exactly one mistake: a composer reading thread-model §4.2 (*"refused when
+ * no run is in flight"*), wiring deliverability to the run state, and rendering an
+ * available-looking `steer` that 409s on submit. §4.2 describes the level; the runner
+ * describes this build, and the register may only draw what this build can do.
+ */
+export type SteerDeliverable = typeof STEER_DELIVERY.supported extends true ? boolean : false;
+
+/**
+ * The pin, and the only instrument in this file that `npm run typecheck` can see.
+ *
+ * It fails to compile the moment `SteerDeliverable` widens — i.e. the moment someone
+ * flips `STEER_DELIVERY.supported`. That is the point: lifting the refusal must be a
+ * **reviewable act that lands in the same commit as whatever proves a steer works**,
+ * exactly as `MID_RUN_STEER.supported` and `FAN_OUT_DISPATCH.allowed` are pinned on
+ * the runner side. Deleting these three lines is what a lifter does, and deleting
+ * them makes them read the register that has to change with it: the composer's
+ * third control, `a11y.threads.interrupt.undeliverable`'s stated reason, and tokens
+ * contract §11.4's table.
+ */
+type SteerNarrowed<T extends true> = T;
+type _steerStaysNarrowedUntilSomethingProvesOtherwise = SteerNarrowed<
+  [SteerDeliverable] extends [false] ? true : false
+>;
 
 const TONE = {
   note: 'text-ivory-2',
@@ -179,11 +266,12 @@ interface Base extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
 /**
  * `deliverable` is present exactly when it is answerable. A `note` or a `halt`
  * cannot be undeliverable (thread-model §4.2: "none — always deliverable"), so the
- * type refuses the question; a `steer` can be, so the type demands the answer.
+ * type refuses the question; a `steer` can be, so the type demands the answer — and
+ * `SteerDeliverable` narrows that answer to the only one this build can honour.
  */
 export type InterruptBadgeProps =
   | (Base & { level: 'note' | 'halt'; deliverable?: never })
-  | (Base & { level: 'steer'; deliverable: boolean });
+  | (Base & { level: 'steer'; deliverable: SteerDeliverable });
 
 export const InterruptBadge = forwardRef<HTMLSpanElement, InterruptBadgeProps>(
   function InterruptBadge({ level, deliverable, size = 'md', className, ...rest }, ref) {

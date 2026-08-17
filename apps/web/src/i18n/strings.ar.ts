@@ -34,7 +34,11 @@ export const ar: Catalog = {
   'shell.tab.map': 'الخريطة',
   'shell.tab.dashboards': 'اللوحات',
   'shell.tab.chart': 'المخطّط',
-  'shell.tab.sessions': 'الجلسات',
+  /* `المحادثات` — conversations, the term Arabic UI uses for message threads. Chosen by
+     `shell-navigation-engineer` with the M16 rename and routed to
+     `rtl-arabic-pdpl-specialist`, who owns this catalogue's wording; `السلاسل` is the
+     literal "chains" and reads as a data structure rather than a place. */
+  'shell.tab.threads': 'المحادثات',
 
   'shell.search.jobs': 'البحث في المهامّ',
   'shell.search.panels': 'البحث في اللوحات',
@@ -246,6 +250,18 @@ export const ar: Catalog = {
   'chart.card.expand': 'توسيع {name}',
   'chart.card.collapse': 'طيّ {name}',
   'chart.phaseTag': '{index} · {phase}',
+
+  /* THREADS — the fourth tab (`Plan §23.8`) ---------------------------------
+   * Two nouns and one short declarative sentence, written rather than `todo()`d:
+   * the English was cut back until it was the translatable kind, precisely so
+   * this scaffold would not spend two of the five gaps `i18n.test.ts` allows.
+   * `المحادثات` over the literal `السلاسل` — chains reads as a data structure,
+   * not a place. Filed by `shell-navigation-engineer`; the wording is this
+   * file's owner's to correct under §23.11 rule 6, and it is routed to them. */
+  'threads.mount.title': 'المحادثات',
+  'threads.mount.one.title': 'محادثة واحدة',
+  'threads.mount.body':
+    'قائمة المحادثات ومُحرِّر الرسائل يظهران هنا. لم يجرِ أيّ تشغيل بعد، فلا توجد محادثة لعرضها.',
 
   /* §3.1 SESSIONS ----------------------------------------------------------- */
   'sessions.state.working': 'قيد العمل',
@@ -489,8 +505,12 @@ export const ar: Catalog = {
     'ينتظر هذا في صندوق البريد ويُقرأ عند أوّل فاصل بين أداة وأخرى. ولا يتعطّل شيء جارٍ.',
   'a11y.threads.interrupt.steer': 'يُحقَن هذا في الجلسة الجارية الآن ويغيّر مسارها أثناء العمل.',
   'a11y.threads.interrupt.halt': 'يوقف هذا العملَ، ويحفظ ما أُنجِز، ثمّ يسألك قبل المتابعة.',
+  /* Reworded with its English pair: the old reason («لا شيء قيد التشغيل في هذا
+   * الخيط») was thread-model §4.2's no-run-in-flight refusal, and this build refuses
+   * every steer regardless. Only the first clause moved; the second is kept verbatim
+   * because it was already right. */
   'a11y.threads.interrupt.undeliverable':
-    'لا شيء قيد التشغيل في هذا الخيط، فسيُرفض هذا بدل أن يُدرَج في الانتظار.',
+    'لا يمكن توجيه عملية تشغيل جارية في هذه النسخة، فسيُرفض هذا بدل أن يُدرَج في الانتظار.',
 
   'a11y.mapCanvas': 'مجرّة الوكلاء. استخدم مفاتيح الأسهم للتنقّل بين الأقسام.',
   'a11y.drawer': 'تفاصيل الوكيل',

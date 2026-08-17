@@ -72,13 +72,57 @@ const isTokenSource = (f) => f === TOKENS_CSS || f === TOKENS_TEST;
  */
 const isTest = (f) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(f);
 
-/** Where chrome lives. Data ink on a fill or a border here is a failure (§1.3). */
-const CHROME_DIRS = [
-  'apps/web/src/app/',
-  'apps/web/src/components/primitives/',
-  'apps/web/src/components/shell/',
-  'apps/web/src/components/chrome/',
+/**
+ * Where chrome lives — **everything under `apps/web/src/` that is not named below.**
+ *
+ * This was an include-list of four directories until 2026-08-18, and
+ * `fidelity-qa-reviewer` retired it with an argument that has a date on it: *"an
+ * include-list cannot see a directory that does not exist yet."* Both halves were
+ * demonstrated on the tree that carried the finding —
+ * `apps/web/src/app/(views)/p/[project]/threads/` and
+ * `apps/web/src/dashboards/components/ThreadFeed.tsx` were created **during** the
+ * review, and `apps/web/src/drawer/` had never been covered at all. The failure mode
+ * was never that someone widens the list badly; it is that nobody remembers the list
+ * exists, which is the repo's *checkers go blind silently* on a schedule.
+ *
+ * So the default is now what §1.3 actually states — **chrome** — and a directory
+ * earns an exception by being named here with the reason, the way the two `Chip`
+ * exemptions read in the banner. Three, and each one is a place where a fill or a
+ * border legitimately *is* the datum rather than decorating one.
+ *
+ * `Chip` is deliberately not in this list. It is data ink and it lives in
+ * `primitives/`, and it is exempted as a **file** (§1.3's sanctioned status-chip
+ * exemption) so that exempting it cannot silently exempt its neighbours.
+ */
+const DATA_INK_DIRS = [
+  ['apps/web/src/map/', 'node fills, department hues and the copper live-ring ARE the datum (§2.1)'],
+  ['apps/web/src/chart/', 'series colour is the series (§2.6)'],
+  ['apps/web/src/dashboards/', 'widget internals paint values — bars, deltas, sparkline fills (§2.5)'],
+
+  /**
+   * PROVISIONAL — these two were never scanned under the old include-list, and
+   * inverting it surfaced **ten** lines in them on 2026-08-18. Read rather than
+   * assumed: every one is a `data-status` dot fill (`.dot[data-status='ok'|'error'|
+   * 'running'|'awaiting-approval']`) or a copper live-session fill/line. That is
+   * sanctioned data ink under §1.3, not a breach — but it is a *file*-shaped judgement
+   * in someone else's directory, and the right resolution is a `token-exempt:` line
+   * comment on each, written by the owner who knows which fill carries which value.
+   *
+   * They are here rather than failing the build because turning two concurrent agents'
+   * trees red for ten lines that are probably all correct is how a checker gets
+   * disabled. They are here rather than *silent* because the whole point of retiring
+   * the include-list was that a blind spot must be readable. Both are printed on every
+   * run, with the owner and the count.
+   *
+   * REMOVE THESE TWO LINES once the exemptions land. That is the deliverable, and it
+   * is somebody else's; filed to both owners 2026-08-18.
+   */
+  ['apps/web/src/drawer/', 'PROVISIONAL — 5 lines, all status-dot / autonomy fills. Owner: drawer-engineer. Filed 2026-08-18; delete this entry when they carry token-exempt comments'],
+  ['apps/web/src/sessions/', 'PROVISIONAL — 5 lines, all copper live-session fills and lines. Owner: sessions-relay-engineer. Filed 2026-08-18; delete this entry when they carry token-exempt comments'],
 ];
+
+const isChrome = (f) =>
+  f.startsWith('apps/web/src/') && !DATA_INK_DIRS.some(([d]) => f.startsWith(d));
 
 const SKIP_DIRS = new Set(['node_modules', '.next', '.next-build', 'dist', 'build', 'coverage', '.turbo', 'public']);
 const EXTS = /\.(tsx?|jsx?|mjs|cjs|css|scss)$/;
@@ -168,7 +212,7 @@ const RULES = [
   },
   {
     id: 'chrome-is-monochrome',
-    only: (f) => CHROME_DIRS.some((d) => f.startsWith(d)),
+    only: isChrome,
     test: (code) => {
       const util = code.match(new RegExp(`\\b(?:bg|border|ring|divide|outline|from|via|to)-ink-(?:${DATA_INK})`));
       if (util) return `data ink on chrome: "${util[0]}"`;
@@ -313,6 +357,10 @@ async function main() {
     console.log(`  files scanned     ${scanned}`);
     console.log(`  violations        ${violations.length}`);
     console.log(`  exemptions        ${exemptions.length}`);
+    // Rule 1's scope, printed rather than assumed. §8b.1 exists because a "0
+    // violations" that never looked is indistinguishable from one that did.
+    console.log(`  rule 1 scope      all of apps/web/src/ except ${DATA_INK_DIRS.length} named dirs`);
+    for (const [dir, why] of DATA_INK_DIRS) console.log(`  not-chrome  ${dir} — ${why}`);
     for (const e of exemptions) {
       const where = e.scope === 'file' ? `${e.file} (whole file)` : `${e.file}:${e.line} [${e.scope}]`;
       console.log(`  exempt  ${where} — ${e.reason}`);

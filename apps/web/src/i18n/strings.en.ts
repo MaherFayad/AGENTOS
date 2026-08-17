@@ -36,7 +36,9 @@ export const en = {
   'shell.tab.map': 'Map',
   'shell.tab.dashboards': 'Dashboards',
   'shell.tab.chart': 'Chart',
-  'shell.tab.sessions': 'Sessions',
+  /* The fourth tab. SESSIONS until M16; THREADS since (`Plan §23.8`). §3.1's own copy
+     below is unchanged — /sessions is still a live path under this tab. */
+  'shell.tab.threads': 'Threads',
 
   'shell.search.jobs': 'Search jobs',
   'shell.search.panels': 'Search panels',
@@ -296,7 +298,31 @@ export const en = {
   'chart.phaseTag': '{index} · {phase}',
 
   /* ---------------------------------------------------------------------------
-   * §3.1 SESSIONS.
+   * THREADS — the fourth tab (`Plan §23.8`). Scaffold copy only: these two
+   * screens are `ViewMount` placeholders that `sessions-relay-engineer` deletes
+   * when the real view lands, so both keys go with them.
+   *
+   * They are catalogued anyway rather than typed into the JSX, because the
+   * alternative was raising the RTL baseline for a surface that ships this
+   * milestone — and "it is temporary" is how every untranslated string in this
+   * app got here.
+   *
+   * **One body sentence for both screens, and deliberately short.** The first
+   * draft was two paragraphs of English rhythm that would have gone into
+   * `strings.ar.ts` as two `todo()`s — which would have put the untranslated
+   * count at exactly the ceiling `i18n.test.ts` sets, leaving the next agent to
+   * file an honest gap with nowhere to put it. That test's own comment names
+   * that trap. Scaffold copy is not worth spending somebody else's budget on, so
+   * it says the one thing that is true and stops: nothing has ever run.
+   * ------------------------------------------------------------------------ */
+  'threads.mount.title': 'Threads',
+  'threads.mount.one.title': 'One thread',
+  'threads.mount.body':
+    'The thread list and its message composer land here. Nothing has ever run, so there is no thread to show.',
+
+  /* ---------------------------------------------------------------------------
+   * §3.1 SESSIONS. Still live: `/sessions` and `/sessions/:id` are paths under
+   * the THREADS tab after M16, not a view of their own.
    * ------------------------------------------------------------------------ */
   'sessions.state.working': 'Working',
   'sessions.state.awaitingPermission': 'Waiting on permission',
@@ -504,8 +530,16 @@ export const en = {
     'This is injected into the running session now and changes its course mid-task.',
   'a11y.threads.interrupt.halt':
     'This stops the work, checkpoints what is done, and asks you before continuing.',
+  /* THE REASON CHANGED, AND THE OLD ONE WAS THE WRONG REASON. This used to say
+   * "nothing is running on this thread", which is thread-model §4.2's refusal — the
+   * one that applies when there is no run in flight. The runner refuses EVERY steer,
+   * in flight or not (`MID_RUN_STEER.supported` is false; `interrupt_not_deliverable`
+   * 409), so the old sentence told a reader with a run in flight that the refusal did
+   * not apply to them. A stated reason that is false is worse than no reason: it is
+   * the house defect (a declared value read as an observed one) wearing a tenth
+   * costume. This sentence is true in both cases. */
   'a11y.threads.interrupt.undeliverable':
-    'Nothing is running on this thread, so this would be refused rather than queued.',
+    'Steering a run in progress is not available in this build, so this would be refused rather than queued.',
 
   'a11y.mapCanvas': 'Agent galaxy. Use the arrow keys to move between departments.',
   'a11y.drawer': 'Agent detail',

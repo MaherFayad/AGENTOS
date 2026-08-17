@@ -154,6 +154,19 @@ describe('AddressBadge — the addressing register (Plan §12, tokens contract �
     }
     expect(paint('fan-out')).toMatch(/text-ivory(?!-2)/);
     expect(paint('fan-out')).toContain('border-line-2');
+
+    // EVERY line token on the expensive form steps, not just the frame's — including
+    // the stacked lip, which is the element that carries channel 2. Found by
+    // `fidelity-qa-reviewer` as source self-contradiction: the lip was `border-line`,
+    // one rung BELOW the plate it sits on and identical to the three cheap forms,
+    // while the frame stepped up. The channel a reader resolves without reading was
+    // drawn at the weakest token in the component and the channel that merely confirms
+    // was drawn at the strongest. Asserted as an absence so any new stroke added to
+    // this form has to step too.
+    expect(
+      paint('fan-out'),
+      'the expensive form may carry no unstepped line token — §9.4b opens the gap from above',
+    ).not.toMatch(/border-line(?!-2)/);
   });
 
   it('cannot be made to print a money figure', () => {
@@ -186,10 +199,20 @@ describe('AddressBadge — the addressing register (Plan §12, tokens contract �
     // as the only value it may hold by its owner (thread-model §6), so the day real
     // runs exist, widening it is a reviewable diff that has to say where the figure
     // came from — and this line is what fails first.
-    // @ts-expect-error — there is no slot for money in a TurnCost, by construction.
+    //
+    // THE DIRECTIVE WAS ON THE WRONG LINE, and this is the second defect in the same
+    // four lines. It sat above `const _priced: TurnCost = {`, which is where the
+    // *declaration* is; the assignment that actually violates `estimatedUsd: null` is
+    // below. `@ts-expect-error` suppresses the line it precedes, so even in a world
+    // where this suite had always been typechecked, this test would have reported
+    // TS2578 *unused directive* rather than guarding BOARD rule 9 — inert AND
+    // misaimed, on the one surface where a plausible number gets believed. Found by
+    // `commandcenter-orchestrator` the moment `tsconfig.test.json` made the suite
+    // visible, which is the argument for the instrument in one sentence.
     const _priced: TurnCost = {
       runs: 4,
       runsAreExact: true,
+      // @ts-expect-error — there is no slot for money in a TurnCost, by construction.
       estimatedUsd: 0.4,
       estimateBasis: 'no-completed-runs',
     };

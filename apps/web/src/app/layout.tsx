@@ -10,7 +10,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Command Center',
-  description: 'MAP / DASHBOARDS / CHART / SESSIONS',
+  description: 'MAP / DASHBOARDS / CHART / THREADS',
 };
 
 // §3.6: the PWA installs to a phone home screen and must respect the notch.

@@ -272,9 +272,19 @@ export const AddressBadge = forwardRef<HTMLSpanElement, AddressBadgeProps>(
           // on the block axis, so it is a stack in both directions of reading and
           // needs no mirror. It is a 1px stroke, not a shadow: dark mode has no
           // shadows outside drawers (§1.5).
+          //
+          // `--line-2`, matching FRAME['fan-out'] and NOT the `--line` of the three
+          // cheap forms. It was `--line` until `fidelity-qa-reviewer` caught the
+          // contradiction, and the catch was right: channel 2 (silhouette) is the
+          // channel a reader resolves *without reading*, so it is what the whole spend
+          // control rests on — and it was being drawn at the weakest line token in the
+          // component while channel 3 (the sigil, which only confirms) was drawn at the
+          // strongest. §9.4b says open the gap from above. A receding second plate is a
+          // coherent drawing, but it is not the one this file argues for forty lines
+          // higher up, and of two contradictory instruments one has to go.
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-x-1 top-0 h-1 rounded-t-chip border border-b-0 border-line"
+            className="pointer-events-none absolute inset-x-1 top-0 h-1 rounded-t-chip border border-b-0 border-line-2"
           />
         )}
 

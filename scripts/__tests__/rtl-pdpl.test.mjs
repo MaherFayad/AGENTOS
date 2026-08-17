@@ -178,6 +178,59 @@ test('COMPANY.md carries the standing PDPL block every run inherits', async () =
   assert.match(md, /Langfuse/);
 });
 
+/**
+ * REQ-RTL-12, and the reason it is four assertions rather than one.
+ *
+ * This block previously claimed **"Right to erasure is executable"** — in the one file §3.3
+ * injects into every run of every project. It was false: no plane in this repo has a delete
+ * verb. It survived because REQ-RTL-12's "Verified by" pointed at the test above, which
+ * asserts `Traces stay local`, `Redact at instrumentation` and `Langfuse` and never looked at
+ * the erasure sentence at all. **A requirement whose verification cannot see it is an
+ * unverified requirement wearing a tick** — the same shape as `check-rtl` being blind to 190
+ * rendered strings.
+ *
+ * So these assert the *corrected* content, and the ratchet is deliberate: restoring the old
+ * claim now fails here. Falsified before it was claimed — reinstating the sentence "Right to
+ * erasure is executable." turns this red, and removing rule 10 turns it red too.
+ */
+test('COMPANY.md states erasure by tier and does not claim it is executable', async () => {
+  // Whitespace-normalised before matching. COMPANY.md is hard-wrapped prose, so every phrase
+  // long enough to be worth asserting is long enough to straddle a newline — the first draft
+  // of this test went red on `asserts no processing region for the model endpoint` purely
+  // because the line broke after "processing". A checker that can only see phrases which
+  // happen to fit on one line is the same blind instrument as the rest of this file's
+  // fixtures, and it fails *open* on rewrap, which is the dangerous direction.
+  const md = (await readFile(COMPANY, 'utf8')).replace(/\s+/g, ' ');
+
+  assert.equal(
+    /right to erasure is executable/i.test(md),
+    false,
+    'COMPANY.md claims erasure is executable. No plane in this repo has a delete verb, and this ' +
+      'file is inherited by every run of every project — a false capability here is asserted to ' +
+      'every agent in the system. State the tiers instead (thread-model.md §9.3 ruling).',
+  );
+
+  // Tier 3 is the whole ruling: a delete verb does not reach a person named inside free text,
+  // because erasure requires selection first and prose has nothing to select on.
+  assert.match(md, /No plane in this repo has a delete verb/i);
+  assert.match(md, /A delete verb does not fix this tier/i);
+
+  // The two lines co-owned with `observability-engineer`, which are rules an agent follows and
+  // no redactor can enforce — which is exactly why they live in the inherited file.
+  assert.match(md, /Never put a human's message into a trace, a log, or a push payload/i);
+  assert.match(md, /Do not flatten a structured payload before tracing or logging/i);
+
+  // "Traces stay local" is true and is not the whole egress story. Pinned so the narrower
+  // claim cannot quietly go back to doing the wider claim's work.
+  assert.match(md, /The model is a processor/i);
+  assert.match(
+    md,
+    /asserts no processing region for the model endpoint/i,
+    'the unasserted region is the honest part; deleting it leaves rule 11 reading as though it ' +
+      'binds the model, which it does not',
+  );
+});
+
 test('encrypted backups of the local volume are documented', async () => {
   const md = await readFile(join(ROOT, 'infra', 'BACKUP.md'), 'utf8');
   assert.match(md, /Part VII\.4/);

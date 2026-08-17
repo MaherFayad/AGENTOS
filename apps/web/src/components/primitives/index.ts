@@ -19,7 +19,10 @@
  *      not a condition, and `#` vs `@@` is the difference between one run and N.
  *      §11.
  *  11. `InterruptBadge` — how disruptively a message lands. A choice the sender
- *      is about to make, not a state of the system. §11.
+ *      is about to make, not a state of the system. §11. Exports `STEER_DELIVERY`
+ *      alongside it: M16 ships two levels and a **refusal**, and `SteerDeliverable`
+ *      is what stops a composer drawing the third as available. Both are required
+ *      reading for anyone rendering an interrupt control.
  *
  * Merging any of them into `Chip` would teach every reader — and every future
  * implementer copying the nearest example — that a coloured token and a grey one
@@ -55,8 +58,8 @@ export type { ProvenanceBadgeProps, ProvenanceState } from './ProvenanceBadge';
 export { AddressBadge, OPEN_ENDED_FORMS } from './AddressBadge';
 export type { AddressBadgeProps } from './AddressBadge';
 
-export { InterruptBadge, interruptsWorkInProgress } from './InterruptBadge';
-export type { InterruptBadgeProps } from './InterruptBadge';
+export { InterruptBadge, STEER_DELIVERY, interruptsWorkInProgress } from './InterruptBadge';
+export type { InterruptBadgeProps, SteerDeliverable } from './InterruptBadge';
 
 export { cx } from './cx';
 export type { ClassValue } from './cx';

@@ -3,6 +3,10 @@
  * brief: the URL reflects state so a phone can be handed a link and the back button
  * behaves.
  *
+ * The fourth tab is **THREADS** as of M16 (`Plan §23.5`, `Plan §23.8`). It replaced
+ * SESSIONS in the slot; §3.1's `/sessions` paths survive underneath it. See
+ * `MAX_SEGMENTED_TABS` and `SESSIONS_PATH` for both halves of that.
+ *
  * Pure functions only — the whole of the shell's routing logic is testable without a
  * router.
  *
@@ -13,7 +17,8 @@
  * Every view path is prefixed with `/p/:project`:
  *
  *   /p/agentos/map · /p/agentos/map/sales · /p/agentos/map/sales/account-enrichment
- *   /p/agentos/chart/sales · /p/agentos/dashboards/pipeline · /p/agentos/sessions/abc
+ *   /p/agentos/chart/sales · /p/agentos/dashboards/pipeline
+ *   /p/agentos/threads · /p/agentos/threads/<uuid> · /p/agentos/sessions/abc
  *
  * The shape is copied from the API deliberately, not invented here.
  * `packages/contracts/src/project.ts` fixes `/api/p/:project/…` and says why in one
@@ -32,17 +37,53 @@
 
 import { isProjectSlug } from '@agnetos/contracts';
 
-export type ShellView = 'map' | 'dashboards' | 'chart' | 'sessions';
+export type ShellView = 'map' | 'dashboards' | 'chart' | 'threads';
 
-/** Tab order is the spec's, with SESSIONS appended as the fourth (§2.0, §3.1). */
-export const VIEWS: readonly ShellView[] = ['map', 'dashboards', 'chart', 'sessions'];
+/**
+ * Tab order is the spec's, with our fourth appended (§2.0). The fourth slot was
+ * `SESSIONS` (§3.1) until M16; it is `THREADS` now (`Plan §23.8` — *"THREADS — replaces
+ * SESSIONS"*). A **replacement**, never a fifth tab: see `MAX_SEGMENTED_TABS`.
+ */
+export const VIEWS: readonly ShellView[] = ['map', 'dashboards', 'chart', 'threads'];
 
 export const VIEW_LABELS: Readonly<Record<ShellView, string>> = {
   map: 'MAP',
   dashboards: 'DASHBOARDS',
   chart: 'CHART',
-  sessions: 'SESSIONS',
+  threads: 'THREADS',
 };
+
+/**
+ * **The shell cannot hold six tabs** (`Plan §23.5`). This is the number, and
+ * `route.test.ts` fails the build on a fifth.
+ *
+ * §23.5 measured it rather than asserting it: `ViewTabs` renders wide-tracked 11px caps at
+ * `+0.25em`, four labels come to ~400px, and `TopBar` already reflows to two rows below
+ * `sm` to fit them. Part Two adds BOARD and CALENDAR and renames SESSIONS to THREADS —
+ * six labels, ~600px, and the bar breaks. Of the three ways out, §23.5 takes the third:
+ *
+ * > The segmented control keeps the four **spatial** views — places you *look at the org*.
+ * > THREADS and CALENDAR are **temporal** and belong in the right cluster of the top bar
+ * > as a persistent pair with counts, next to `+ New`.
+ *
+ * So the end state is `MAP · CHART · DASHBOARDS · BOARD` in here, with THREADS moved out.
+ * Neither BOARD nor CALENDAR exists yet, so M16 spends the slot SESSIONS was occupying and
+ * the count never moves. **The day BOARD lands, THREADS leaves this array rather than
+ * BOARD joining it** — that migration is the reason this constant is a gate and not a
+ * comment. A rule that names no enforcer enforces nothing.
+ */
+export const MAX_SEGMENTED_TABS = 4;
+
+/**
+ * `/sessions` is a path under the THREADS tab, not a view of its own (M16, `Plan §23.8`).
+ *
+ * §3.1's two session routes are still live and still render `SessionView` — see
+ * `parseShellRoute`. They keep their own path because a **relay session id is not an
+ * `ops.thread` uuid** (`contracts/thread-model.md` §5.1; §9.1 is still OPEN), so
+ * rewriting `/sessions/abc` to `/threads/abc` would resolve to a thread that does not
+ * exist. A dead route that still resolves is worse than one that 404s.
+ */
+const SESSIONS_PATH = 'sessions';
 
 export interface ShellRoute {
   /**
@@ -59,7 +100,14 @@ export interface ShellRoute {
   agent: string | null;
   /** `/dashboards/:id` (§2.5). */
   panel: string | null;
-  /** `/sessions/:id` (§3.1). */
+  /** `/threads/:id` — an `ops.thread` uuid (`thread-model.md` §5.1). */
+  thread: string | null;
+  /**
+   * `/sessions/:id` — a **relay** session id (§3.1), which is a different namespace from
+   * `thread`. Two fields rather than one on purpose: an id that means two things is how a
+   * link lands on somebody else's record, and §9.1 of `thread-model.md` — *do session
+   * threads get a mailbox* — is open, so nothing may assume the two ever merge.
+   */
   session: string | null;
   /** True when a breadcrumb strip should be shown — i.e. we are inside something. */
   isDrillIn: boolean;
@@ -69,6 +117,7 @@ const EMPTY: Omit<ShellRoute, 'view' | 'isDrillIn' | 'project'> = {
   department: null,
   agent: null,
   panel: null,
+  thread: null,
   session: null,
 };
 
@@ -95,6 +144,22 @@ export function splitProject(pathname: string): { project: string | null; rest: 
 export function parseShellRoute(pathname: string): ShellRoute {
   const { project, rest } = splitProject(pathname);
   const [head, second, third] = rest;
+
+  // `/sessions` and `/sessions/:id` are paths *under* THREADS (`Plan §23.8`), so the tab
+  // bar lights THREADS while you are on a session. Without this they would fall through
+  // to the `map` default below and the shell would claim you were somewhere you are not —
+  // and that is the state every already-delivered push notification deep-links into
+  // (`sessions/push/payload.ts`, §3.6).
+  if (head === SESSIONS_PATH) {
+    return {
+      ...EMPTY,
+      project,
+      view: 'threads',
+      session: second ?? null,
+      isDrillIn: Boolean(second),
+    };
+  }
+
   const view: ShellView = VIEWS.includes(head as ShellView) ? (head as ShellView) : 'map';
 
   switch (view) {
@@ -111,8 +176,8 @@ export function parseShellRoute(pathname: string): ShellRoute {
       return { ...EMPTY, project, view, department: second ?? null, isDrillIn: Boolean(second) };
     case 'dashboards':
       return { ...EMPTY, project, view, panel: second ?? null, isDrillIn: Boolean(second) };
-    case 'sessions':
-      return { ...EMPTY, project, view, session: second ?? null, isDrillIn: Boolean(second) };
+    case 'threads':
+      return { ...EMPTY, project, view, thread: second ?? null, isDrillIn: Boolean(second) };
   }
 }
 
@@ -161,14 +226,14 @@ export function switchProjectHref(route: ShellRoute, project: string): string {
 
 /**
  * Placeholder text for the search pill, per §2.0: "Search jobs" on MAP/CHART,
- * "Search panels" on DASHBOARDS. SESSIONS is ours, so it gets the same grammar.
+ * "Search panels" on DASHBOARDS. THREADS is ours, so it gets the same grammar.
  */
 export function searchPlaceholder(view: ShellView): string {
   switch (view) {
     case 'dashboards':
       return 'Search panels';
-    case 'sessions':
-      return 'Search sessions';
+    case 'threads':
+      return 'Search threads';
     default:
       return 'Search jobs';
   }
@@ -193,8 +258,10 @@ export function breadcrumbFor(route: ShellRoute): BreadcrumbConfig | null {
       return { label: 'ALL DEPARTMENTS', href: withProject('/chart', p) };
     case 'dashboards':
       return { label: 'ALL DASHBOARDS', href: withProject('/dashboards', p) };
-    case 'sessions':
-      return { label: 'ALL SESSIONS', href: withProject('/sessions', p) };
+    case 'threads':
+      // One label for both id namespaces: from a session as much as from a thread, "up"
+      // is the thread list, because THREADS is the tab you are in either way.
+      return { label: 'ALL THREADS', href: withProject('/threads', p) };
   }
 }
 
@@ -215,7 +282,7 @@ export interface ProjectTrail {
   project: string | null;
   /** Department slug, when the route has one. */
   department: string | null;
-  /** The leaf — an agent slug, a panel id or a session id. */
+  /** The leaf — an agent slug, a panel id, a thread id or a session id. */
   leaf: string | null;
 }
 
@@ -223,7 +290,7 @@ export function projectTrail(route: ShellRoute): ProjectTrail {
   return {
     project: route.project,
     department: route.department,
-    leaf: route.agent ?? route.panel ?? route.session,
+    leaf: route.agent ?? route.panel ?? route.thread ?? route.session,
   };
 }
 

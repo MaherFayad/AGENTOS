@@ -7,7 +7,7 @@ const TABS = [
   { value: 'map', label: 'MAP' },
   { value: 'dashboards', label: 'DASHBOARDS' },
   { value: 'chart', label: 'CHART' },
-  { value: 'sessions', label: 'SESSIONS' },
+  { value: 'threads', label: 'THREADS' },
 ] as const;
 
 function setup(value: (typeof TABS)[number]['value'] = 'map', dir: 'ltr' | 'rtl' = 'ltr') {
@@ -60,7 +60,7 @@ describe('SegmentedControl (§2.0)', () => {
     expect(onChange).toHaveBeenCalledWith('dashboards');
 
     fireEvent.keyDown(first, { key: 'ArrowLeft' });
-    expect(onChange).toHaveBeenCalledWith('sessions'); // wraps
+    expect(onChange).toHaveBeenCalledWith('threads'); // wraps
   });
 
   it('reports the selected tab to assistive tech', () => {
@@ -78,7 +78,9 @@ describe('SegmentedControl (§2.0)', () => {
  * had: `ArrowRight` mapped to `+1` unconditionally. The tablist is an `inline-flex` row, so
  * `dir="rtl"` reverses it and MAP sits at the far *right* — but the handler did not reverse
  * with it, so ArrowRight walked towards the tab the reader could see on their left. That has
- * been true of MAP · DASHBOARDS · CHART · SESSIONS since the control was written.
+ * been true of MAP · DASHBOARDS · CHART · SESSIONS since the control was written, and the
+ * fourth tab is THREADS since M16 — the fixture below is the shell's real tab set, so the
+ * rename is exercised in both directions rather than only in the one the suite above runs.
  *
  * It stayed green because the suite above renders LTR only. **A check that has never been
  * run in one of the two directions is not a check** — which is why these cases were run
@@ -105,10 +107,10 @@ describe('SegmentedControl keyboard — RTL (§2.0, MIRRORS[shell.segmentedContr
   it('wraps along the list, not along the screen', () => {
     // The wrap is the edge the LTR suite already covers in one direction only, and it is
     // where an off-by-a-sign fix would still be wrong: from MAP, going *back* in reading
-    // order must reach SESSIONS in both directions.
+    // order must reach the fourth tab in both directions.
     const { onChange } = setup('map', 'rtl');
     fireEvent.keyDown(screen.getByRole('tab', { name: 'MAP' }), { key: 'ArrowRight' });
-    expect(onChange).toHaveBeenCalledWith('sessions');
+    expect(onChange).toHaveBeenCalledWith('threads');
   });
 
   it('moves DOM focus with the selection, so the roving tab stop is not stranded', () => {
@@ -146,7 +148,7 @@ describe('SegmentedControl keyboard — RTL (§2.0, MIRRORS[shell.segmentedContr
     fireEvent.keyDown(tab, { key: 'Home' });
     expect(onChange).toHaveBeenCalledWith('map');
     fireEvent.keyDown(tab, { key: 'End' });
-    expect(onChange).toHaveBeenCalledWith('sessions');
+    expect(onChange).toHaveBeenCalledWith('threads');
   });
 
   it('leaves non-arrow keys to bubble, so Tab still leaves the control', () => {

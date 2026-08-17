@@ -19,6 +19,7 @@ export {
   viewSurface,
   VIEWS,
   VIEW_LABELS,
+  MAX_SEGMENTED_TABS,
   type ShellView,
   type ShellRoute,
   type ViewSurface,
