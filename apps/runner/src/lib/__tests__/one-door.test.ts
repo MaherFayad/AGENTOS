@@ -109,10 +109,23 @@ test('the dispatch path has exactly one producer of a runnable agent', async () 
     'only the cascade may build a record from chosen bytes — a second importer is a second door',
   );
 
+  /**
+   * Two callers as of 2026-08-17, and the second one is the fix rather than a leak.
+   *
+   * `GET /api/agents/:slug` used to read the project layer's file directly, so an
+   * `_overrides/` file could win a run while the drawer, MAP, CHART and the validator all
+   * kept rendering the global one — *what you see is not what runs*, with no error message
+   * anywhere (`Plan §21.9`). Routing the read through the same call makes the drawer show
+   * the file that would run, or refuse exactly as the run would.
+   *
+   * A read caller is not a second door: the thing that spends money is the agent-session
+   * factory, asserted below to have one call site, and it is not reachable from here. The
+   * list stays exhaustive, so a third caller is a deliberate edit to this line.
+   */
   assert.deepEqual(
     importersOf(files, 'resolveForDispatch'),
-    ['lib/runService.ts'],
-    'and only the run pipeline calls it',
+    ['lib/runService.ts', 'routes/api.ts'],
+    'the run pipeline, and the read route that must not disagree with it',
   );
 
   const runService = files.find((file) => file.id === 'lib/runService.ts');
@@ -137,11 +150,10 @@ test('every remaining caller of the single-layer loader is enumerated, and none 
       // Writes `schedule:` into the mounted library's frontmatter and commits it. It needs
       // the project layer's *file path*, not the cascade's winner — and that is a known
       // limitation recorded in the M15 handoff, not an accident: the day an `_overrides/`
-      // file wins, this would write the cron into the file that did not run.
+      // file wins, this would write the cron into the file that did not run. ADR-014 §3.2
+      // is the rule it owes ("refuse when the layer written to is not the winner"), and it
+      // is the last remaining shipped caller of the single-layer loader.
       'lib/schedule.ts',
-      // `GET /api/agents/:slug` — the drawer's read-only detail view. It renders
-      // `wired_into`; it cannot spend anything.
-      'routes/api.ts',
     ],
     'a new name in this list is a new place an agent can be loaded outside the cascade',
   );

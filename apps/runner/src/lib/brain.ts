@@ -322,12 +322,13 @@ export async function writeBackBrain(
    */
   const globalRoot = globalLibraryRoot(config);
   if (globalRoot !== null && isInside(globalRoot, project.companyFile)) {
-    // `git_write_refused` — the runner's existing write-boundary code, reused rather than
-    // invented. A `brain_write_refused` code would read better and would be an edit to
-    // `ApiErrorCode` in `packages/contracts`, which is `runner-engineer`'s under
-    // `api-contracts.md`. It is proposed to them as a decision-request; it is not taken here.
+    // `brain_write_refused` (403), adopted 2026-08-17 on `rtl-arabic-pdpl-specialist`'s
+    // decision-request. It was `git_write_refused`, which is honest but is the wrong noun:
+    // that code is the path check on `agents/**` / `company/**`, and this refusal happens
+    // before git is reached. Both are 403; the difference is which file the person reading
+    // the log should open.
     throw new ApiError(
-      'git_write_refused',
+      'brain_write_refused',
       'The company interview may not write the global tier of the brain.',
       {
         hint:

@@ -41,6 +41,33 @@ to look in the same wrong place:
 | `project_not_mounted` | 503 | *Right name, wrong machine.* The project may exist perfectly well on another host (`host_affinity`). Never `404`, which would send someone hunting a typo in a correct name. |
 | `project_not_active` | 409 | Paused or archived. It keeps all its history and its whole library; it just does not start runs. |
 
+### A route that resolves a project reads that project's library — nothing else
+
+**Added 2026-08-17, after `rtl-arabic-pdpl-specialist`'s isolation sign-off, second pass.**
+Resolving `:project` and then reading a coordinator-level path is not scoping; it is scoping
+that happens to agree. Five read handlers did exactly that — `graph`, `agentsIndex`, `agent`,
+`panels`, `panel` called `resolveProject` and then read the runner's own `agentsDir`,
+`panelsDir` and `graphFile`, while `POST /run` derived every root from the project. With one
+library mounted the two agree **by coincidence between two variables, not by derivation from
+one**, which is indistinguishable from correct until the day it is not.
+
+> **Every library read behind `/api/p/:project/…` takes the resolved project, and the
+> coordinator's config is not reachable from it.**
+
+The mechanism is a type, not a review: those readers take `MountedProject`, which has no
+`RunnerConfig` shape, so a handler that reaches for config **fails to compile**. Asserted
+both ways in `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` — behaviourally,
+by handing the readers a project whose library is *not* the coordinator's and requiring every
+answer to come from it, which is the only test that can tell derivation from coincidence.
+
+Three consequences that are visible in the API rather than only in the code:
+
+| Route | What it now reads | The refusal, when the project has none |
+|---|---|---|
+| `GET /api/p/:project/graph` | that project's stored layout artifact | **`graph_not_built` (503), naming the project.** The payload carries no project field, so an artifact cannot be *checked* against the URL it is served under — which is precisely why one is never substituted for another |
+| `GET /api/p/:project/agents[/:slug]` | the **resolved set** — the cascade's winner per `(department, slug)`, ceiling-checked (ADR-014) | `agent_not_found` (404), or the same refusal a run would give |
+| `GET /api/p/:project/panels[/:id]` | that project's `panels/` | an **empty list**. Never the coordinator's — see Q8 in `project-scoping.md` |
+
 **The pre-project paths stay mounted and answer `400 project_scope_missing`.** This is the
 only visible surface of the migration and it is not decoration. A `404` reads as a deleted
 feature; a redirect to a default project would serve one client's rows under another client's
@@ -182,9 +209,9 @@ cleanly and records the note; the run ends `done{status:"denied", denialNote}`.
 
 | route | returns |
 |---|---|
-| `GET /api/graph` | the **stored** layout artifact — see `contracts/graph-layout.md`. Never simulated (ADR-003) |
-| `GET /api/agents` | `{agents:[{slug, path, frontmatter}], skipped:[{slug, reason}]}` — the list projection CHART's matrix draws from (§2.6) |
-| `GET /api/agents/:slug` | `{slug, path, frontmatter, body, runnable:{tools[], missingConnectors[], approvalRequired, scheduled}}` |
+| `GET /api/graph` | the **stored** layout artifact for this project's library — see `contracts/graph-layout.md`. Never simulated (ADR-003), never another project's |
+| `GET /api/agents` | `{agents:[{slug, path, frontmatter}], skipped:[{slug, reason}]}` — the list projection CHART's matrix draws from (§2.6). The **resolved set**, so a winning `agents/_overrides/**` file is a row here |
+| `GET /api/agents/:slug` | `{slug, path, sourceRef, frontmatter, body, runnable:{tools[], missingConnectors[], approvalRequired, scheduled}}` |
 | `GET /api/runs?agent=&limit=5` | `{runs:[{runId, agent, status, startedAt, durationMs, costUsd, traceUrl}]}` — **this process only**, see below |
 | `GET /api/cost/today` | `{usd}` — **`observability-engineer`'s route**, not the runner's |
 | `GET /api/panels` / `GET /api/panels/:id` | panel definitions (`contracts/panel-schema.md`) |
@@ -197,6 +224,35 @@ segment and join with `/`, so a folder name that ever grows a `%`, `?` or `#` st
 arrives intact (the runner decodes each segment, and a stray `%` would otherwise throw
 before any handler ran). Rows carry `startedAt` as ISO 8601, not a pre-rendered "3m ago",
 so relative time stays live without polling.
+
+### The agent reads go through the cascade, so `sourceRef` is answerable before any run
+
+**Added 2026-08-17, requested by `drawer-engineer`.** `GET /api/agents/:slug` carries
+`sourceRef: string` — `{layer}:{path}@sha256:…`, the same grammar as the SSE `start` frame
+(ADR-014 §2), produced by the resolver and **never synthesised from `path`**.
+
+It is **required, not optional**, and that is the load-bearing half. The route resolves
+through the same call `POST /run` uses, so there is no state in which the runner holds an
+`AgentDetail` and does not know which file it came from. An optional field would have to be
+rendered as `unknown` in a state that cannot occur — and `unknown` would then be
+indistinguishable from the state that *can*, which is "no run has started yet". That is
+exactly what the drawer header did: it said SOURCE UNKNOWN in the state the product spends
+almost all of its time in, because the only available source of provenance was a run that had
+not happened.
+
+The reason this is a contract change rather than a field: **`loadAgent` read
+`<repo>/agents/{slug}/SKILL.md` directly.** So an `_overrides/` file could win a run while
+MAP, CHART, the drawer and the validator all kept rendering the project layer's copy — *what
+you see is not what runs*, with no error message anywhere (`Plan §21.9`), and BOARD rule 4
+defeated without a line of wrong code. Both reads now resolve, which is also why
+`skipped[]` can now carry `capability_widened`: an agent whose resolved tool list would be
+refused at dispatch is **excluded with its reason**, not drawn as a tile whose WIRED INTO list
+cannot run.
+
+One thing a consumer may not do, and it is worth stating because it is the obvious shortcut:
+**do not infer a layer from `path`.** An L0 path and an L1 path are indistinguishable from
+outside the coordinator the moment a global library exists, and a badge that starts lying does
+so without anyone editing it.
 
 ### `GET /api/runs` is the queue, not the history
 
@@ -286,6 +342,7 @@ restart, and `state` goes `connected → unreachable → connected` without one.
 | artifact is `md`, ≥40 chars | an empty artifact would erase the brain and commit the erasure |
 | `inputs.mode` is `first-run` or `update-section` | **`review-gaps` reports on the brain; it never replaces it** |
 | the artifact carries the brain's structure | `## ` headings / the `<!-- UNANSWERED` namespace, so "a document this agent produced" and "a replacement for the company's memory" are different tests |
+| the target is **this project's** tier | the permitted `agent_ref` is derived from the project being written to, so the agent named and the file written cannot disagree about which project they are in. A write aimed at the **global** tier throws `brain_write_refused` (403) rather than returning `null` — the legitimate refusals are silent, this one never is |
 
 The mode and shape checks live in the runner, not in the agent's prompt. ADR-007: a
 boundary held by a sentence in a prompt is not a boundary.
@@ -363,6 +420,7 @@ a stack trace. Codes and their statuses (`ApiErrorCode` / `API_ERROR_STATUS` in
 | `approval_already_decided` | 409 | second decision on the same run |
 | `invalid_cron` | 400 | not a 5-field cron |
 | `git_write_refused` | 403 | write target outside `agents/**` (ADR-002) |
+| `brain_write_refused` | 403 | the Second Brain write-back was refused **before git was reached** — the tier being written is not this project's (ADR-007, `COMPANY.md` rule 9). Same status as the row above and deliberately a different code: a person reading a log needs to know which file to open |
 | `git_failed` | 500 | commit failed |
 | `ofelia_sync_failed` | 502 | commit landed, reload did not |
 | `graph_not_built` | 503 | no stored layout artifact yet — run `npm run graph:build` |

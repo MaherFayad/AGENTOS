@@ -14,11 +14,23 @@
  *
  * `core.brainCompleteness` is produced once by `computeLayout` (build-graph + watcher),
  * never overlaid here — one number, one producer (§3.3).
+ *
+ * ## Whose artifact
+ *
+ * Both functions take the **mounted project**, never `RunnerConfig` — this module cannot
+ * name the coordinator's config type, which is what makes "a project route cannot read a
+ * coordinator-level path" a compile error rather than a review comment (`project.ts`).
+ *
+ * The honest limit, stated because a reader will otherwise assume it away: **the stored
+ * payload carries no project field.** `MountedProject.graphFile` is the only thing binding
+ * an artifact to the project it is served under. A project whose library has no artifact
+ * gets `graph_not_built` — a refusal, and the right one. What is not available is serving
+ * one coordinator-wide graph under every project's URL, which would look like it worked.
  */
 import { readFile } from 'node:fs/promises';
 import type { GraphReadBody } from '@agnetos/contracts';
 import { ApiError } from './errors';
-import type { RunnerConfig } from './config';
+import type { MountedProject } from './project';
 
 export interface GraphOverlay {
   /** Agents with an approval gate open right now — the map pulses these amber (§3.2). */
@@ -26,9 +38,9 @@ export interface GraphOverlay {
 }
 
 /** True when a stored artifact exists. Backs `StatusResponse.graphBuilt`. */
-export async function graphIsBuilt(config: RunnerConfig): Promise<boolean> {
+export async function graphIsBuilt(project: MountedProject): Promise<boolean> {
   try {
-    await readFile(config.graphFile, 'utf8');
+    await readFile(project.graphFile, 'utf8');
     return true;
   } catch {
     return false;
@@ -48,15 +60,15 @@ export async function graphIsBuilt(config: RunnerConfig): Promise<boolean> {
  * between builds.
  */
 export async function readGraph(
-  config: RunnerConfig,
+  project: MountedProject,
   overlay: GraphOverlay = { approvalPending: [] },
 ): Promise<GraphReadBody> {
   let source: string;
   try {
-    source = await readFile(config.graphFile, 'utf8');
+    source = await readFile(project.graphFile, 'utf8');
   } catch {
-    throw new ApiError('graph_not_built', 'The map layout has not been built yet.', {
-      hint: 'Run `npm run graph:build` once (it reads agents/ and writes the layout). The map is empty until then — that is an honest empty state, not a failure.',
+    throw new ApiError('graph_not_built', `The map layout for "${project.slug}" has not been built yet.`, {
+      hint: `Run \`npm run graph:build\` once in that project's library (it reads agents/ and writes the layout). The map is empty until then — that is an honest empty state, not a failure, and it is deliberately not filled in from another project's artifact.`,
       retryable: false,
     });
   }

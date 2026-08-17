@@ -286,6 +286,7 @@ async function secondProject(root: string) {
     companyFile: join(dir, 'company', 'COMPANY.md'),
     companySourcesDir: join(dir, 'company', 'sources'),
     panelsDir: join(dir, 'panels'),
+    graphFile: join(dir, 'graph.json'),
   };
 }
 
@@ -378,7 +379,10 @@ test('a write to the global tier is refused outright, loudly', async () => {
             { absolutePath: artifactPath, kind: 'md' },
             { mode: 'first-run' },
           ),
-        (error: unknown) => (error as { code?: string }).code === 'git_write_refused',
+        // `brain_write_refused`, not `git_write_refused`: this refusal happens before git
+        // is reached, and the two codes send a reader to different files. Adopted from
+        // `rtl-arabic-pdpl-specialist`'s decision-request, 2026-08-17.
+        (error: unknown) => (error as { code?: string }).code === 'brain_write_refused',
         'the refusal must be an error a human sees, not a null a caller ignores',
       );
       assert.equal(await readFile(globalBrain, 'utf8'), BEFORE, 'and nothing was written');

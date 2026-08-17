@@ -53,7 +53,23 @@ export function projectIdForSlug(slug: string): string {
   ].join('-');
 }
 
-/** A project this coordinator can actually serve: a slug, a library on disk, a scratch root. */
+/**
+ * A project this coordinator can actually serve: a slug, a library on disk, a scratch root.
+ *
+ * **Every read behind a project-scoped route takes this, never `RunnerConfig`.** That is a
+ * rule with a mechanism rather than a convention: `RunnerConfig` has no `id`, `slug` or
+ * `status`, so a library reader whose parameter is typed `MountedProject` **cannot be handed
+ * the coordinator's config at all** — it is a compile error, in the handler that forgot.
+ *
+ * The rule was earned. Five read handlers (`graph`, `agentsIndex`, `agent`, `panels`,
+ * `panel`) resolved `:project` and then read `config.agentsDir` / `config.panelsDir` /
+ * `config.graphFile`, while the run path derived all three roots from the project. With one
+ * library mounted the two agree — but they agree **by coincidence between two variables, not
+ * by derivation from one**, and that is indistinguishable from correct right up to the day a
+ * second library is mounted, at which point MAP, CHART and DASHBOARDS would serve the
+ * coordinator's library under a project's name with no error anywhere. Found by
+ * `rtl-arabic-pdpl-specialist`'s isolation audit, second pass, 2026-08-17.
+ */
 export interface MountedProject {
   id: string;
   slug: string;
@@ -71,7 +87,22 @@ export interface MountedProject {
   companyDir: string;
   companyFile: string;
   companySourcesDir: string;
+  /**
+   * `panels/` for this project (§2.5). Mounted per project, **never cascaded** and with no
+   * coordinator-level fallthrough — `project-scoping.md` §5.1 Q8.
+   */
   panelsDir: string;
+  /**
+   * The stored layout artifact for this project's library (ADR-003).
+   *
+   * On the artifact's honest limits, because a reader will otherwise assume more than is
+   * true: nothing inside `graph.json` names a project, so this field is the *only* thing
+   * binding the payload to the project it is served under. A project whose library holds no
+   * artifact gets `graph_not_built` — a refusal, which is the answer this coordinator can
+   * actually stand behind. Serving a coordinator-wide graph under a project's URL is the one
+   * outcome that is not available.
+   */
+  graphFile: string;
 }
 
 /**
@@ -97,6 +128,7 @@ export function mountedProject(config: RunnerConfig): MountedProject {
     companyFile: config.companyFile,
     companySourcesDir: config.companySourcesDir,
     panelsDir: config.panelsDir,
+    graphFile: config.graphFile,
   };
 }
 

@@ -198,10 +198,22 @@ export async function listAgents(
   return records.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-export function toAgentDetail(record: AgentRecord): AgentDetail {
+/**
+ * `AgentDetail` for `GET /api/agents/:slug`.
+ *
+ * `sourceRef` is a **required parameter and not derived here**, deliberately. The only value
+ * that may be sent is the one `resolveThroughCascade` produced — `{layer}:{path}@sha256:…`
+ * of the file that actually won. A `sourceRef` synthesised from `record.path` would be a
+ * second implementation of resolution (ADR-014 decision 9) and would be wrong the day a
+ * global library exists, because an L0 path and an L1 path are indistinguishable from the
+ * outside. `drawer-engineer` refused to infer it browser-side for exactly this reason; this
+ * signature is what makes inferring it server-side equally unavailable.
+ */
+export function toAgentDetail(record: AgentRecord, sourceRef: string): AgentDetail {
   return {
     slug: record.slug,
     path: record.path,
+    sourceRef,
     frontmatter: record.data,
     body: record.body,
     runnable: {

@@ -24,13 +24,15 @@ import {
 import { sendApiError } from './http.ts';
 import { registerMetricsRoutes } from './register-metrics.ts';
 import { ApiError, badRequest } from '../lib/errors.ts';
-import { listAgents, loadAgent, toAgentDetail } from '../lib/agents.ts';
+import { toAgentDetail } from '../lib/agents.ts';
+import { listResolvedAgents, resolveForDispatch } from '../lib/cascade.ts';
 import {
   mountedProject,
   probeScopeEnforcement,
   resolveProject,
   scopeMissing,
   toProjectSummary,
+  type MountedProject,
 } from '../lib/project.ts';
 import type { RunState } from '../lib/runStore.ts';
 import { computeBrainCompleteness } from '../lib/brain.ts';
@@ -249,7 +251,7 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
   app.get(RUNNER_ROUTES.graph.path, async (request, reply) => {
     try {
       const project = projectOf(ctx, request);
-      return await readGraph(config, { approvalPending: store.agentsAwaitingApproval(project.slug) });
+      return await readGraph(project, { approvalPending: store.agentsAwaitingApproval(project.slug) });
     } catch (err) {
       return sendApiError(reply, err);
     }
@@ -259,38 +261,57 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
    * The collection (§2.6 — CHART draws its matrix from this). Summaries only: no `body`,
    * no `runnable`. See `AgentsIndex` for why.
    *
-   * `listAgents` skips a file it cannot parse rather than throwing, so one bad SKILL.md
-   * costs its own tile and not the whole matrix — but the reason is reported in
-   * `skipped[]`, because a tile that vanishes silently is indistinguishable from an agent
-   * that was never written.
+   * **The resolved set, not the project layer's directory listing.** `listResolvedAgents`
+   * walks the union of the three mounted roots and resolves each `(department, slug)`
+   * through the one cascade, so CHART draws the agents that would actually run — including
+   * an `agents/_overrides/**` file, which no enumerator in this repo could previously see.
+   *
+   * An agent that cannot be resolved is excluded with its reason in `skipped[]` rather than
+   * throwing: one bad SKILL.md costs its own tile and not the whole matrix, and a tile that
+   * vanishes silently is indistinguishable from an agent that was never written
+   * (ADR-014 §1.2, §7.4).
    */
-  const agentsIndex = async (): Promise<AgentsIndex> => {
+  const agentsIndex = async (project: MountedProject): Promise<AgentsIndex> => {
     const skipped: AgentsIndex['skipped'] = [];
-    const records = await listAgents(config, (slug, reason) => skipped.push({ slug, reason }));
+    const resolved = await listResolvedAgents(config, project, (slug, reason) =>
+      skipped.push({ slug, reason }),
+    );
     return {
-      agents: records.map((record) => ({ slug: record.slug, path: record.path, frontmatter: record.data })),
+      agents: resolved.map(({ record }) => ({
+        slug: record.slug,
+        path: record.path,
+        frontmatter: record.data,
+      })),
       skipped,
     };
   };
 
   app.get(RUNNER_ROUTES.agentsIndex.path, async (request, reply) => {
     try {
-      projectOf(ctx, request);
-      return await agentsIndex();
+      return await agentsIndex(projectOf(ctx, request));
     } catch (err) {
       return sendApiError(reply, err);
     }
   });
 
+  /**
+   * The drawer's detail read — through the cascade, which is what lets it carry `sourceRef`.
+   *
+   * It resolves with the **same call dispatch uses**, so the drawer shows the file that
+   * would run and never a different one. A resolution that a run would refuse
+   * (`capability_widened`, `cascade_unresolved`) refuses here too, with the same hint: an
+   * agent whose tool list cannot run must not be rendered as though it could.
+   */
   app.get(RUNNER_ROUTES.agent.path, async (request, reply) => {
     try {
-      projectOf(ctx, request);
+      const project = projectOf(ctx, request);
       const slug = slugParam(request);
       // `/api/agents/` — a trailing slash on the collection, not a request for an agent
       // with no name. Fastify routes it here because the wildcard matches the empty
       // remainder; answering with the list is the only reading that isn't a lie.
-      if (!slug) return await agentsIndex();
-      return toAgentDetail(await loadAgent(config, slug));
+      if (!slug) return await agentsIndex(project);
+      const resolved = await resolveForDispatch(config, project, slug);
+      return toAgentDetail(resolved.record, resolved.sourceRef);
     } catch (err) {
       return sendApiError(reply, err);
     }
@@ -313,10 +334,11 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
     }
   });
 
+  // Panels are mounted per project and never cascaded (`project-scoping.md` §5.1 Q8). A
+  // project with no `panels/` of its own answers an empty list — not the coordinator's six.
   app.get(RUNNER_ROUTES.panels.path, async (request, reply) => {
     try {
-      projectOf(ctx, request);
-      return { panels: await listPanels(config) };
+      return { panels: await listPanels(projectOf(ctx, request)) };
     } catch (err) {
       return sendApiError(reply, err);
     }
@@ -324,9 +346,9 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
 
   app.get(RUNNER_ROUTES.panel.path, async (request, reply) => {
     try {
-      projectOf(ctx, request);
+      const project = projectOf(ctx, request);
       const id = (request.params as { id?: string }).id ?? '';
-      return await readPanel(config, id);
+      return await readPanel(project, id);
     } catch (err) {
       return sendApiError(reply, err);
     }
@@ -358,7 +380,7 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
     const project = mountedProject(config);
     const [brain, graphBuilt, budget, scopeEnforcement] = await Promise.all([
       computeBrainCompleteness(config),
-      graphIsBuilt(config),
+      graphIsBuilt(project),
       ledger.status(),
       probeScopeEnforcement(ctx.ledger.current()?.db ?? null),
     ]);

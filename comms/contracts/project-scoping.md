@@ -169,6 +169,18 @@ would otherwise have had to ask. The two that matter most to a consumer of *this
 
 Read that contract before building anything that consumes a resolved agent.
 
+**The mount is what a read derives from — amended 2026-08-17.** This contract owns which
+roots exist for which project, and it now also owns the shape that keeps that true at the
+call site: **the resolved project carries its own `agentsDir`, `overridesDir`, `panelsDir`,
+`companyFile` and `graphFile`, and every library read takes the project rather than the
+coordinator's configuration.** Until 2026-08-17 five read handlers resolved `:project` and
+then read the coordinator's paths — agreeing with the run path only because one library is
+mounted. That is invariant 8's argument in the library plane: agreement between two variables
+is not derivation from one, and the difference is invisible until a second mount exists.
+`MountedProject` has no `RunnerConfig` shape, so the agreement is now a compile-time property
+of the parameter list rather than a thing a reviewer has to notice
+(`apps/runner/src/routes/__tests__/project-derived-reads.test.ts`).
+
 ---
 
 ## 5. OPEN — the questions that must be answered before code
@@ -193,7 +205,54 @@ against.
 | **Q5** Is `library_remote` a clone the coordinator performs? | **Not in M15, and it cannot even be recorded.** A `git push` sends a project library to a third party — the same class of event as a `deliver:` target leaving the tailnet (BOARD, Part VII.4). | `CONSTRAINT library_remote_needs_egress_adr CHECK (library_remote IS NULL)`. Until that ADR lands and a later migration drops it, **no remote can be stored, so no code path can act on one.** Dropping a constraint is reviewable; ignoring a comment is not. |
 | **Q6** Which of the two enforcement points is authoritative? | **Part V's capped API-key workspace in the runner, and it is the only enforced one.** `ops.project.budget_monthly` is declared and **not** enforced in M15: spend-per-project can only be computed from ledger rows, and zero runs have ever executed, so any cap derived from it is a false refusal or a silent pass. | `ProjectSummary.budgetEnforced: false` ships next to the number on every response. A cap rendered beside no enforcement is a UI telling a lie it was handed. |
 | **Q7** `host_affinity[]` now or later? | **Built now, read by nothing.** Deferring means a migration on a live ledger later; the column is free. | `ProjectSummary.hostAffinityEnforced: false`, same rule as Q6. `project_not_mounted` (503, not 404) is the refusal a project on another host gets, so "wrong machine" never reads as "wrong name". |
-| **Q8** Are `panels/*.json` cascaded like agents? | **No — not in M15.** Panels are mounted per project, not resolved through layers. ADR-014's rules are written about `agents/**` and depend on properties panels do not have: a capability ceiling, a `status` derived from runs, an `agent_ref`. | If they ever do cascade, they need their own resolution rules from `dashboards-engineer` against ADR-004's six Command Centers. Answering it now would mean designing it with one project to test against. |
+| **Q8** Are `panels/*.json` cascaded like agents? | **No — not in M15.** Panels are mounted per project, not resolved through layers. ADR-014's rules are written about `agents/**` and depend on properties panels do not have: a capability ceiling, a `status` derived from runs, an `agent_ref`. **A project with no `panels/` of its own shows nothing — see Q8a below, which was deferred and is now answered.** | `GET /api/p/:project/panels[/:id]` reads `MountedProject.panelsDir`; `apps/runner/src/lib/panels.ts` cannot import `RunnerConfig`, so a project route cannot serve the coordinator's dashboards. `project-derived-reads.test.ts`. **The web app's own `loadPanels()` still walks a fixed candidate list and is `dashboards-engineer`'s — see the amendment below.** |
+
+#### Q8a — what a project with no `panels/` of its own shows. **ANSWERED: nothing.**
+
+Q8 deferred this deliberately (*"answering it now would mean designing it with one project to
+test against"*), and `dashboards-engineer` reported on 2026-08-17 that it had become the thing
+blocking the build. It is answered here rather than deferred again, because the alternative is
+a contract asserting a behaviour nobody chose.
+
+> **A project with no `panels/` shows an empty carousel. There is no fallthrough to a
+> coordinator-level set, and no coordinator-level set exists to fall through to.**
+
+Three reasons, and **none of them is inherited from ADR-014** — that ADR ruled against
+fallthrough for *agents*, on an argument about capability ceilings that panels do not have,
+so borrowing its conclusion would be borrowing a result without its reason:
+
+1. **A panel is a query shape, not a document.** It names agents, departments and metrics from
+   the library it was written against. Inherited into another project it renders that
+   project's *frame* filled with this project's numbers — and there is no state in which that
+   is distinguishable, on screen, from a dashboard someone meant to build. A widget that is
+   empty because the panel does not belong here looks exactly like a widget that is empty
+   because nothing has run.
+2. **There is no coordinator tier in the mount model.** `panelsDir` is a field of
+   `MountedProject`; today's "coordinator panels" *are* the one mounted project's. A
+   fallthrough answer would require inventing a second tier first, and inventing a tier to
+   hold a default is how the ambient default this whole ADR removes gets back in through
+   another door.
+3. **An empty carousel is an honest empty state** (BOARD rule 9), and it is a state the
+   product already renders. Six Command Centers appearing in a client project that never
+   asked for them is not a nicer default; it is six dashboards a person has to disprove.
+
+*Reversible, and cheaply:* adding a fallthrough later is additive and touches one function.
+Removing one after projects have relied on it is not. The conservative direction is the one
+that can still change its mind.
+
+**What is built, and what is not — so this row cannot become the thing it is correcting:**
+
+| | State |
+|---|---|
+| `GET /api/p/:project/panels` and `…/panels/:id` serve `MountedProject.panelsDir` | **built**, `apps/runner/src/lib/panels.ts`, verified in `project-derived-reads.test.ts` |
+| A project with no `panels/` answers `{panels: []}` and `panel_not_found` naming the project | **built**, same test |
+| `apps/web/src/dashboards/data/load.ts` — `loadPanels()` takes no project and walks `PANELS_DIR`, `/panels` and three monorepo-relative candidates | **not built, and it is `dashboards-engineer`'s.** The resolver they asked for is a route, not a fourth candidate: `GET /api/p/:project/panels`. The web app has no business reading `ops.project.library_path` off a disk it may not share |
+| Both dashboard routes destructure only `id` and discard `:project` | **not built**, `dashboards-engineer` |
+| Resolution rules if panels ever *do* cascade | not written, and correctly not — `dashboards-engineer` against ADR-004's six centres, when a second project exists to write them against |
+
+Until the web half lands, **six Command Centers render identically in every project** — which
+is true of exactly one project today, so it is a latent defect rather than a live one. Filed
+back with the owner and named here so a reviewer reading Q8 is not told it was done.
 
 **Still OPEN in this subsection — one question, and it is the highest-stakes one:**
 

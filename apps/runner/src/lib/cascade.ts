@@ -36,7 +36,7 @@
  * file's tool list. Same disease as `unknown` vs `zero`, one plane up.
  */
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { agentRef as makeAgentRef, sourceRef, type CascadeLayer } from '@agnetos/contracts';
 import { ApiError } from './errors';
@@ -312,7 +312,7 @@ export interface DispatchAgent {
 }
 
 /**
- * **The only way the run pipeline may obtain a runnable agent.**
+ * **The only way to obtain a resolved agent — for a run, and now for a read.**
  *
  * Resolution and enforcement are one call on purpose. If they were two, a future caller
  * could resolve without asserting and would get a working run — the check would then be
@@ -321,6 +321,21 @@ export interface DispatchAgent {
  *
  * The record is built from **the same bytes** the ceiling was derived from. Nothing is
  * re-read between the check and the run.
+ *
+ * ## The name says dispatch; `GET /api/agents/:slug` calls it too, and that is the fix
+ *
+ * Until 2026-08-17 this had exactly one caller, and the read path used `loadAgent` — a
+ * single-layer read of `<repo>/agents/{slug}/SKILL.md`. The consequence was not cosmetic:
+ * **an override could win a run while MAP, CHART, the drawer and the validator all kept
+ * showing the global file.** What you saw was not what ran, which is BOARD rule 4 defeated
+ * without a single line of wrong code, and `Plan §21.9`'s bug class with no error message.
+ *
+ * So the read path resolves through the same function, and the property is now structural:
+ * the drawer renders the agent that would run, or the same refusal the run would give. A
+ * read caller is **not** a second door — the door is the agent-session factory, which
+ * `one-door.test.ts` asserts has exactly one call site, and that call site is not here.
+ * Resolving cannot spend anything. The exhaustive caller list in that test is what keeps a
+ * third caller a deliberate act.
  */
 export async function resolveForDispatch(
   config: RunnerConfig,
@@ -351,4 +366,86 @@ export async function resolveForDispatch(
     layer: resolution.winner.layer,
     ceiling: resolution.ceiling,
   };
+}
+
+/**
+ * Every `(department, slug)` one root defines, as `department/slug` strings.
+ *
+ * `_`-prefixed directories are skipped at the department level — `_overrides` and
+ * `_registry` are the two reserved names under `agents/` (ADR-014 §1.3) and neither is a
+ * department. The override root is `agents/_overrides` itself, so *its* children are
+ * departments and the same skip is a no-op there.
+ *
+ * A root that cannot be read contributes nothing rather than throwing: an absent global
+ * library is the normal state (BOARD, M15 scope), and the *dangerous* kind of unreadable —
+ * a layer that exists but will not open for an agent someone asked for — is caught per
+ * agent by `readLayer`, which refuses the run rather than silently promoting a lower layer.
+ * Those are two different facts and only the second may fail closed.
+ */
+async function keysUnder(root: string | null): Promise<string[]> {
+  if (root === null) return [];
+
+  let departments: string[];
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    departments = entries.filter((e) => e.isDirectory() && !e.name.startsWith('_')).map((e) => e.name);
+  } catch {
+    return [];
+  }
+
+  const keys: string[] = [];
+  for (const department of departments) {
+    try {
+      const entries = await readdir(join(root, department), { withFileTypes: true });
+      for (const entry of entries) if (entry.isDirectory()) keys.push(`${department}/${entry.name}`);
+    } catch {
+      // A department directory that vanished between the two reads contributes nothing.
+    }
+  }
+  return keys;
+}
+
+/**
+ * The **resolved set** for one project — what MAP, CHART and DASHBOARDS project
+ * (ADR-014 §1).
+ *
+ * The union of `(department, slug)` across all three mounted roots, each resolved through
+ * the one cascade, each ceiling-checked. `onSkip` receives everything excluded and why:
+ * ADR-014 §1.2 requires a broken file to be **excluded with a named reason and never to
+ * fall through**, and `AgentsIndex.skipped[]` is where that reason reaches a person.
+ *
+ * Two consequences worth naming, because both were previously invisible:
+ *
+ * 1. **`agents/_overrides/**` is now enumerable.** Every other enumerator in this repo skips
+ *    `_`-prefixed folders (`agent-cascade.md` §11, gap 1), so an override file would have
+ *    won a run and appeared on no surface at all. It does not exist yet in any project —
+ *    this closes the hole before the first one is written, which is the only cheap time.
+ * 2. **A widened override is a `skipped[]` row, not a tile.** It refuses at dispatch, so
+ *    rendering it as a normal agent would put a tool list on screen that cannot run.
+ */
+export async function listResolvedAgents(
+  config: RunnerConfig,
+  project: MountedProject,
+  onSkip?: (slug: string, reason: string) => void,
+): Promise<DispatchAgent[]> {
+  const roots = cascadeRoots(config, project);
+  const keys = new Set<string>([
+    ...(await keysUnder(roots.global)),
+    ...(await keysUnder(roots.project)),
+    ...(await keysUnder(roots.override)),
+  ]);
+
+  const resolved: DispatchAgent[] = [];
+  for (const slug of [...keys].sort((a, b) => a.localeCompare(b))) {
+    if (!isAgentSlug(slug)) {
+      onSkip?.(slug, 'slug is not kebab-case');
+      continue;
+    }
+    try {
+      resolved.push(await resolveForDispatch(config, project, slug));
+    } catch (err) {
+      onSkip?.(slug, err instanceof ApiError ? err.message : 'failed to resolve');
+    }
+  }
+  return resolved;
 }
