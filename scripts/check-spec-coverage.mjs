@@ -9,6 +9,13 @@
  * A requirement whose "Implemented in" path does not exist is a lie in a document, which
  * is worse than a gap — a gap is visible. This is why the check resolves paths.
  *
+ * The same rule now binds the **Spec §** column (ADR-034). A citation pointing nowhere is the
+ * same lie as a path pointing nowhere, and until 2026-08-17 this column was checked for its
+ * *prefix* only: `§99.9` passed, exit 0, silent — while `` `Plan §12` ``, the form ADR-013 rule 2
+ * *requires* for Part Two work, FAILed. A gate that refuses the correct citation does not merely
+ * miss things; it decides what a requirement is willing to claim to be about, and that
+ * distortion is invisible in the output.
+ *
  * Usage: node scripts/check-spec-coverage.mjs [--json]
  */
 
@@ -18,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SPEC = join(ROOT, 'skilltree-clone-spec.md');
+const PLAN = join(ROOT, 'AGENTOS-V2-PLAN.md');
 const SPECS_DIR = join(ROOT, 'comms', 'specs');
 const BOARD = join(ROOT, 'comms', 'BOARD.md');
 
@@ -38,7 +46,7 @@ async function boardOwnership() {
   for (const line of table.split(/\r?\n/)) {
     const row = line.match(/^\|\s*(.+?)\s*\|\s*`([a-z-]+)`\s*\|/);
     if (!row) continue;
-    for (const m of row[1].matchAll(/§(\d+\.\d+)|\bPART\s+([IVX]+)\b/g)) {
+    for (const m of row[1].matchAll(/(?<!Plan\s)§(\d+\.\d+)|\bPART\s+([IVX]+)\b/g)) {
       owners.set(m[1] ?? `PART ${m[2]}`, row[2]);
     }
   }
@@ -51,18 +59,135 @@ const warnings = [];
 const fail = (msg) => errors.push(msg);
 const warn = (msg) => warnings.push(msg);
 
-/** Sections the spec defines, extracted from its own headings. */
-async function specSections() {
+/**
+ * The spec of record, indexed twice for two different jobs.
+ *
+ * `sections` is the **completeness denominator** — the headings that must each be claimed by
+ * exactly one agent. It is unchanged: `PART <ROMAN>` and `<n>.<m>`, nothing else. ADR-013 rule 1
+ * keeps this narrow deliberately.
+ *
+ * `ids` is the **citation index** — everything a requirement row may legally point at, which is
+ * strictly wider, because the spec numbers one level deeper than it gives headings to. §2.5's
+ * seven widget types are `1.`–`7.` in an ordered list, §2.6's six are `1.`–`6.`, and Part VII's
+ * honest flags are `1.`–`4.`; 44 requirement rows in `comms/specs/` cite them as `§2.5.1`,
+ * `§2.6.3`, `PART VII.4`. **An index built from headings alone would manufacture 44 FAILs out of
+ * 44 correct cells**, which is worse than the gap it closes — so the ordinal of a top-level
+ * numbered item inside a container is a citable id, and `§2.5.9` FAILs because §2.5 has seven.
+ *
+ * Fenced code is skipped: a numbered line inside the PART IV frontmatter example is not a
+ * section. Skipping it can only make the index narrower, never wider, which is the safe
+ * direction for everything except a false FAIL — and a numbered list in a code fence produces
+ * an id nobody cites either way.
+ */
+async function specIndex() {
   const text = await readFile(SPEC, 'utf8');
-  const sections = new Map(); // id -> title
+  const sections = new Map(); // id -> title  (the denominator)
+  const ids = new Set(); //          (what a citation may resolve to)
+  let container = null;
+  let fenced = false;
   for (const line of text.split(/\r?\n/)) {
+    if (/^\s*```/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+
     const part = line.match(/^#\s+PART\s+([IVX]+)\s+[—-]\s*(.+)$/);
-    if (part) sections.set(`PART ${part[1]}`, part[2].trim());
+    if (part) {
+      container = `PART ${part[1]}`;
+      sections.set(container, part[2].trim());
+      ids.add(container);
+      continue;
+    }
     const sub = line.match(/^##\s+(\d+\.\d+)\s+(.+)$/);
-    if (sub) sections.set(sub[1], sub[2].trim());
+    if (sub) {
+      container = sub[1];
+      sections.set(container, sub[2].trim());
+      ids.add(container);
+      continue;
+    }
+    // Any other heading keeps the container: a prose subheading inside §2.5 does not end §2.5.
+    if (/^#{1,6}\s/.test(line)) continue;
+
+    const item = container && line.match(/^(\d+)\.\s/);
+    if (item) ids.add(`${container}.${item[1]}`);
   }
-  return sections;
+  return { sections, ids };
 }
+
+/**
+ * `AGENTOS-V2-PLAN.md`'s citable ids. Part Two is cited as `Plan §12` / `Plan §23.8` and never
+ * as a bare `§12` (ADR-013 rule 2 — a bare `§` always means the spec of record, which has no
+ * §10). The plan numbers `## 12.` at the top level and `### 23.8` below it, so headings are the
+ * whole index here; the ordinal rule the spec needs has no counterpart, because no row cites a
+ * third plan level and inventing ids for one would only make this half of the check permissive.
+ *
+ * **This does not widen the coverage denominator.** ADR-013 rule 1 is untouched: the plan is
+ * still absent from `sections`, still absent from BOARD's `## Spec coverage` table, and a plan
+ * section still cannot be *claimed*. It can now be *cited*, which is a different column and a
+ * different promise.
+ *
+ * Returns `null` when the plan is missing, which is reported rather than silently accepted —
+ * a checker whose input became empty and which grades the empty result as a pass is the exact
+ * defect BOARD records against `identity-model.test.mjs`.
+ */
+async function planIds() {
+  let text;
+  try {
+    text = await readFile(PLAN, 'utf8');
+  } catch {
+    return null;
+  }
+  const ids = new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const top = line.match(/^##\s+(\d+)\.\s/);
+    if (top) {
+      ids.add(top[1]);
+      continue;
+    }
+    const sub = line.match(/^###\s+(\d+\.\d+)\s/);
+    if (sub) ids.add(sub[1]);
+  }
+  return ids;
+}
+
+/**
+ * What a **Spec §** cell is allowed to say, settled once (ADR-034) instead of being decided by
+ * whether a string happens to begin with `§`.
+ *
+ * A cell is a `·`- or `,`-separated list. Each element is one of:
+ *
+ *   **primary** — the authority the requirement derives from. Exactly the three forms below, and
+ *     every one of them is *resolved against its document*. A row must carry at least one.
+ *       `§2.3` · `§2.5.1`   the spec of record
+ *       `PART V` · `PART VII.4`  the spec of record
+ *       `Plan §12` · `Plan §23.8`  AGENTOS-V2-PLAN.md
+ *
+ *   **supporting** — a real cross-reference this checker cannot resolve, accepted as an
+ *     addition and never as the whole citation:
+ *       `BOARD rule 9`      one of CLAUDE.md's nine standing rules
+ *       `thread-model §4.2` a section of another comms/ document
+ *     These are **not** resolved, and that is stated here and on BOARD rather than implied. A
+ *     supporting element alone leaves the row with no primary citation, so it FAILs — which is
+ *     what stops "accepted" from decaying into "unchecked".
+ *
+ * Markdown wrapping is stripped first: every one of `design-system.md`'s Part Two rows writes
+ * the citation as `` `Plan §12` ``, and the old prefix test failed all of them on the backtick.
+ */
+function classifyCitation(raw) {
+  const el = raw.replace(/[`*]/g, '').trim();
+  if (!el) return null;
+  let m;
+  if ((m = el.match(/^§\s*(\d+(?:\.\d+)*)$/))) return { kind: 'spec', id: m[1], el };
+  if ((m = el.match(/^PART\s+([IVX]+(?:\.\d+)*)$/i)))
+    return { kind: 'part', id: `PART ${m[1].toUpperCase()}`, el };
+  if ((m = el.match(/^Plan\s*§\s*(\d+(?:\.\d+)*)$/i))) return { kind: 'plan', id: m[1], el };
+  if (/^BOARD\s+rule\s+\d+$/i.test(el)) return { kind: 'supporting', el };
+  if (/^[A-Za-z][\w-]*\s+§\s*\d+(?:\.\d+)*$/.test(el)) return { kind: 'supporting', el };
+  return { kind: 'unreadable', el };
+}
+
+const PRIMARY = new Set(['spec', 'part', 'plan']);
 
 const REQUIRED_HEADINGS = [
   '## Owner',
@@ -164,7 +289,10 @@ async function exists(p) {
 }
 
 async function main() {
-  const sections = await specSections();
+  const { sections, ids: specCitable } = await specIndex();
+  const planCitable = await planIds();
+  if (planCitable === null)
+    warn('AGENTOS-V2-PLAN.md is missing — every `Plan §n` citation is accepted unchecked');
 
   let files = [];
   try {
@@ -194,8 +322,11 @@ async function main() {
 
     // Sections this spec claims, from the "Spec sections covered" line(s).
     const covered = text.match(/^##\s+Spec sections covered\s*$([\s\S]*?)(?=^##\s|\Z)/m);
+    // `(?<!Plan\s)` so a spec that also names its Part Two work does not accidentally *claim*
+    // `§23.8` of a spec of record that has no §23. Claiming stays spec-of-record-only (ADR-013
+    // rule 1); citing is the other column.
     if (covered) {
-      for (const m of covered[1].matchAll(/§(\d+\.\d+)|\bPART\s+([IVX]+)\b/g)) {
+      for (const m of covered[1].matchAll(/(?<!Plan\s)§(\d+\.\d+)|\bPART\s+([IVX]+)\b/g)) {
         const id = m[1] ?? `PART ${m[2]}`;
         if (!claimed.has(id)) claimed.set(id, []);
         claimed.get(id).push(file);
@@ -253,10 +384,37 @@ async function main() {
   const isPending = (cell, paths) => (!cell || PENDING.test(cell)) && paths.length === 0;
 
   let pending = 0;
+  let citesResolved = 0;
+  let citesUnresolvable = 0;
   for (const r of rows) {
     if (!r.requirement) fail(`${r.file}: ${r.id} has an empty requirement`);
-    if (!r.section.startsWith('§') && !r.section.toUpperCase().startsWith('PART'))
-      fail(`${r.file}: ${r.id} does not cite a spec section (got "${r.section}")`);
+
+    // The Spec § column, resolved rather than prefix-matched. See classifyCitation.
+    const cites = String(r.section ?? '')
+      .split(/\s*[·,]\s*/)
+      .map(classifyCitation)
+      .filter(Boolean);
+    const primary = cites.filter((c) => PRIMARY.has(c.kind));
+    if (primary.length === 0)
+      fail(`${r.file}: ${r.id} cites no spec or plan section (got "${r.section}")`);
+    for (const c of primary) {
+      if (c.kind === 'plan') {
+        if (planCitable === null) {
+          citesUnresolvable++;
+        } else if (planCitable.has(c.id)) {
+          citesResolved++;
+        } else {
+          fail(`${r.file}: ${r.id} cites "${c.el}", which AGENTOS-V2-PLAN.md does not have`);
+        }
+      } else if (specCitable.has(c.id)) {
+        citesResolved++;
+      } else {
+        fail(`${r.file}: ${r.id} cites "${c.el}", which skilltree-clone-spec.md does not have`);
+      }
+    }
+    citesUnresolvable += cites.filter((c) => c.kind === 'supporting').length;
+    for (const c of cites.filter((c) => c.kind === 'unreadable'))
+      warn(`${r.file}: ${r.id} has a citation element this gate cannot read — "${c.el}"`);
 
     const implPaths = pathsIn(r.impl);
     const testPaths = pathsIn(r.test);
@@ -281,13 +439,31 @@ async function main() {
   const pct = rows.length ? Math.round((built / rows.length) * 100) : 0;
 
   if (process.argv.includes('--json')) {
-    console.log(JSON.stringify({ sections: sections.size, requirements: rows.length, built, pending, errors, warnings }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          sections: sections.size,
+          requirements: rows.length,
+          built,
+          pending,
+          citesResolved,
+          citesUnresolvable,
+          errors,
+          warnings,
+        },
+        null,
+        2,
+      ),
+    );
   } else {
     console.log(`\nSpec coverage`);
     console.log(`  spec sections     ${sections.size} (${sections.size - [...sections.keys()].filter((s) => !claimed.has(s)).length} claimed)`);
     console.log(`  requirements      ${rows.length}`);
     console.log(`  implemented       ${built} (${pct}%)`);
     console.log(`  declared, unbuilt ${pending}`);
+    // Printed so "the Spec § column is checked now" is never read as wider than it is: the
+    // second number is the part that is accepted on its shape and resolved against nothing.
+    console.log(`  citations         ${citesResolved} resolved · ${citesUnresolvable} accepted unresolved`);
     for (const w of warnings) console.log(`  warn  ${w}`);
     for (const e of errors) console.log(`  FAIL  ${e}`);
     console.log('');
