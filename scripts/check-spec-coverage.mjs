@@ -106,6 +106,54 @@ function splitRow(line) {
 /** Only resolve cells that actually look like repo paths. */
 const looksLikePath = (s) => s.includes('/') || /\.(ts|tsx|mjs|js|css|json|md|ya?ml)$/.test(s);
 
+/** Markdown punctuation that can wrap a path in a table cell. `_` is NOT here: it is a
+ *  legitimate path character and stripping it turns `scripts/__tests__` into a lie. */
+const STRIP_LEAD = /^[`*([<"']+/;
+const STRIP_TAIL = /[`*)\]>,;:."']+$/;
+
+const cleanToken = (tok) => tok.replace(STRIP_LEAD, '').replace(STRIP_TAIL, '').split('#')[0].trim();
+
+/**
+ * Every path a coverage cell claims. **Both columns go through this**, because "resolve the
+ * paths" must have exactly one reading — the Test column was previously resolved not at all,
+ * so the gate's founding rule (*a requirement pointing at a file that does not exist is a lie
+ * in a document*) was enforced on half the table.
+ *
+ * The two columns carry different forms, so the rule is about *shape*, not about which column
+ * it came from. A `·`/`,`-separated element is either:
+ *
+ *   a **claim** — one bare token and nothing else. Resolved when it has a directory separator
+ *     or a file extension. This is the rule the Implemented column has always used and it is
+ *     unchanged, which is why `package.json` at the repo root keeps being checked.
+ *
+ *   **prose** — anything containing a space. Only its `/`-bearing tokens are resolved. So
+ *     `node scripts/seed-agents.mjs` still checks the script it names — the half of that cell
+ *     that can go stale — while `manual — see Test plan`, `negative fixture run` and
+ *     `review — fidelity-qa-reviewer` stay prose. A bare filename inside a sentence
+ *     (`provenance.mjs`, in an aside) also stays prose: it cannot be resolved without a
+ *     directory, and only a resolvable claim can be a lie.
+ *
+ * A token starting with `/` is never a path: repo paths here are relative to ROOT, so a
+ * leading slash means a URL route (`manual — open /p/:project/chart`), not a file.
+ */
+function pathsIn(cell) {
+  const found = [];
+  for (const element of String(cell ?? '').split(/\s*[·,]\s*/)) {
+    const el = element.trim();
+    if (!el) continue;
+    const bare = cleanToken(el);
+    if (!/\s/.test(bare)) {
+      if (bare && !bare.startsWith('/') && looksLikePath(bare)) found.push(bare);
+      continue;
+    }
+    for (const raw of el.split(/\s+/)) {
+      const tok = cleanToken(raw);
+      if (tok && !tok.startsWith('/') && tok.includes('/')) found.push(tok);
+    }
+  }
+  return found;
+}
+
 async function exists(p) {
   try {
     await access(join(ROOT, p.trim()));
@@ -193,26 +241,40 @@ async function main() {
   }
 
   // Every requirement must be real.
-  const PENDING = /^(—|-|TBD|pending|n\/a)$/i;
+  //
+  // The pending marker is anchored at the START of the cell, not at both ends. Both-ends
+  // anchoring was correct about the bare `—` and one keystroke from being defeated: `— (owed)`
+  // matched nothing, so it was graded as a real claim and emitted neither a FAIL nor a warn.
+  // A near-miss passing silently is the same disease as an unenforced column.
+  const PENDING = /^(—|-|TBD|pending|n\/a)(\s|$)/i;
+  /** Declared-but-unbuilt: opens with a pending marker AND names no resolvable path. The
+   *  second half keeps a cell like `— *(pinned by scripts/__tests__/x.test.mjs)*` out of the
+   *  pending bucket, because it does name evidence. */
+  const isPending = (cell, paths) => (!cell || PENDING.test(cell)) && paths.length === 0;
+
   let pending = 0;
   for (const r of rows) {
     if (!r.requirement) fail(`${r.file}: ${r.id} has an empty requirement`);
     if (!r.section.startsWith('§') && !r.section.toUpperCase().startsWith('PART'))
       fail(`${r.file}: ${r.id} does not cite a spec section (got "${r.section}")`);
 
-    if (PENDING.test(r.impl) || !r.impl) {
+    const implPaths = pathsIn(r.impl);
+    const testPaths = pathsIn(r.test);
+
+    // The Test column is resolved even when the requirement is declared-but-unbuilt: a test
+    // path that does not exist is a lie in a document either way.
+    for (const p of testPaths) {
+      if (!(await exists(p))) fail(`${r.file}: ${r.id} cites test "${p}" which does not exist`);
+    }
+
+    if (isPending(r.impl, implPaths)) {
       pending++;
       continue; // declared-but-unbuilt is legal and counted, not an error
     }
-    for (const p of r.impl.split(/\s*[·,]\s*/)) {
-      const path = p.replace(/^`|`$/g, '').split('#')[0].trim();
-      if (!path) continue;
-      // A cell may name a token, a type or a CSS class rather than a file. Only paths are
-      // resolvable, and only resolvable claims can be lies.
-      if (!looksLikePath(path)) continue;
-      if (!(await exists(path))) fail(`${r.file}: ${r.id} claims "${path}" which does not exist`);
+    for (const p of implPaths) {
+      if (!(await exists(p))) fail(`${r.file}: ${r.id} claims "${p}" which does not exist`);
     }
-    if (PENDING.test(r.test) || !r.test) warn(`${r.file}: ${r.id} is implemented but has no verification`);
+    if (isPending(r.test, testPaths)) warn(`${r.file}: ${r.id} is implemented but has no verification`);
   }
 
   const built = rows.length - pending;
