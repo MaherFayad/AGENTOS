@@ -384,6 +384,21 @@ export const ar: Catalog = {
   'a11y.provenance.drifted': 'متفرّع عن {parent} عند {commit}. وقد تغيّر الأصل منذ ذلك الحين.',
   'a11y.provenance.orphaned': 'متفرّع عن {parent} عند {commit}. ولم يعد الأصل موجودًا.',
 
+  /* The absence of provenance, filed as `todo()` by drawer-engineer 2026-08-17.
+   *
+   * Not a lookup, which is why it is not guessed here: the five keys above are
+   * *answers* and this is the admission that there is none, so it has to sit in
+   * the same register as them without borrowing any of their nouns — and the
+   * long form names a cause ("recorded when the agent runs") whose MSA phrasing
+   * is a choice about how much of our plumbing a reader should be shown. The
+   * English renders meanwhile and the gap is countable, which is what `todo()`
+   * is for. Routed to rtl-arabic-pdpl-specialist. */
+  'drawer.provenance.unknown': todo('Source unknown'),
+  'a11y.provenance.unknown': todo(
+    'Which library this agent came from is not known. It is recorded when the agent runs, ' +
+      'and the agent detail this drawer reads does not carry it yet.',
+  ),
+
   'a11y.mapCanvas': 'مجرّة الوكلاء. استخدم مفاتيح الأسهم للتنقّل بين الأقسام.',
   'a11y.drawer': 'تفاصيل الوكيل',
   'a11y.carousel': 'مراكز القيادة',

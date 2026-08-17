@@ -195,6 +195,15 @@ export const en = {
   'drawer.action.close': 'Close',
   'drawer.empty.loading': 'Loading this agent…',
   'drawer.empty.missing': 'This agent could not be loaded.',
+
+  /* Provenance the drawer does not have (`Plan §23.6`, ADR-014).
+   *
+   * The five states of `provenance.badge.*` are answers; this is the admission
+   * that there is no answer yet, and it is a separate key rather than a sixth
+   * state because `unknown` is not a layer. Kept short — it sits beside an
+   * already-tracked eyebrow — with the reason carried by the a11y sentence,
+   * where length is free. */
+  'drawer.provenance.unknown': 'Source unknown',
   'drawer.ladder.now': 'Now',
   'drawer.console.title': 'Output',
   'drawer.console.running': 'Running',
@@ -396,6 +405,9 @@ export const en = {
   'a11y.provenance.fork': 'Forked from {parent} at {commit}, and it still matches its parent.',
   'a11y.provenance.drifted': 'Forked from {parent} at {commit}. The parent has changed since.',
   'a11y.provenance.orphaned': 'Forked from {parent} at {commit}. The parent no longer exists.',
+  'a11y.provenance.unknown':
+    'Which library this agent came from is not known. It is recorded when the agent runs, ' +
+    'and the agent detail this drawer reads does not carry it yet.',
 
   'a11y.mapCanvas': 'Agent galaxy. Use the arrow keys to move between departments.',
   'a11y.drawer': 'Agent detail',

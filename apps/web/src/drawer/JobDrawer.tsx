@@ -17,6 +17,7 @@ import { useFocusTrap } from './a11y/useFocusTrap';
 import { ApiCallError, downloadUrl, fetchAgent, fetchRuns, postSchedule } from './data/client';
 import { initialValues, toRunPayload, validateInputs, type InputValues } from './data/inputs';
 import { projectAgent, type DrawerModel } from './data/project';
+import { provenanceOfAgent, type DrawerProvenance } from './data/provenance';
 import type { AgentDoc } from './data/types';
 import { openDrawer } from './events';
 import { GlassPanel } from './primitives';
@@ -155,6 +156,18 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
   }, [run]);
 
   const model = agent.kind === 'ready' ? agent.model : null;
+  /**
+   * `Plan §23.6` — which library this agent came from.
+   *
+   * Derived on every render from the run stream's `source_ref` and nothing else, so it is a
+   * projection of the cascade rather than a copy the drawer keeps: there is no state to
+   * update, nothing to invalidate and no way for it to survive a change it did not see.
+   * `provenanceOfAgent` refuses to attribute a run's provenance to any agent but the one
+   * that ran, so opening a second drawer cannot inherit the first one's answer — it goes
+   * back to `unknown`, which is the truth. See `data/provenance.ts` for why
+   * `GET /api/agents/:slug` cannot answer this today.
+   */
+  const provenance: DrawerProvenance = provenanceOfAgent(slug, run.state);
   const view = isChart ? 'chart' : 'map';
   const state = open ? 'open' : 'closed';
 
@@ -205,6 +218,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
               isChart ? (
                 <ChartAnatomy
                   model={model}
+                  provenance={provenance}
                   titleId={titleId}
                   onClose={onClose}
                   capabilities={capabilities}
@@ -222,6 +236,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
               ) : (
                 <MapAnatomy
                   model={model}
+                  provenance={provenance}
                   titleId={titleId}
                   onClose={onClose}
                   capabilities={capabilities}
@@ -255,6 +270,8 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
 
 interface AnatomyProps {
   model: DrawerModel;
+  /** `Plan §23.6`. Both anatomies render it identically — one question, one answer. */
+  provenance: DrawerProvenance;
   titleId: string;
   onClose: () => void;
   capabilities: ReturnType<typeof useRunnerAvailability>;
@@ -272,6 +289,7 @@ interface AnatomyProps {
 
 function MapAnatomy({
   model,
+  provenance,
   titleId,
   onClose,
   capabilities,
@@ -293,6 +311,7 @@ function MapAnatomy({
         title={model.title}
         breadcrumb={model.breadcrumb}
         description={model.description}
+        provenance={provenance}
         titleId={titleId}
         onClose={onClose}
         closeLabel={t('drawer.action.close')}
@@ -350,6 +369,7 @@ function MapAnatomy({
 
 function ChartAnatomy({
   model,
+  provenance,
   titleId,
   onClose,
   capabilities,
@@ -371,6 +391,7 @@ function ChartAnatomy({
         title={model.title}
         breadcrumb={model.breadcrumb}
         description={null}
+        provenance={provenance}
         titleId={titleId}
         onClose={onClose}
         closeLabel={t('drawer.action.close')}
@@ -438,7 +459,9 @@ function Additions({
   downloadHref,
   runs,
   includeSkillCard,
-}: Omit<AnatomyProps, 'titleId' | 'onClose'> & { includeSkillCard: boolean }) {
+  // `provenance` is omitted, not passed and ignored: it belongs to the header and the
+  // sections below it must not grow a second opinion about where the agent came from.
+}: Omit<AnatomyProps, 'titleId' | 'onClose' | 'provenance'> & { includeSkillCard: boolean }) {
   const hasInputs = model.inputs.fields.length > 0 || model.inputs.unsupported.length > 0;
 
   return (

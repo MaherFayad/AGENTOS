@@ -165,13 +165,47 @@
 }
 
 /* -----------------------------------------------------------------------------
- * 1. Eyebrow row — autonomy state + close
+ * 1. Eyebrow row — autonomy state + provenance + close
  * -------------------------------------------------------------------------- */
 .eyebrowRow {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* The two labels that describe the agent, grouped so `space-between` keeps pinning the ✕
+ * to the inline end and nothing else. `flex-wrap` because the provenance label can be a
+ * long word in Arabic beside an already-tracked autonomy state — it drops to a second line
+ * rather than squeezing the eyebrow or pushing the close button out of reach.
+ *
+ * `gap` and `align-items`, never a margin or a float: the whole drawer mirrors in RTL
+ * (§1.4, DRAWER_ANCHOR) and logical properties mirror for free. */
+.eyebrowGroup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-inline-size: 0;
+}
+
+/* Provenance we do not have.
+ *
+ * The badge's own typography — `text-label-sm` is 10px/500, and `--track-1` is the tracking
+ * `ProvenanceBadge` overrides to — so the two occupy the same optical slot and the header
+ * does not reflow when a run reveals the real answer. It differs in exactly one channel,
+ * colour, and one step only: `--ink-2`, the token this drawer already uses for every honest
+ * empty state (see the note on `.empty`), never the disabled `--ink-3`.
+ *
+ * No mark, no border, no pill. A mark is the primitive's vocabulary and each of its five
+ * silhouettes asserts a layer; this asserts nothing, which is the whole content. */
+.provenanceUnknown {
+  display: inline-flex;
+  align-items: center;
+  @apply text-label-sm;
+  text-transform: uppercase;
+  letter-spacing: var(--track-1);
+  color: var(--ink-2);
 }
 
 .close {

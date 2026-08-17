@@ -54,6 +54,23 @@ const DONE_TEXT: Record<'ok' | 'error' | 'denied' | 'canceled', string> = {
 export interface ConsoleState {
   phase: RunPhase;
   runId?: string;
+  /**
+   * `department/agent-slug`, from `start`. Held so a consumer can tell *whose* run this
+   * state describes — one `useRunStream` serves the drawer for its whole life, and a
+   * finished run outlives the drawer that started it.
+   */
+  agent?: string;
+  /**
+   * `{layer}:{path}@sha256:…` from `start` — **which file actually won the cascade for this
+   * run** (ADR-014 §2; `SseStartData.sourceRef`).
+   *
+   * Kept because the contract that emits it says the drawer header renders its layer half
+   * as the provenance badge, and because *"I ran the wrong code-reviewer"* is a bug class
+   * with no error message (`Plan §21.9`). It is provenance of a **run**, never of the agent:
+   * `data/provenance.ts` is the only thing that reads it, and it will not attribute it to an
+   * agent other than the one named in `agent` above.
+   */
+  sourceRef?: string;
   /** The terminal outcome from `done`. Absent until the run ends. */
   status?: 'ok' | 'error' | 'denied' | 'canceled';
   /** Present when a human denied the plan and wrote why. */
@@ -175,7 +192,17 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
           // (§3.2). Printing it makes the security boundary something a person can see
           // rather than something a document claims.
           const started = append(
-            { ...withId, phase: 'streaming', runId: event.runId, traceUrl: event.traceUrl ?? undefined },
+            {
+              ...withId,
+              phase: 'streaming',
+              runId: event.runId,
+              traceUrl: event.traceUrl ?? undefined,
+              // Both are read straight off the event and neither is defaulted: an older
+              // runner that does not send them leaves the header honestly unknown rather
+              // than inheriting whatever the previous run said.
+              agent: event.agent,
+              sourceRef: event.sourceRef,
+            },
             { kind: 'notice', text: `Run ${event.runId} started.` },
           );
           const tools = Array.isArray(event.tools) ? event.tools : [];
