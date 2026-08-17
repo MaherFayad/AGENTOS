@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useI18n } from '@/i18n';
 import { GlassPanel } from './ui';
 import { switchProjectHref } from './route';
 import { useShell } from './ShellContext';
@@ -72,6 +73,7 @@ function Chevron({ open }: { open: boolean }): React.JSX.Element {
 
 export function ProjectSwitcher(): React.JSX.Element {
   const router = useRouter();
+  const { t } = useI18n();
   const { route, project } = useShell();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -80,7 +82,7 @@ export function ProjectSwitcher(): React.JSX.Element {
   const listId = useId();
 
   const options: ProjectRow[] = project.options;
-  const label = project.slug ?? 'no project';
+  const label = project.slug ?? t('shell.project.none');
   const displayed = project.confirmed && project.name ? project.name : label;
 
   const close = useCallback((returnFocus = true) => {
@@ -182,8 +184,13 @@ export function ProjectSwitcher(): React.JSX.Element {
         aria-controls={open ? listId : undefined}
         // The accessible name states the scope in full, because the visible pill is a
         // truncated slug and a screen reader user has no tooltip to fall back on.
-        aria-label={`Project: ${displayed}. ${project.confirmed ? 'Confirmed by the runner.' : 'Not confirmed by the runner.'} Change project.`}
-        title={project.message ?? `Project ${displayed}. Everything on screen is scoped to it.`}
+        // ONE KEY PER STATE, never a clause chosen inside the sentence: the confirmation
+        // clause inflects in Arabic and "Change project." does not necessarily go last.
+        aria-label={t(
+          project.confirmed ? 'shell.project.aria.confirmed' : 'shell.project.aria.unconfirmed',
+          { project: displayed },
+        )}
+        title={project.message ?? t('shell.project.title', { project: displayed })}
         onClick={() => (open ? close(false) : reveal())}
         onKeyDown={onTriggerKeyDown}
         data-project-confirmed={project.confirmed}
@@ -209,7 +216,7 @@ export function ProjectSwitcher(): React.JSX.Element {
               id={listId}
               role="listbox"
               tabIndex={-1}
-              aria-label="Projects"
+              aria-label={t('shell.project.list')}
               aria-activedescendant={options[active] ? `${listId}-${active}` : undefined}
               onKeyDown={onListKeyDown}
               className="max-h-[280px] overflow-y-auto focus:outline-none"
@@ -233,7 +240,9 @@ export function ProjectSwitcher(): React.JSX.Element {
                       {/* `mounted` is the coordinator's own statement about which library
                           it has on disk. A row it lists but cannot serve is a real state
                           (`host_affinity`, Plan §9) and says so rather than 404ing later. */}
-                      {row.status !== 'active' ? row.status : row.mounted ? 'mounted' : 'elsewhere'}
+                      {row.status !== 'active'
+                        ? row.status
+                        : t(row.mounted ? 'shell.project.mounted' : 'shell.project.elsewhere')}
                     </span>
                   </button>
                 </li>
@@ -241,8 +250,7 @@ export function ProjectSwitcher(): React.JSX.Element {
 
               {options.length === 0 && (
                 <li className="px-3 py-3 text-meta text-ink-2">
-                  {project.message ??
-                    'The runner listed no projects. Nothing here is a guess — the switcher shows what it was told.'}
+                  {project.message ?? t('shell.project.empty')}
                 </li>
               )}
             </ul>
@@ -289,20 +297,15 @@ function FooterNote({
   scopeEnforced: boolean | null;
   unconfirmed: string | null;
 }): React.JSX.Element | null {
+  const { t } = useI18n();
   const lines: string[] = [];
 
   if (unconfirmed) lines.push(unconfirmed);
-  if (count === 1) {
-    lines.push(
-      'One project is mounted. Switching has nothing to switch to yet, so nothing here shows that project scoping works — only that it exists.',
-    );
-  }
+  if (count === 1) lines.push(t('shell.project.onlyOne'));
   if (scopeEnforced === false) {
-    lines.push(
-      'The runner reports that its database connection bypasses row-level security, so project isolation is not being enforced underneath these names.',
-    );
+    lines.push(t('shell.project.isolationOff'));
   } else if (scopeEnforced === null && count > 0) {
-    lines.push('The runner did not say whether project isolation is enforced.');
+    lines.push(t('shell.project.isolationUnknown'));
   }
 
   if (lines.length === 0) return null;

@@ -60,6 +60,8 @@ export {
   mirrors,
   inlineSign,
   inlineSignFor,
+  elementDirection,
+  inlineStep,
   type MirroredSurface,
   type FixedSurface,
   type DrawerAnchor,

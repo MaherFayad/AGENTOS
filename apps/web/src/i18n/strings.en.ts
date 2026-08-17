@@ -103,6 +103,44 @@ export const en = {
   'shell.search.panels.malformed':
     'The dashboard index came back in a shape this build does not understand, so search is empty rather than wrong.',
 
+  /* `Plan §23.10` project switcher — the shell's highest-frequency new control.
+   *
+   * Written as whole sentences rather than as the fragments the component was
+   * assembling, and the reason is the M15 verdict rather than a preference: the
+   * accessible name was
+   *   `Project: ${slug}. ${confirmed ? 'Confirmed…' : 'Not confirmed…'} Change project.`
+   * which is three clauses glued at the call site (rule 2), and a template literal
+   * is invisible to the copy scan besides. Two keys, one per state, so a
+   * translator moves "Change project" wherever their grammar wants it and the
+   * confirmation clause inflects with the rest of the sentence.
+   *
+   * `shell.project.none` is lower case on purpose — it sits in the pill under
+   * `text-transform: uppercase`, which does nothing in Arabic (rule 1).
+   *
+   * Key names are `shell-navigation-engineer`'s from their 2026-08-17T00:41 filing,
+   * kept verbatim, because a rename during a handoff is a merge conflict nobody
+   * learns anything from. The ONE place I departed from their list is the
+   * accessible name: they proposed `.label` · `.change` · `.confirmed` ·
+   * `.unconfirmed` as four keys, and the component was gluing them at the call
+   * site. That is rule 2, and it is what the verdict caught. `.aria.confirmed` and
+   * `.aria.unconfirmed` say the whole thing twice instead. `.title` is new — the
+   * tooltip was a template literal and had no proposed key at all. */
+  'shell.project.none': 'no project',
+  'shell.project.list': 'Projects',
+  'shell.project.mounted': 'mounted',
+  'shell.project.elsewhere': 'elsewhere',
+  'shell.project.title': 'Project {project}. Everything on screen is scoped to it.',
+  'shell.project.aria.confirmed': 'Project: {project}. Confirmed by the runner. Change project.',
+  'shell.project.aria.unconfirmed':
+    'Project: {project}. Not confirmed by the runner. Change project.',
+  'shell.project.empty':
+    'The runner listed no projects. Nothing here is a guess — the switcher shows what it was told.',
+  'shell.project.onlyOne':
+    'One project is mounted. Switching has nothing to switch to yet, so nothing here shows that project scoping works — only that it exists.',
+  'shell.project.isolationOff':
+    'The runner reports that its database connection bypasses row-level security, so project isolation is not being enforced underneath these names.',
+  'shell.project.isolationUnknown': 'The runner did not say whether project isolation is enforced.',
+
   /* Context breadcrumb strip (§2.0, appears in drill-ins). */
   'shell.breadcrumb.allDepartments': 'All departments',
   'shell.counter.live': '{live} of {total} live',
@@ -406,8 +444,8 @@ export const en = {
   'a11y.provenance.drifted': 'Forked from {parent} at {commit}. The parent has changed since.',
   'a11y.provenance.orphaned': 'Forked from {parent} at {commit}. The parent no longer exists.',
   'a11y.provenance.unknown':
-    'Which library this agent came from is not known. It is recorded when the agent runs, ' +
-    'and the agent detail this drawer reads does not carry it yet.',
+    'Which library this agent came from is not known. The agent detail did not say, ' +
+    'and no run of this agent has said either.',
 
   'a11y.mapCanvas': 'Agent galaxy. Use the arrow keys to move between departments.',
   'a11y.drawer': 'Agent detail',

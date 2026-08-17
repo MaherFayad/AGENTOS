@@ -67,7 +67,78 @@ test('English and Arabic catalogues have matching keys', async () => {
   const report = catalogueReport(en, ar);
   assert.deepEqual(report.missing, []);
   assert.deepEqual(report.orphan, []);
-  assert.ok(report.total > 50, `catalogue too small: ${report.total}`);
+  assert.ok(report.keys > 50, `catalogue too small: ${report.keys}`);
+});
+
+/* ---------------------------------------------------------------------------
+ * The M15 verdict's item 3b, turned into a test.
+ *
+ * The falsification that found it: delete the Arabic `two`, `few` and `many` from
+ * three count-bearing keys. `tsc` exited 0 (they are optional on `Plural`),
+ * `check-rtl --gate` exited 0, the ratchet said "holding" and `arabic 212 (97%)`
+ * did not move by one. Nothing in the repo could observe a missing plural class —
+ * the only granularity that is Arabic-specific.
+ * ------------------------------------------------------------------------ */
+
+const EN_PLURAL = ["export const en = {", "  'a.count': {", "    one: '{count} run',", "    other: '{count} runs',", "  } satisfies Plural,", '};'].join('\n');
+const arPlural = (classes) =>
+  ['export const ar = {', "  'a.count': {", ...classes.map((c) => `    ${c}: 'x',`), '  },', '};'].join('\n');
+
+test('a missing Arabic plural class is a finding — the dual is not the singular', () => {
+  const full = catalogueReport(EN_PLURAL, arPlural(['one', 'two', 'few', 'many', 'other']));
+  assert.deepEqual(full.pluralGaps, [], 'a complete Arabic plural must not be reported');
+
+  const noDual = catalogueReport(EN_PLURAL, arPlural(['one', 'few', 'many', 'other']));
+  assert.deepEqual(noDual.pluralGaps, [{ key: 'a.count', missing: ['two'] }]);
+
+  const englishShaped = catalogueReport(EN_PLURAL, arPlural(['one', 'other']));
+  assert.deepEqual(englishShaped.pluralGaps[0].missing, ['two', 'few', 'many']);
+});
+
+test('a class English declares is required of Arabic too, and zero is not invented', () => {
+  const enWithZero = EN_PLURAL.replace("  'a.count': {", "  'a.count': {\n    zero: 'No runs',");
+  // English separated zero, so it is a copy decision Arabic has to answer.
+  assert.deepEqual(
+    catalogueReport(enWithZero, arPlural(['one', 'two', 'few', 'many', 'other'])).pluralGaps,
+    [{ key: 'a.count', missing: ['zero'] }],
+  );
+  // English did not, so CLDR's Arabic `zero` falls through to `other` — the
+  // correct MSA form for a count of zero. Requiring it would be taste as grammar.
+  assert.deepEqual(
+    catalogueReport(EN_PLURAL, arPlural(['one', 'two', 'few', 'many', 'other'])).pluralGaps,
+    [],
+  );
+});
+
+test('an Arabic todo() is an admitted gap, not a plural-class failure', () => {
+  const ar = ['export const ar = {', "  'a.count': todo('{count} runs'),", '};'].join('\n');
+  const r = catalogueReport(EN_PLURAL, ar);
+  assert.deepEqual(r.pluralGaps, []);
+  assert.deepEqual(r.todoKeys, ['a.count']);
+});
+
+test('todo() counts call sites; TODO(ar) counts human markers; neither counts prose', () => {
+  const ar = [
+    '/* The word todo() appears four times in this comment: todo() todo() todo(). */',
+    '// TODO(ar): a human left this note.',
+    "  'a.real': todo('English'),",
+    "  'a.done': 'عربي',",
+  ].join('\n');
+  const r = catalogueReport("export const en = {\n  'a.real': 'x',\n  'a.done': 'y',\n};", ar);
+  assert.equal(r.todos, 1, 'five occurrences of the characters todo( — one is a call site');
+  assert.equal(r.markers, 1, 'the uppercase human marker was never counted at all');
+  assert.equal(r.translated, 1);
+});
+
+test('the catalogue report counts plural-class sentences, not just keys', async () => {
+  const [en, ar] = await Promise.all([readFile(EN, 'utf8'), readFile(AR, 'utf8')]);
+  const r = catalogueReport(en, ar);
+  assert.ok(r.pluralKeys >= 8, `expected count-bearing keys, got ${r.pluralKeys}`);
+  // The number the report used to print was `keys`, labelled "strings". Arabic
+  // declares more classes than English by construction, so this is the invariant
+  // that says the plural sentences are inside a number now.
+  assert.ok(r.arClasses > r.enClasses, `${r.arClasses} Arabic classes vs ${r.enClasses} English`);
+  assert.equal(r.enStrings, r.keys - r.pluralKeys + r.enClasses);
 });
 
 test('empty-state keys exist in both catalogues as complete sentences', async () => {
@@ -197,6 +268,61 @@ test('machinery is not copy — the noise that would make people stop reading th
       `${what} was reported as copy`,
     );
   }
+});
+
+/* ---------------------------------------------------------------------------
+ * The M15 verdict's item 2, and the fourth blind spot found alongside it.
+ * ------------------------------------------------------------------------ */
+
+test('a template literal with no ${} is a plain string literal', () => {
+  // Falsified in the verdict by planting identical prose two ways: a FAIL as
+  // `aria-label="…"` and silent as ``aria-label={`…`}``. The blind-spot
+  // declaration for templates justifies itself on `${a} · ${b}` joins; a
+  // zero-interpolation template has no such defence, and a declared blind spot is
+  // not a licence over the decidable part of its own class.
+  const quoted = '<button aria-label="Everything on screen is scoped." />';
+  const backtick = '<button aria-label={`Everything on screen is scoped.`} />';
+  assert.equal(copyFindings('apps/web/src/x.tsx', quoted).length, 1);
+  assert.equal(
+    copyFindings('apps/web/src/x.tsx', backtick).length,
+    1,
+    'the same prose in backticks was silent',
+  );
+  // …and it must stop being double-counted as a thing nobody looked at.
+  assert.equal(scanText('apps/web/src/x.tsx', backtick).blind.exprAttr, 0);
+
+  assert.equal(copyFindings('apps/web/src/x.tsx', 'const s = `Nothing is running yet.`;').length, 1);
+  // An interpolated one is still the declared blind spot, not a finding.
+  const assembled = 'const s = `Run ${when} finished cleanly today`;';
+  assert.equal(copyFindings('apps/web/src/x.tsx', assembled).length, 0);
+  assert.equal(scanText('apps/web/src/x.tsx', assembled).blind.template, 1);
+});
+
+test('a sentence cannot suppress its own finding by containing the word "to"', () => {
+  // MACHINE_CONTEXT holds `to`, `it`, `as`, `id`, `key`, `name`, `type` and `test`
+  // — identifiers, and ordinary English. Matched against the raw line, the copy
+  // being judged got a vote on whether it was copy. These two differ by one
+  // preposition and used to get opposite verdicts.
+  const withPreposition = "const s = 'Everything on screen is scoped to it.';";
+  const without = "const s = 'Everything on screen is scoped.';";
+  assert.equal(copyFindings('apps/web/src/x.tsx', withPreposition).length, 1);
+  assert.equal(copyFindings('apps/web/src/x.tsx', without).length, 1);
+});
+
+test('machine context still suppresses when it is code, including across lines', () => {
+  // The mirror of the test above: blanking literals must not blank the suppression.
+  assert.deepEqual(copyFindings('apps/web/src/x.tsx', 'className="flex items-center gap-2"'), []);
+  // Prettier decides whether `headers: {` shares a line with its entries. The
+  // context is the object, not the column width.
+  const wrapped = ['{', '  headers: {', "    'cache-control': 'no-store, no-transform',", '  },', '}'].join('\n');
+  assert.deepEqual(copyFindings('apps/web/src/x.ts', wrapped), []);
+});
+
+test('a backtick inside a quoted sentence is punctuation, not a template', () => {
+  const src = "setError('Paste the recovery secret from `happy auth` on the machine.');";
+  const found = copyFindings('apps/web/src/x.ts', src);
+  assert.equal(found.length, 1, found.map((f) => f.message).join(' | '));
+  assert.match(found[0].message, /Paste the recovery secret/);
 });
 
 test('looksLikeProse holds the line between a label and an identifier', () => {

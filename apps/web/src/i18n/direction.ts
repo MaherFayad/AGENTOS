@@ -27,6 +27,21 @@ export const MIRRORS = {
   'shell.breadcrumb': '§2.0 — the breadcrumb and its arrow follow reading order',
   /** §2.0 segmented control: Map · Dashboards · Chart · Sessions reverses. */
   'shell.segmentedControl': '§2.0 — tab order is reading order',
+  /** §2.4 the command-center carousel. Ruled 2026-08-17, because NEITHER table
+   *  named it and that omission is what let three components each decide locally.
+   *  It is a fixed ordinal list of six named things (ADR-004) presented as a ring
+   *  — the ring is presentation, the index is an ordinal, and ordinals are reading
+   *  order. It is not `map.canvas`: a department's angle there is a stored
+   *  coordinate in contracts/graph-layout.md, and a carousel position is not.
+   *
+   *  ITS FIX IS THREE COUPLED SITES, NOT ONE. `Carousel.tsx`'s ArrowRight, the
+   *  `translateX(offset * STRIDE)` in lib/carousel.ts `cardTransform`, and the
+   *  `clientX` drag delta are all physical and all agree with each other today, so
+   *  the carousel is internally consistent and only wrong against the page.
+   *  Flipping the key handler alone would make ArrowRight walk toward the card on
+   *  the reader's left — which is precisely the DepartmentTabs bug, introduced by
+   *  the patch meant to fix it. Move all three or none. */
+  'dashboards.carousel': '§2.4 — six command centers in a fixed order is a list, not a space',
   /** §2.0 shell corners: search+fullscreen at inline-start, actions at inline-end. */
   'shell.corners': '§2.0 — top-bar and bottom-bar clusters swap sides',
   /** §2.3 drawer close ✕, all list bullets, chips, disclosure chevrons. */
@@ -77,6 +92,65 @@ export const inlineSign = (dir: Direction): 1 | -1 => (dir === 'rtl' ? 1 : -1);
 
 /** Convenience for components that hold a locale rather than a direction. */
 export const inlineSignFor = (locale: Locale): 1 | -1 => inlineSign(directionOf(locale));
+
+/* -----------------------------------------------------------------------------
+ * The keyboard's inline axis — `inlineSign`'s sibling, for arrow keys.
+ *
+ * Promoted here from `chart/model/direction.ts` on 2026-08-17, granted on
+ * `shell-navigation-engineer`'s decision-request. `chart-matrix-engineer` wrote it
+ * and deliberately did not promote it — *"if a third caller wants them, that is
+ * the moment"* — which was right at one caller and is spent at three:
+ * `DepartmentTabs`, `SegmentedControl`, and `dashboards/components/Carousel.tsx`,
+ * where the same defect is still live.
+ *
+ * It lives here because the RULE already does. `MIRRORS['shell.segmentedControl']`
+ * — *"tab order is reading order"* — and `DOES_NOT_MIRROR['chart.phaseColumns']`
+ * are the two tables that decide whether a given arrow key flips at all; this is
+ * their application to a keystroke. A rule and its application in two owners'
+ * directories is how they drift, and the alternative on offer had a design-system
+ * primitive importing from a view.
+ *
+ * WHERE IT MUST NOT BE APPLIED, kept verbatim from the original because it is the
+ * more valuable half: the matrix grid's arrow keys (`chart/model/keyboard.ts`)
+ * stay direction-blind. `DOES_NOT_MIRROR['chart.phaseColumns']` — phases 1→4 are
+ * time, and time does not reverse because the page does. The test for whether an
+ * arrow key flips is the same one that decides whether the pixels flip: reading
+ * order mirrors, space and time do not. Applying this to the grid would be a
+ * second bug, not a completion of the first fix.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * The element's effective direction, by HTML's own rule: the nearest ancestor
+ * carrying a `dir` attribute wins, and the document element ends that chain.
+ *
+ * Read from the DOM rather than from `useI18n()`, and the second reason is the
+ * load-bearing one. (a) `useI18n()` throws outside its provider, so it would break
+ * every bare-render test of a control. (b) A component's keys should follow the
+ * direction it is actually *rendered* in, not the app's locale: §2.5 and §3.1 both
+ * put LTR islands inside the RTL page, and a control inside one of those must key
+ * LTR.
+ *
+ * `dir="auto"` resolves per text run and cannot be computed here, so it reads as
+ * `ltr` — stated rather than silently assumed. No surface in this app sets it.
+ */
+export function elementDirection(element: Element | null | undefined): Direction {
+  const owner = element?.closest('[dir]');
+  return owner?.getAttribute('dir')?.toLowerCase() === 'rtl' ? 'rtl' : 'ltr';
+}
+
+/**
+ * ArrowRight / ArrowLeft → a step along the *list*, once the direction is known.
+ * `0` for every other key, so the caller lets it bubble.
+ *
+ * Pure, so the direction half is provable without a DOM; a component test then
+ * proves the DOM half under a real `dir="rtl"` render.
+ */
+export function inlineStep(key: string, direction: Direction): -1 | 0 | 1 {
+  const forward = direction === 'rtl' ? -1 : 1;
+  if (key === 'ArrowRight') return forward;
+  if (key === 'ArrowLeft') return direction === 'rtl' ? 1 : -1;
+  return 0;
+}
 
 /**
  * The drawer anchors, as logical edges. Both drawers use the same CSS

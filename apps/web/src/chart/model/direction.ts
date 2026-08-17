@@ -1,4 +1,19 @@
-import type { Direction } from '@/i18n';
+/**
+ * PROMOTED, 2026-08-17. The two functions now live in `apps/web/src/i18n/direction.ts`
+ * and are exported from `@/i18n`; this file is a re-export so nothing in CHART has
+ * to change, no test moves, and `REQ-CHT-47` and `comms/specs/chart-matrix.md`
+ * Decision 12 keep pointing at a real path.
+ *
+ * The condition its author set — *"if a third caller wants them, that is the
+ * moment, and the request should come with the third caller"* — was met:
+ * `SegmentedControl` was the second and `dashboards/components/Carousel.tsx` is the
+ * third, with the same defect still live in it. Granted by
+ * `rtl-arabic-pdpl-specialist` on `shell-navigation-engineer`'s decision-request
+ * (`comms/inbox/rtl-arabic-pdpl-specialist/20260817-1846-…`). New callers import
+ * from `@/i18n`; this alias stays until `chart-matrix-engineer` chooses otherwise,
+ * and deleting it is theirs to do.
+ */
+export { elementDirection, inlineStep } from '@/i18n';
 
 /**
  * Which way is "next" when the user presses ArrowRight.
@@ -30,35 +45,6 @@ import type { Direction } from '@/i18n';
  * contract, which is the one place that says which surfaces mirror.
  */
 
-/**
- * The element's effective direction, by HTML's own rule: the nearest ancestor carrying a
- * `dir` attribute wins, and the document element is the last one in that chain.
- *
- * Read from the DOM rather than from `useI18n()` for two reasons, and the second is the
- * load-bearing one. (a) `useI18n()` throws outside its provider, so it would break every
- * bare-render test of this component — the same objection that sent CHART to
- * `useProjectSegment()` instead of `useShell()`. (b) A component's keys should follow the
- * direction it is actually *rendered* in, not the app's locale: §2.5 and §3.1 both put LTR
- * islands inside the RTL page, and a bar rendered inside one of those must key LTR.
- *
- * `dir="auto"` resolves per text run and cannot be computed here, so it reads as `ltr` —
- * stated rather than silently assumed. No surface in this app sets it.
- */
-export function elementDirection(element: Element | null | undefined): Direction {
-  const owner = element?.closest('[dir]');
-  return owner?.getAttribute('dir')?.toLowerCase() === 'rtl' ? 'rtl' : 'ltr';
-}
-
-/**
- * ArrowRight / ArrowLeft → a step along the *list*, once the reading direction is known.
- * `0` for every other key, so the caller lets it bubble.
- *
- * Pure, so the direction half of the behaviour is provable without a DOM; the component
- * test then proves the DOM half under a real `dir="rtl"` render.
- */
-export function inlineStep(key: string, direction: Direction): -1 | 0 | 1 {
-  const forward = direction === 'rtl' ? -1 : 1;
-  if (key === 'ArrowRight') return forward;
-  if (key === 'ArrowLeft') return direction === 'rtl' ? 1 : -1;
-  return 0;
-}
+/* The two functions themselves are at the top of this file as a re-export. They
+ * were moved rather than copied: two copies of one rule is what let this bug exist
+ * in three components at once, which is the whole finding above. */

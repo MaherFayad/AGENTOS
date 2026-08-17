@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n';
 import { AppShell } from './AppShell';
 import { GRAPH_FIXTURE, PROJECTS_FIXTURE, pathnameRef, stubFetch, stubFullscreenSupport } from './test-harness';
 
@@ -38,9 +39,13 @@ afterEach(() => {
 const renderShellAt = (pathname: string) => {
   pathnameRef.current = pathname;
   return render(
-    <AppShell>
-      <div data-testid="canvas">canvas</div>
-    </AppShell>,
+    // `app/layout.tsx` wraps the shell in I18nProvider, so a harness that omits it
+    // renders a tree the app cannot produce. Defaults to English.
+    <I18nProvider>
+      <AppShell>
+        <div data-testid="canvas">canvas</div>
+      </AppShell>
+    </I18nProvider>,
   );
 };
 

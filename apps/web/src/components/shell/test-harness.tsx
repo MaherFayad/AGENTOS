@@ -1,6 +1,7 @@
 import { render, type RenderResult } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
+import { I18nProvider, type Locale } from '@/i18n';
 import { pathnameRef, routerMock } from './test-mocks';
 import { ShellProvider } from './ShellContext';
 
@@ -114,7 +115,22 @@ export const PROJECTS_FIXTURE = {
  */
 export const DEFAULT_PATHNAME = '/p/agentos/map';
 
-export function renderShell(ui: ReactNode, options: { pathname?: string } = {}): RenderResult {
+/**
+ * `I18nProvider` is mounted here rather than per test because `app/layout.tsx`
+ * mounts it around the whole shell: a harness that omits it renders a tree the
+ * app cannot produce. It defaults to English, so every existing assertion on
+ * English copy keeps its meaning; pass a locale to render the same component in
+ * Arabic. `useI18n` throws outside a provider by design, which is why this shows
+ * up as twelve loud failures rather than as English leaking into an Arabic page.
+ */
+export function renderShell(
+  ui: ReactNode,
+  options: { pathname?: string; locale?: Locale } = {},
+): RenderResult {
   pathnameRef.current = options.pathname ?? DEFAULT_PATHNAME;
-  return render(<ShellProvider>{ui}</ShellProvider>);
+  return render(
+    <I18nProvider locale={options.locale}>
+      <ShellProvider>{ui}</ShellProvider>
+    </I18nProvider>,
+  );
 }

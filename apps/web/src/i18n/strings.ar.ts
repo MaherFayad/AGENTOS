@@ -93,6 +93,23 @@ export const ar: Catalog = {
   'shell.search.panels.malformed':
     'وصل فهرس اللوحات بصيغة لا تفهمها هذه النسخة، فالبحث فارغ لا خاطئ.',
 
+  /* مبدّل المشاريع (`Plan §23.10`). الصيغة اسميّة: «تغيير المشروع» لا «غيّر».
+   * «مقيَّد به» تترجم scoped to it بوصفها حالة، لا فعلًا يطلب من القارئ شيئًا. */
+  'shell.project.none': 'لا مشروع',
+  'shell.project.list': 'المشاريع',
+  'shell.project.mounted': 'مثبَّت',
+  'shell.project.elsewhere': 'في مكان آخر',
+  'shell.project.title': 'المشروع {project}. كل ما على الشاشة مقيَّد به.',
+  'shell.project.aria.confirmed': 'المشروع: {project}. مؤكَّد من المشغّل. تغيير المشروع.',
+  'shell.project.aria.unconfirmed': 'المشروع: {project}. غير مؤكَّد من المشغّل. تغيير المشروع.',
+  'shell.project.empty':
+    'لم يذكر المشغّل أيّ مشروع. لا شيء هنا تخمين — يعرض المبدّل ما قيل له وحسب.',
+  'shell.project.onlyOne':
+    'مشروع واحد مثبَّت. لا شيء آخر ينتقل إليه التبديل، فلا شيء هنا يُثبت أنّ تقييد المشاريع يعمل — بل يُثبت أنّه موجود فقط.',
+  'shell.project.isolationOff':
+    'يفيد المشغّل بأنّ اتّصاله بقاعدة البيانات يتجاوز أمن مستوى الصفوف، فعزل المشاريع غير مطبَّق تحت هذه الأسماء.',
+  'shell.project.isolationUnknown': 'لم يذكر المشغّل ما إذا كان عزل المشاريع مطبَّقًا.',
+
   'shell.breadcrumb.allDepartments': 'كل الأقسام',
   'shell.counter.live': '{live} من {total} قيد التشغيل',
   'shell.counter.yourTree': 'شجرتك',
@@ -389,14 +406,23 @@ export const ar: Catalog = {
    * Not a lookup, which is why it is not guessed here: the five keys above are
    * *answers* and this is the admission that there is none, so it has to sit in
    * the same register as them without borrowing any of their nouns — and the
-   * long form names a cause ("recorded when the agent runs") whose MSA phrasing
-   * is a choice about how much of our plumbing a reader should be shown. The
-   * English renders meanwhile and the gap is countable, which is what `todo()`
-   * is for. Routed to rtl-arabic-pdpl-specialist. */
+   * long form names two causes whose MSA phrasing is a choice about how much of
+   * our plumbing a reader should be shown. The English renders meanwhile and the
+   * gap is countable, which is what `todo()` is for. Routed to
+   * rtl-arabic-pdpl-specialist.
+   *
+   * The long form was **re-worded on 2026-08-17** and the Arabic must be written
+   * against this version, not the previous one. It used to end *"the agent detail
+   * this drawer reads does not carry it yet"*, which stopped being true when
+   * `AgentDetail.sourceRef` shipped mid-M15 — a user-facing sentence asserting a
+   * fact about our plumbing that had since changed. It now names both sources
+   * that could have answered and says neither did, which is a statement about
+   * this render rather than about the contract, and so cannot go stale the same
+   * way. */
   'drawer.provenance.unknown': todo('Source unknown'),
   'a11y.provenance.unknown': todo(
-    'Which library this agent came from is not known. It is recorded when the agent runs, ' +
-      'and the agent detail this drawer reads does not carry it yet.',
+    'Which library this agent came from is not known. The agent detail did not say, ' +
+      'and no run of this agent has said either.',
   ),
 
   'a11y.mapCanvas': 'مجرّة الوكلاء. استخدم مفاتيح الأسهم للتنقّل بين الأقسام.',

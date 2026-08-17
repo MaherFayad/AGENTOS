@@ -221,6 +221,36 @@ const USER_FACING_PROPS =
   /\b(placeholder|title|aria-label|aria-description|aria-placeholder|aria-roledescription|alt|label|heading|caption|emptyMessage|errorMessage)\s*=\s*["']([^"']{2,})["']/g;
 
 /**
+ * A TEMPLATE LITERAL WITH NO `${}` IS A PLAIN STRING LITERAL. It differs from a
+ * quoted string in one character of syntax and in nothing a reader can see.
+ *
+ * This was the hole that let three sentences ship untranslated in the shell's
+ * highest-frequency control (`ProjectSwitcher.tsx:185-186`, M15 verdict item 2).
+ * Identical prose was a FAIL as `aria-label="…"` and silent as ``aria-label={`…`}``.
+ *
+ * The sharp part, and the reason this is a fix rather than a widening: the
+ * `assembled-template` blind spot is declared with the justification *"because
+ * some are genuinely `${a} · ${b}` joins"*. A template with zero interpolations
+ * has no such defence. It is not an assembled sentence, it is a sentence. The
+ * blind spot was honest about the undecidable case and was covering a decidable
+ * one, and **a declared blind spot is not a licence over the part of the class
+ * that is decidable.**
+ *
+ * `[^`\\$]` excludes `$` from the body and `\$(?!\{)` lets a literal `$` back in,
+ * so `` `Total: $${n}` `` is still an assembled template and `` `costs $5` `` is
+ * still a plain string.
+ */
+const PLAIN_TEMPLATE_BODY = String.raw`(?:[^\`\\$]|\\.|\$(?!\{))*`;
+const PLAIN_TEMPLATE = new RegExp('`(' + PLAIN_TEMPLATE_BODY + ')`', 'g');
+const USER_FACING_PROPS_TEMPLATE = new RegExp(
+  '\\b(placeholder|title|aria-label|aria-description|aria-placeholder|aria-roledescription|alt|label|heading|caption|emptyMessage|errorMessage)' +
+    '\\s*=\\s*\\{\\s*`(' +
+    PLAIN_TEMPLATE_BODY +
+    ')`\\s*\\}',
+  'g',
+);
+
+/**
  * JSX text nodes: >Some words< with no braces, i.e. not an expression.
  *
  * NO `\n` IN THE CHARACTER CLASS, and that is the fix rather than an oversight.
@@ -295,6 +325,17 @@ const COPY_KEY =
  */
 const COPY_CONTAINER =
   /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=\s*(?:\{|\[)\s*$/;
+
+/**
+ * An object PROPERTY that opens a block of machinery: `headers: {`, `style: {`.
+ * Judged by `MACHINE_CONTEXT` on the key alone.
+ *
+ * Without it, machine suppression depended on Prettier: `headers: { 'cache-control':
+ * 'no-store, no-transform' }` on one line was suppressed by the word `headers`, and
+ * the identical object wrapped onto four lines was not — the header VALUE reported
+ * as untranslated copy. The context is the object, not the column width.
+ */
+const MACHINE_PROPERTY_CONTAINER = /(?:^|[{,(])\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_$][\w$]*))\s*:\s*(?:\{|\[)\s*$/;
 const COPY_CONTAINER_NAME =
   /(?:^|_)(?:COPY|LABELS?|TEXTS?|MESSAGES?|WORDS?|STRINGS?|TITLES?|HINTS?|BLURBS?|CAPTIONS?|SENTENCES?|NOTES?|PROSE|EMPTY|WORDING|PHRASES?)(?:$|_)/i;
 
@@ -307,6 +348,16 @@ const ANY_STRING = /(['"])((?:[^\\\n]|\\.)*?)\1/g;
 /**
  * Where a literal is machinery. Reporting these would train people to ignore the
  * checker, which is the failure mode this file exists to avoid.
+ *
+ * TESTED AGAINST THE CODE SKELETON, NEVER THE PROSE. This list holds `to`, `it`,
+ * `as`, `id`, `key`, `name`, `type`, `role`, `path`, `url`, `test` and `content` —
+ * every one of them an ordinary English word as well as an identifier. Matched
+ * against the raw line, the sentence *being judged* could suppress its own
+ * finding: `'Everything on screen is scoped to it.'` contains both `to` and `it`
+ * and was silent, while `'Everything on screen is scoped.'` was a FAIL. Two
+ * sentences, one rule, opposite verdicts, decided by whether the copy happened to
+ * contain a preposition. `blankLiterals()` empties every literal before this runs,
+ * so `className="…"` still suppresses and the copy inside it no longer votes.
  */
 const MACHINE_CONTEXT =
   /\b(?:className|class|classNames?|clsx|cn|id|htmlFor|href|src|srcSet|to|path|url|key|role|type|as|name|dataTestId|data-testid|testId|method|charset|encoding|env|process\.env|require|import|from|localStorage|sessionStorage|getItem|setItem|setAttribute|getAttribute|querySelector|addEventListener|removeEventListener|dispatchEvent|createElement|console|Error|TypeError|RangeError|assert|describe|it|test|expect|matchMedia|fetch|new URL|JSON\.parse|toContain|toMatch)\b|(?:cache|content|user)-(?:control|type|agent|disposition)|\b(?:headers|authorization|fontFamily|font-family|localFont)\b/;
@@ -327,6 +378,28 @@ const KEBAB_IDENT = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
 
 /** A trailing `// …` comment is not code, and its prose is not copy. */
 const stripLineComment = (line) => line.replace(/(^|[^:\w])\/\/.*$/, '$1');
+
+/**
+ * The line with every literal's CONTENTS blanked and its delimiters kept.
+ * `foo({ title: 'Scoped to it' })` → `foo({ title: '' })`. Used only to ask
+ * *what kind of code is this line*, never to read anything out of it.
+ */
+export function blankLiterals(line) {
+  return blankQuoted(line).replace(/`(?:[^`\\]|\\.)*`/g, '``');
+}
+
+/**
+ * The same, for quoted strings only — templates survive.
+ *
+ * Needed before the plain-template scan, because a backtick can also be ordinary
+ * punctuation *inside* a quoted sentence:
+ * `setError('Paste the recovery secret from ‵happy auth‵ on the machine…')`
+ * has two backticks and no template, and reading between them yields the
+ * non-sentence "happy auth" alongside the real finding.
+ */
+export function blankQuoted(line) {
+  return line.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
+}
 
 /** A URL, a path, a selector, a MIME type, a query string, a CSS declaration. */
 const NOT_LANGUAGE =
@@ -555,16 +628,18 @@ export function scanText(path, text) {
       // this file exists to make trustworthy.
       const reported = new Set();
 
-      USER_FACING_PROPS.lastIndex = 0;
       let m;
-      while ((m = USER_FACING_PROPS.exec(line))) {
-        if (HAS_WORDS.test(m[2]) && !NOT_COPY.test(m[2])) {
-          reported.add(m[2].trim());
-          record(
-            'hardcoded-string',
-            `user-facing ${m[1]}="${m[2]}" is not in the string catalogue`,
-            COPY_FIX,
-          );
+      for (const re of [USER_FACING_PROPS, USER_FACING_PROPS_TEMPLATE]) {
+        re.lastIndex = 0;
+        while ((m = re.exec(line))) {
+          if (HAS_WORDS.test(m[2]) && !NOT_COPY.test(m[2])) {
+            reported.add(m[2].trim());
+            record(
+              'hardcoded-string',
+              `user-facing ${m[1]}="${m[2]}" is not in the string catalogue`,
+              COPY_FIX,
+            );
+          }
         }
       }
 
@@ -581,23 +656,41 @@ export function scanText(path, text) {
         }
       } else {
         const open = code.match(COPY_CONTAINER);
+        const prop = code.match(MACHINE_PROPERTY_CONTAINER);
+        const propKey = prop ? (prop[1] ?? prop[2] ?? prop[3] ?? '') : '';
         if (open && MACHINE_CONTAINER_NAME.test(open[1])) {
           machineContainer = true;
           containerDepth = 1;
         } else if (open && COPY_CONTAINER_NAME.test(open[1])) {
           containerName = open[1];
           containerDepth = 1;
+        } else if (prop && MACHINE_CONTEXT.test(propKey)) {
+          machineContainer = true;
+          containerDepth = 1;
         }
       }
 
       // A. prose anywhere — an object value, an array element, an argument.
-      if (!machineContainer && !MACHINE_CONTEXT.test(code)) {
-        ANY_STRING.lastIndex = 0;
-        while ((m = ANY_STRING.exec(code))) {
-          const candidate = m[2].trim();
-          if (!looksLikeProse(candidate) || reported.has(candidate)) continue;
-          reported.add(candidate);
-          record('hardcoded-string', `user-facing text "${candidate}" is not in the string catalogue`, COPY_FIX);
+      // A zero-interpolation template is a string literal, so it is scanned by the
+      // same mechanism rather than deferred to the blind-spot count.
+      if (!machineContainer && !MACHINE_CONTEXT.test(blankLiterals(code))) {
+        // A line carrying an interpolation is left to `assembled-template`: the
+        // plain-template pattern would otherwise start matching at the escaped
+        // backtick inside `` `"${name}" has no \`department\` — …` `` and quote
+        // half a sentence. One `${` on the line and the whole line is that
+        // category's, which is where it was already being counted.
+        const hasInterpolation = code.includes('${');
+        for (const [re, group, source] of [
+          [ANY_STRING, 2, code],
+          [PLAIN_TEMPLATE, 1, hasInterpolation ? '' : blankQuoted(code)],
+        ]) {
+          re.lastIndex = 0;
+          while ((m = re.exec(source))) {
+            const candidate = m[group].trim();
+            if (!looksLikeProse(candidate) || reported.has(candidate)) continue;
+            reported.add(candidate);
+            record('hardcoded-string', `user-facing text "${candidate}" is not in the string catalogue`, COPY_FIX);
+          }
         }
       }
 
@@ -680,15 +773,31 @@ const lineIndexOf = (text, offset) => {
  * middle ground between a false pass and a false failure.
  */
 function blindSpotCounts(path, text, { isCode, inI18n, isTest }) {
-  const zero = { exprAttr: 0, template: 0 };
+  const zero = { exprAttr: 0, template: 0, multilinePlain: 0 };
   if (!isCode || inI18n || isTest) return zero;
   const stripped = stripComments(text);
-  EXPR_ATTR.lastIndex = 0;
-  TEMPLATE_COPY.lastIndex = 0;
   let m;
   let exprAttr = 0;
   let template = 0;
+  let multilinePlain = 0;
+
+  EXPR_ATTR.lastIndex = 0;
   while ((m = EXPR_ATTR.exec(stripped))) exprAttr++;
+  // A zero-interpolation `attr={`…`}` is now READ rather than deferred. Leaving
+  // it in this count would report one string twice: once as a finding and once
+  // as a thing nobody looked at.
+  USER_FACING_PROPS_TEMPLATE.lastIndex = 0;
+  while ((m = USER_FACING_PROPS_TEMPLATE.exec(stripped))) exprAttr--;
+
+  // The residue of the plain-template fix, named rather than left implied: the
+  // copy scan runs per line, so a plain template Prettier broke across lines is
+  // still unread. Counted, so its zero is one this file went looking for.
+  PLAIN_TEMPLATE.lastIndex = 0;
+  while ((m = PLAIN_TEMPLATE.exec(stripped))) {
+    if (m[1].includes('\n') && looksLikeProse(m[1].replace(/\s+/g, ' '))) multilinePlain++;
+  }
+
+  TEMPLATE_COPY.lastIndex = 0;
   while ((m = TEMPLATE_COPY.exec(stripped))) {
     // Only templates whose STATIC halves carry words — `${a}-${b}` is machinery,
     // `Run ${when} — ${status}` is a sentence built from fragments (rule 2 of
@@ -697,29 +806,128 @@ function blindSpotCounts(path, text, { isCode, inI18n, isTest }) {
     const words = statics.split(' ').join(' ').match(/[A-Za-z؀-ۿ]{3,}/g) ?? [];
     if (words.length >= 2) template++;
   }
-  return { exprAttr, template };
+
+  return { exprAttr: Math.max(0, exprAttr), template, multilinePlain };
 }
 
 /* ---------------------------------------------------------------------------
- * Catalogue parity. Type-checking already forbids a missing Arabic key; this
- * reports the number, because a coverage percentage gets looked at and a
- * compiler error only gets fixed.
+ * Catalogue parity.
+ *
+ * THE COMMENT THAT USED TO STAND HERE SAID *"type-checking already forbids a
+ * missing Arabic key"*. That is TRUE AT KEY GRANULARITY AND FALSE AT PLURAL-CLASS
+ * GRANULARITY — which is the only granularity that is Arabic-specific, and the one
+ * `entry.ts:25` itself documents as the thing English has no equivalent of.
+ * `Plural` makes `zero/one/two/few/many` optional, so deleting the Arabic dual and
+ * both plural forms of a count-bearing sentence compiled cleanly, passed the gate,
+ * and did not move `arabic 212 (97%)` by one (M15 verdict item 3b). A count-bearing
+ * Arabic sentence with no `two` renders the dual as the singular-genitive `other`,
+ * which is not a near miss — it is the wrong word.
+ *
+ * So the parse below reads ENTRIES, not just keys:
+ *
+ *   'k': 'sentence'            scalar
+ *   'k': { one: …, other: … }  plural — its declared classes are read
+ *   'k': todo('English')       an admitted gap
+ *
+ * and every number this file prints is named for exactly what it counted.
  * ------------------------------------------------------------------------ */
-const CATALOGUE_KEY = /^\s*'([^']+)'\s*:/gm;
+const CATALOGUE_KEY = /^\s*'([^']+)'\s*:\s*(.*)$/;
+const PLURAL_CLASS = /^\s*(zero|one|two|few|many|other)\s*:/;
+
+/**
+ * The five classes Arabic distinguishes for a nonzero count. `zero` is NOT here:
+ * CLDR gives Arabic a `zero` class, but with none declared a count of 0 falls
+ * through to `other` (singular genitive), which is the correct MSA form for zero.
+ * Requiring it would be taste dressed as grammar. The three that are NOT optional
+ * are `two` (the dual — English has no equivalent), `few` (3–10, plural genitive)
+ * and `many` (11–99, singular accusative): each is a different word, and `other`
+ * is the right answer for none of them.
+ *
+ * Any class ENGLISH declares is required on top, because a class English bothered
+ * to separate is a copy decision, not a grammatical one, and it has to be answered.
+ */
+const AR_REQUIRED_CLASSES = ['one', 'two', 'few', 'many', 'other'];
+
+/** Parse one catalogue file into `key -> {kind, classes}`. */
+export function parseCatalogue(text) {
+  const entries = new Map();
+  const lines = stripComments(text).split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(CATALOGUE_KEY);
+    if (!m) continue;
+    const [, key, rest] = m;
+    if (/^\{/.test(rest)) {
+      const classes = [];
+      let depth = 1;
+      for (let j = i + 1; j < lines.length && depth > 0; j++) {
+        depth += (lines[j].match(/[{[]/g) || []).length - (lines[j].match(/[}\]]/g) || []).length;
+        if (depth <= 0) break;
+        const c = lines[j].match(PLURAL_CLASS);
+        if (c) classes.push(c[1]);
+      }
+      entries.set(key, { kind: 'plural', classes });
+    } else if (/^todo\s*\(/.test(rest)) {
+      entries.set(key, { kind: 'todo', classes: [] });
+    } else {
+      entries.set(key, { kind: 'scalar', classes: [] });
+    }
+  }
+  return entries;
+}
 
 export function catalogueReport(enText, arText) {
-  const keys = (text) => new Set([...text.matchAll(CATALOGUE_KEY)].map((m) => m[1]));
-  const enKeys = keys(enText);
-  const arKeys = keys(arText);
+  const enEntries = parseCatalogue(enText);
+  const arEntries = parseCatalogue(arText);
+  const enKeys = new Set(enEntries.keys());
+  const arKeys = new Set(arEntries.keys());
   const missing = [...enKeys].filter((k) => !arKeys.has(k));
   const orphan = [...arKeys].filter((k) => !enKeys.has(k));
-  const todos = (arText.match(/\btodo\(/g) || []).length;
+
+  /* A `todo(` CALL SITE, after comments are blanked. The old count was
+   * `/\btodo\(/g` over the raw text, case-sensitive and anywhere in the file:
+   * it scored four occurrences of the characters `todo()` inside PROSE COMMENTS
+   * as untranslated keys, and missed the one genuine human marker `// TODO(ar):`
+   * because that one is uppercase. Seven reported, three real — a declared value
+   * read as an observed one, on a headline figure, moving in whichever direction
+   * the prose happened to fall. Two different things, so now two counters. */
+  const todoKeys = [...arEntries].filter(([, e]) => e.kind === 'todo').map(([k]) => k);
+  const markers = (arText.match(/\bTODO\(ar\)/g) || []).length;
+
+  /* Plural-class parity — the check nothing performed. */
+  const pluralGaps = [];
+  for (const [key, en] of enEntries) {
+    if (en.kind !== 'plural') continue;
+    const ar = arEntries.get(key);
+    if (!ar || ar.kind === 'todo') continue; // missing / admitted, already counted
+    if (ar.kind !== 'plural') {
+      pluralGaps.push({ key, missing: ['(not a plural entry)'] });
+      continue;
+    }
+    const required = new Set([...AR_REQUIRED_CLASSES, ...en.classes]);
+    const gaps = [...required].filter((c) => !ar.classes.includes(c));
+    if (gaps.length) pluralGaps.push({ key, missing: gaps });
+  }
+
+  const count = (entries, kind) => [...entries.values()].filter((e) => e.kind === kind).length;
+  const classes = (entries) => [...entries.values()].reduce((n, e) => n + e.classes.length, 0);
+
   return {
-    total: enKeys.size,
+    /* `keys` is what `strings` used to be called, and the rename is the point:
+     * it counted catalogue keys and printed the word "strings", so 19 English and
+     * 43 Arabic plural-class sentences were outside every number on the report. */
+    keys: enKeys.size,
+    pluralKeys: count(enEntries, 'plural'),
+    enStrings: enKeys.size - count(enEntries, 'plural') + classes(enEntries),
+    arStrings: arKeys.size - count(arEntries, 'plural') + classes(arEntries),
+    enClasses: classes(enEntries),
+    arClasses: classes(arEntries),
     missing,
     orphan,
-    todos,
-    translated: enKeys.size - missing.length - todos,
+    todos: todoKeys.length,
+    todoKeys,
+    markers,
+    pluralGaps,
+    translated: enKeys.size - missing.length - todoKeys.length,
   };
 }
 
@@ -778,10 +986,25 @@ async function blindSpots(seen) {
       why: 'it is not in this tree. Known today: ledger.hint on /api/cost/today, rendered by CostTicker; run error messages via api-contracts.md. No scan of apps/web can find the next one.',
     },
     {
-      id: 'unscanned-roots',
+      id: 'multiline-plain-template',
+      count: seen.multilinePlain,
+      what: 'a backtick string with no ${} that Prettier broke across lines',
+      why: 'a single-line one is now read as the string literal it is; the copy scan runs per line, so a wrapped one is not. Split so this zero is one the file went looking for rather than one it inherited.',
+    },
+    {
+      /* SPLIT FROM `unscanned-roots` 2026-08-17. One id carried a count of ONE
+       * root and a `why` naming three more with no count — a number that did not
+       * name what it counted, which is the same defect as the two above it. */
+      id: 'panels-json',
       count: panelStrings,
       what: `panels/*.json copy-bearing fields (${panelFiles.filter((n) => n.endsWith('.json')).length} files) — dashboards are data (§2.5), so their titles are copy in a data file`,
-      why: 'this checker walks apps/web/src only. apps/runner/**, packages/** and agents/**/SKILL.md are also unscanned.',
+      why: 'measurable, and outside the walk. §2.5 makes a dashboard title copy that lives in a data file, so no scan of apps/web/src can reach it.',
+    },
+    {
+      id: 'unscanned-roots',
+      count: null,
+      what: 'apps/runner/**, packages/** and agents/**/SKILL.md',
+      why: 'this checker walks apps/web/src only. These roots have never been counted, and printing panels/*.json’s number beside their name made it look as though they had.',
     },
     {
       id: 'arabic-quality',
@@ -806,6 +1029,32 @@ async function blindSpots(seen) {
  * which is the same reason `rtl-exempt:` markers are printed rather than silent.
  * ------------------------------------------------------------------------ */
 const RATCHET_FILE = 'scripts/rtl-baseline.json';
+
+/**
+ * Rules the ratchet does not get a vote on.
+ *
+ * The ratchet asks *did this number go up*, which is the wrong question for a
+ * property whose only acceptable value is zero. It holds as long as the count
+ * does not rise — so **the moment a baseline ever RECORDS one of these, the gate
+ * accepts it forever, and accepts a different one in its place.**
+ *
+ * Falsified rather than reasoned: with `missing-translation: 1` recorded in
+ * `rtl-baseline.json`, deleting `'shell.tab.chart'` from `strings.ar.ts` gives
+ * ratchet regressions `[]`, the word `holding`, and — before this set existed —
+ * exit 0, with an English key untranslated. Baselines are hand-edited, so that is
+ * one well-meant re-record away, which is the same distance the coverage gate's
+ * bare-`—` guard was found to be.
+ *
+ * These four are not debt on a migration schedule with a named owner. They are
+ * the catalogue disagreeing with itself, and there is no number of them that is
+ * acceptable-for-now.
+ */
+const HARD_FAIL_RULES = new Set([
+  'missing-catalogue',
+  'missing-translation',
+  'missing-plural-class',
+  'orphan-translation',
+]);
 
 /** `apps/web/src/components/shell/x.tsx` → `components/shell`. The unit an owner owns. */
 export function moduleOf(path) {
@@ -856,7 +1105,7 @@ async function compareToBaseline(current) {
 async function main() {
   const findings = [];
   const exemptions = [];
-  const seen = { exprAttr: 0, template: 0 };
+  const seen = { exprAttr: 0, template: 0, multilinePlain: 0 };
   let scanned = 0;
 
   for await (const file of walk(SCAN_DIR)) {
@@ -868,6 +1117,7 @@ async function main() {
     if (r.blind) {
       seen.exprAttr += r.blind.exprAttr;
       seen.template += r.blind.template;
+      seen.multilinePlain += r.blind.multilinePlain;
     }
     scanned++;
   }
@@ -889,6 +1139,29 @@ async function main() {
         text: '',
       });
     }
+    for (const { key, missing } of catalogue.pluralGaps) {
+      findings.push({
+        path: 'apps/web/src/i18n/strings.ar.ts',
+        line: 0,
+        rule: 'missing-plural-class',
+        message: `"${key}" is count-bearing and its Arabic entry declares no ${missing.join(', ')}`,
+        fix:
+          'Arabic distinguishes one · two · few (3–10) · many (11–99) · other, and an undeclared class ' +
+          'falls through to `other` — the singular genitive, which is the wrong word for a dual and for ' +
+          '3–10. Write the class, or admit the whole key with todo(). See i18n/entry.ts.',
+        text: '',
+      });
+    }
+    for (const k of catalogue.orphan) {
+      findings.push({
+        path: 'apps/web/src/i18n/strings.ar.ts',
+        line: 0,
+        rule: 'orphan-translation',
+        message: `key "${k}" exists in Arabic and not in English`,
+        fix: 'delete it, or add the English key it is answering',
+        text: '',
+      });
+    }
   } catch {
     findings.push({
       path: 'apps/web/src/i18n/',
@@ -905,6 +1178,7 @@ async function main() {
   const blind = await blindSpots(seen);
   const gate = process.argv.includes('--gate');
   const ratchet = gate ? await compareToBaseline({ total: findings.length, byRule, byModule }) : null;
+  const hardFails = findings.filter((f) => HARD_FAIL_RULES.has(f.rule));
 
   if (process.argv.includes('--json')) {
     console.log(
@@ -929,9 +1203,20 @@ async function main() {
     console.log(`  scanned at        ${provenanceLine(ROOT, 'apps/web')}`);
     console.log(`  files scanned     ${scanned}`);
     if (catalogue) {
-      const pct = catalogue.total ? Math.round((catalogue.translated / catalogue.total) * 100) : 0;
-      console.log(`  strings           ${catalogue.total}`);
-      console.log(`  arabic            ${catalogue.translated} (${pct}%) · ${catalogue.todos} TODO(ar)`);
+      const pct = catalogue.keys ? Math.round((catalogue.translated / catalogue.keys) * 100) : 0;
+      // Every line below names what it counted. The line that used to stand here
+      // said `strings 219` and counted KEYS, which put 19 English and 43 Arabic
+      // plural-class sentences outside every number on this report.
+      console.log(`  keys              ${catalogue.keys}  (${catalogue.pluralKeys} count-bearing)`);
+      console.log(
+        `  strings           en ${catalogue.enStrings} · ar ${catalogue.arStrings}` +
+          `   (a plural key is one key and ${catalogue.enClasses}/${catalogue.arClasses} class sentences)`,
+      );
+      console.log(`  arabic            ${catalogue.translated} keys (${pct}%)`);
+      console.log(
+        `  admitted gaps     ${catalogue.todos} todo() · ${catalogue.markers} TODO(ar) note` +
+          `${catalogue.markers === 1 ? '' : 's'} in comments`,
+      );
     }
     console.log(`  findings          ${findings.length}`);
     console.log(`  exemptions        ${exemptions.length}`);
@@ -950,12 +1235,15 @@ async function main() {
       for (const e of exemptions) console.log(`    ${e.path}:${e.line}  ${e.rule} — ${e.reason}`);
     }
 
-    if (findings.length && !gate) {
-      console.log('');
-      for (const f of findings) {
-        console.log(`  FAIL  ${f.path}:${f.line}  ${f.message}`);
-        console.log(`        → ${f.fix}`);
-      }
+    for (const f of findings.length && !gate ? findings : hardFails) {
+      console.log(`\n  FAIL  ${f.path}:${f.line}  ${f.message}`);
+      console.log(`        → ${f.fix}`);
+    }
+
+    if (hardFails.length) {
+      console.log(`\n  ${hardFails.length} catalogue-integrity failure(s). The ratchet does not`);
+      console.log(`  get a vote on these: they are not debt with an owner and a date, they are`);
+      console.log(`  the catalogue disagreeing with itself. No baseline number excuses one.`);
     }
 
     if (ratchet) {
@@ -978,7 +1266,7 @@ async function main() {
     console.log('');
   }
 
-  if (gate) process.exit(ratchet && ratchet.regressions.length ? 1 : 0);
+  if (gate) process.exit(hardFails.length || (ratchet && ratchet.regressions.length) ? 1 : 0);
   process.exit(findings.length ? 1 : 0);
 }
 
