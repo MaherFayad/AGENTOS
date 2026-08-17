@@ -21,6 +21,29 @@
  *   2. **Scopes enforcement is deferred** — and the deferral is a gate, not a promise. (§5)
  *   3. **A dump of the Operations volume is not a dump of the credentials.** (§6)
  *
+ * ## What this instrument CANNOT see — read this before trusting a green
+ *
+ * This file went green while blind once already, so the blind spots get written down rather
+ * than rediscovered. `code()` below is a character scanner, not a regex, because the previous
+ * regex could not tell a `/*` in code from the same two characters inside `--` prose and
+ * silently deleted up to 17,336 of the 35,435 characters it was pointed at — 49% of the
+ * corpus — while three assertions over that corpus stayed green. What remains unseen:
+ *
+ *   1. **No Postgres.** Every assertion reads text. A migration that is syntactically valid
+ *      and semantically wrong passes. Nothing here has ever met a live database.
+ *   2. **Dollar-quoted bodies are scanned as SQL, not held as literals.** `DO $$ … $$` in this
+ *      repo is procedural DDL, and its `ALTER TABLE`s must be visible, so comments inside it
+ *      are stripped. If someone ever stores prose in a `$$`-quoted *value*, its `--` and `/*`
+ *      will be eaten and this comment is the only warning.
+ *   3. **The FK assertions bite on shape, not existence.** `identity_id` and `ops.device` are
+ *      checked *if present*. Neither test can tell "correctly not built yet" from "deleted".
+ *   4. **`code()` throws on an unterminated block comment or dollar-quote** rather than
+ *      consuming to EOF. That is deliberate: the failure this file is named for is an
+ *      instrument whose input silently became empty. It is now loud instead.
+ *   5. **Assertions match statement text, not parse trees.** A column introduced by a mechanism
+ *      other than the `CREATE TABLE` body — a later `ALTER TABLE … ADD COLUMN scopes` — is not
+ *      seen by `hasColumn`. That gap is real and unclosed.
+ *
  * Run: node --test scripts/__tests__/*.test.mjs
  */
 
@@ -48,13 +71,108 @@ async function migrations() {
  * migration in this repo carries long `--` prose, and 0006 quotes the `ops.device` DDL it
  * deliberately does **not** create. A checker that reads a commented-out sketch as a table is
  * a checker that passes when the work was never done.
+ *
+ * **This was a regex and the regex was the wrong instrument.** Two passes ran in sequence —
+ * block comments, then line comments — so a `/*` sequence appearing inside `--` prose was
+ * still an opening pair when the block pass ran, and the lazy quantifier swallowed everything
+ * up to the next closer anywhere in the corpus. Measured: 17,336 of 35,435 visible characters
+ * deleted by planting one ordinary closer, with `INSERT INTO ops.identity` going 1 -> 0 and
+ * two assertions over the same corpus still passing. A regex cannot hold the state that tells
+ * code from prose, so the third special case was not written and the instrument changed
+ * instead. This is one left-to-right pass that knows which construct it is inside — the same
+ * defect family as a checker matching a keyword inside a string literal, and this scanner is
+ * immune to that one by construction too.
+ *
+ * Order of precedence at each character, which IS the fix: a comment introducer inside a
+ * string is text; a string quote inside a comment is text; the first construct to open wins.
+ *
+ * @throws if a block comment or dollar-quote is never closed — see blind spot 4 above.
+ *         Consuming to EOF is how this file went blind, so it refuses to do that quietly.
  */
 function code(sql) {
-  return sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .split(/\r?\n/)
-    .map((line) => line.replace(/--.*$/, ''))
-    .join('\n');
+  let out = '';
+  let i = 0;
+
+  while (i < sql.length) {
+    // Line comment: runs to end of line. Checked FIRST, which is what makes a `/*` written
+    // inside `--` prose stay prose.
+    if (sql.startsWith('--', i)) {
+      while (i < sql.length && sql[i] !== '\n') i++;
+      continue;
+    }
+
+    // Block comment. Postgres nests these; the old lazy regex did not, so a corpus with two
+    // real block comments had a second reading available. Newlines are preserved so that
+    // line-oriented assertions below keep their line numbers.
+    if (sql.startsWith('/*', i)) {
+      const opened = i;
+      let depth = 0;
+      let newlines = '';
+      while (i < sql.length) {
+        if (sql.startsWith('/*', i)) { depth++; i += 2; continue; }
+        if (sql.startsWith('*/', i)) { depth--; i += 2; if (depth === 0) break; continue; }
+        if (sql[i] === '\n') newlines += '\n';
+        i++;
+      }
+      if (depth !== 0) {
+        throw new Error(
+          `Unterminated block comment opened at offset ${opened}. Refusing to consume the rest ` +
+            `of the corpus: an instrument whose input silently became empty is the exact defect ` +
+            `this file exists to not repeat.`,
+        );
+      }
+      out += ` ${newlines}`;
+      continue;
+    }
+
+    // Single-quoted literal, kept verbatim. A `--` in here is data, not a comment: truncating
+    // at it is how a sibling checker dropped a mandatory column out of its set.
+    if (sql[i] === "'") {
+      out += sql[i++];
+      while (i < sql.length) {
+        if (sql.startsWith("''", i)) { out += "''"; i += 2; continue; }
+        const c = sql[i++];
+        out += c;
+        if (c === "'") break;
+      }
+      continue;
+    }
+
+    // Dollar-quoted body. Recursed into, NOT held opaque — see blind spot 2. `DO $$ … $$` is
+    // where 0005 and 0008 keep their ALTER TABLEs, and holding it opaque hid 1,261 characters
+    // of real DDL from every assertion below.
+    const tag = /^\$[A-Za-z_]*\$/.exec(sql.slice(i));
+    if (tag) {
+      const open = tag[0];
+      const end = sql.indexOf(open, i + open.length);
+      if (end === -1) {
+        throw new Error(`Unterminated dollar-quote ${open} opened at offset ${i}.`);
+      }
+      out += open + code(sql.slice(i + open.length, end)) + open;
+      i = end + open.length;
+      continue;
+    }
+
+    out += sql[i++];
+  }
+
+  return out;
+}
+
+/**
+ * The full text of the first `INSERT INTO <table> … ;` statement, comments stripped, or `''`.
+ *
+ * Written because the PDPL assertion below used to read the FIRST `VALUES (…)` in the joined
+ * 98k-character corpus, which is `0005:211`'s *project* seed — it had never once looked at
+ * `ops.identity`. Falsified: an email planted in the identity seed left all nine tests green.
+ * A gate must be anchored to the thing it names.
+ */
+function insertStatement(sql, table) {
+  const src = code(sql);
+  const m = new RegExp(`INSERT\\s+INTO\\s+${table.replace('.', '\\.')}\\b`, 'i').exec(src);
+  if (!m) return '';
+  const end = src.indexOf(';', m.index);
+  return src.slice(m.index, end === -1 ? src.length : end + 1);
 }
 
 /** The body of `CREATE TABLE [IF NOT EXISTS] <name> ( … )`, or null. Comments stripped. */
@@ -135,17 +253,23 @@ test('exactly one identity is seeded, and it holds no personal data (PDPL, Part 
       `design for more than one, build one.`,
   );
 
-  const values = /VALUES\s*\(([^)]*)\)/i.exec(code(sql))?.[1] ?? '';
+  // Anchored to the ops.identity INSERT by name, not to whichever `VALUES (` comes first in
+  // the corpus. The previous form matched 0005's project seed and would have passed an email.
+  const seed = insertStatement(sql, 'ops.identity');
+  assert.ok(seed, 'No INSERT INTO ops.identity statement found to inspect.');
   assert.ok(
-    !values.includes('@'),
-    `The seeded identity carries an address (${values.trim()}). An email here makes this row ` +
+    !seed.includes('@'),
+    `The seeded identity carries an address:\n  ${seed.trim()}\nAn email here makes this row ` +
       `personal data at rest in a table with no project scope. The row is a label — 'owner' / 'Owner'.`,
   );
 
   // Designing for N is the other half, and it is equally checkable: a constraint pinning the
-  // row count would make the second identity a migration instead of an INSERT.
+  // row count would make the second identity a migration instead of an INSERT. Scoped to the
+  // migration that creates ops.identity — over the joined corpus this fired on any table's
+  // `count(*) = 1`, which is a different claim than the message makes.
+  const identityMigration = all.find((m) => createTable(m.sql, 'ops.identity'));
   assert.ok(
-    !/count\s*\(\s*\*\s*\)\s*\)?\s*=\s*1/i.test(code(sql)),
+    !/count\s*\(\s*\*\s*\)\s*\)?\s*=\s*1/i.test(code(identityMigration.sql)),
     'A CHECK pins ops.identity to one row. That is the un-design: Part One §8 says build one, ' +
       'not forbid two.',
   );
@@ -373,4 +497,90 @@ test('nothing reads a scopes value — enforcement stays deferred until an ADR n
       `cannot name that point in one sentence it is not ready — and until it is, do not build ` +
       `anything that is only safe because auth exists, because it does not.`,
   );
+});
+
+/* ========================================================================== *
+ * 6. The instrument checks itself
+ *
+ * This file reported 9/9 green while it could not see 49% of its own input, and separately
+ * while an email sat in the row its PDPL assertion claims to guard. Both were found by
+ * someone else. A test that has never been red proves nothing, so the falsification lives
+ * here as fixtures rather than in a report nobody re-runs: these plant the exact defects and
+ * require the instrument to notice.
+ *
+ * Fixtures are in-memory. Planting in the real migrations to prove a gate works leaves a
+ * window where the tree is wrong, and this repo runs five agents at once.
+ *
+ * The comment sequences are built by concatenation on purpose. The first written explanation
+ * of the original bug re-armed it, because the explanation contained the pair.
+ * ========================================================================== */
+
+const OPEN = '/' + '*';
+const CLOSE = '*' + '/';
+
+test('code() does not treat a comment introducer inside `--` prose as an opener', () => {
+  // The original defect, minimised. `0005:448` documents the `/api/all/` routes with a star,
+  // inside `--` prose; the next ordinary closer anywhere later then deleted everything between.
+  const sql = [
+    `-- scoped by the ${OPEN} routes and nothing else.`,
+    `CREATE TABLE ops.identity (id uuid PRIMARY KEY);`,
+    `-- an ordinary separator ${CLOSE}`,
+    `INSERT INTO ops.identity (slug) VALUES ('owner');`,
+  ].join('\n');
+
+  const src = code(sql);
+  assert.match(src, /CREATE TABLE ops\.identity/, 'the DDL between the two sequences was eaten');
+  assert.match(src, /INSERT INTO ops\.identity/, 'the seed after the closer was eaten');
+  assert.doesNotMatch(src, /nothing else/, 'the prose itself survived — it is a comment');
+});
+
+test('code() keeps a `--` that is inside a string literal', () => {
+  // The sibling defect one repo over: a checker matched a keyword inside a string literal and
+  // dropped a mandatory column. Truncating at a `--` in data is the same error mirrored.
+  const src = code(`INSERT INTO ops.identity (slug) VALUES ('a--b'), ('c');`);
+  assert.match(src, /'a--b'/, 'a literal containing a comment introducer was truncated');
+  assert.match(src, /'c'/, 'the rest of the statement was lost with it');
+});
+
+test('code() strips comments inside a dollar-quoted body, and keeps its DDL', () => {
+  const src = code(
+    `DO $$ BEGIN\n  -- prose that must not be visible\n  ALTER TABLE ops.device ADD COLUMN identity_id uuid;\nEND $$;`,
+  );
+  assert.match(src, /ALTER TABLE ops\.device/, 'DDL inside DO $$ … $$ was held opaque');
+  assert.doesNotMatch(src, /must not be visible/, 'prose inside DO $$ … $$ leaked into the corpus');
+});
+
+test('code() handles nested block comments — Postgres does, the old lazy regex did not', () => {
+  const src = code(`A ${OPEN} outer ${OPEN} inner ${CLOSE} still outer ${CLOSE} B`);
+  assert.match(src, /A\s+\s*B/, `nesting mis-parsed; got: ${JSON.stringify(src)}`);
+  assert.doesNotMatch(src, /outer|inner/, 'comment text survived');
+});
+
+test('code() refuses to consume the corpus when a block comment never closes', () => {
+  // Blind spot 4. Eating to EOF is precisely how this file went blind; it is now loud.
+  assert.throws(
+    () => code(`CREATE TABLE ops.identity (id uuid); ${OPEN} never closed`),
+    /Unterminated block comment/,
+    'an unterminated block comment was swallowed silently instead of throwing',
+  );
+});
+
+test('the PDPL seed assertion is anchored to ops.identity, not to the first VALUES in the corpus', () => {
+  // Falsification of the assertion that five citations rest on. Before the fix this planted
+  // email left all nine tests green, because the regex matched an unrelated project seed in
+  // an earlier migration.
+  const corpus = [
+    `INSERT INTO ops.project (slug) VALUES (ops.project_id_for('agentos'), 'agentos');`,
+    `INSERT INTO ops.identity (slug, display_name) VALUES ('owner', 'maher@example.com');`,
+  ].join('\n');
+
+  const seed = insertStatement(corpus, 'ops.identity');
+  assert.ok(seed.includes('@'), `the planted address was not seen. Statement read: ${seed}`);
+  assert.doesNotMatch(seed, /ops\.project\b/, 'the project seed was picked up instead');
+
+  const clean = insertStatement(
+    `INSERT INTO ops.identity (slug, display_name) VALUES ('owner', 'Owner');`,
+    'ops.identity',
+  );
+  assert.ok(!clean.includes('@'), 'a clean seed was reported as carrying an address');
 });
