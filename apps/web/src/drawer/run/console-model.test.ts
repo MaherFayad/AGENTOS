@@ -12,6 +12,13 @@ describe('consoleReducer', () => {
         type: 'start',
         runId: 'r1',
         agent: 'sales/account-enrichment',
+        // `agentRef`/`sourceRef` became required on `SseStartData` during M15's provenance
+        // work, and the test 40 lines below this one was written against the new shape while
+        // this one was not. Nothing caught it: `apps/web/tsconfig.json` excluded the suite
+        // and vitest does not typecheck, so this object had been failing to be a `RunEvent`
+        // in silence. Surfaced the first time `tsconfig.test.json` ran.
+        agentRef: 'agentos/sales/account-enrichment',
+        sourceRef: `global:agents/sales/account-enrichment/SKILL.md@sha256:${'a'.repeat(64)}`,
         traceUrl: null,
         startedAt: '2026-08-15T21:00:00Z',
         tools: ['exa'],

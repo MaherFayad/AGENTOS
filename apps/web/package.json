@@ -9,6 +9,7 @@
     "start": "next start -H 127.0.0.1",
     "lint": "next lint --max-warnings 0",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
     "test": "node src/test/run-all.mjs",
     "test:vitest": "vitest run",
     "test:node": "node --test 'src/**/__tests__/*.test.mjs'"

@@ -1,0 +1,49 @@
+{
+  // Typecheck the web test suite. The main `tsconfig.json` deliberately excludes
+  // `**/*.test.ts(x)`, `test-harness.tsx` and `src/test/**` so that `next build` and the
+  // editor do not carry the suite — which is correct, and had one consequence nobody had
+  // measured: **every `@ts-expect-error` in the web tests was inert.**
+  //
+  // Vitest transpiles with esbuild and does not typecheck either, so nothing in
+  // `npm run verify` read those lines. Found by `design-system-guardian` on 2026-08-18 and
+  // confirmed by falsification rather than by reading this file: a planted
+  // `const probe: number = 'not a number'` in a `.test.ts` left `tsc --noEmit` at **exit 0**
+  // with no output. The same probe in `apps/runner`, whose tsconfig has no such exclusion,
+  // was caught immediately — so the runner's type-level gates were real and the web's were
+  // decorative. That asymmetry is the whole reason this file exists.
+  //
+  // Two web tests read as type gates and proved nothing until now:
+  //   · `AddressBadge.test.tsx`   — that `TurnCost.estimatedUsd` cannot hold a money figure
+  //                                 (BOARD rule 9, on the one surface where a plausible
+  //                                 number gets believed)
+  //   · `InterruptBadge.test.tsx` — that the `steer`-is-refused discriminated union holds
+  //
+  // Both are exactly the "a test that has never been red proves nothing" family, and both
+  // guard claims this milestone is making. A `@ts-expect-error` whose error never happens is
+  // now reported as `Unused '@ts-expect-error' directive` — the gate failing loudly, which is
+  // the behaviour we want.
+  //
+  // Why a separate tsconfig and not vitest's `typecheck` option: vitest's version runs tsc
+  // inside the test run, which changes what `npm test` costs and couples the type gate to the
+  // runner. This is one more `tsc --noEmit` invocation, it is wired into `npm run verify`, and
+  // it touches nothing that executes.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // `tsconfig.json` sets `incremental`, and two projects sharing one `.tsbuildinfo` make
+    // each run invalidate the other's cache. Its own file, and gitignored via `*.tsbuildinfo`.
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.test.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/test/**/*.ts",
+    "src/test/**/*.tsx",
+    "**/test-harness.tsx",
+    "vitest.config.ts",
+    // The suite imports source, so the source has to be visible or every import is an error.
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "next-env.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}

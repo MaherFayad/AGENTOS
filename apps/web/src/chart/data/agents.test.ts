@@ -78,7 +78,15 @@ describe('loadChartAgents', () => {
     const result = await loadChartAgents('agentos', fetchImpl as unknown as typeof fetch);
 
     expect(fetchImpl).toHaveBeenCalledOnce();
-    expect(fetchImpl.mock.calls[0][0]).toBe('/api/p/agentos/agents');
+    // `mock.calls[0]` is typed as the empty tuple because `vi.fn(async () => …)` infers a
+    // zero-argument signature, so indexing it is an error the suite never saw until
+    // `tsconfig.test.json` existed. Assert on the recorded argument through the matcher,
+    // which needs no index and reads better when it fails.
+    // The second argument is asserted too rather than waved through with `expect.anything()`:
+    // the `accept` header is what makes the route return JSON instead of a page.
+    expect(fetchImpl).toHaveBeenCalledWith('/api/p/agentos/agents', {
+      headers: { accept: 'application/json' },
+    });
     expect(result.error).toBeUndefined();
     expect(result.agents.map((a) => a.name)).toEqual(['Brand Voice']);
   });

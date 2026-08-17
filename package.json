@@ -16,6 +16,7 @@
     "build": "npm run build --workspace=apps/web",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck:tests": "npm run typecheck:tests --workspace=apps/web",
     "validate:frontmatter": "node scripts/validate-frontmatter.mjs",
     "validate:tokens": "node scripts/check-tokens.mjs",
     "validate:panels": "node scripts/validate-panels.mjs",

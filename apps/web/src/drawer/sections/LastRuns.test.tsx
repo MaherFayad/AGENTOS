@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RunRow } from '../data/types';
-import { LastRuns } from './LastRuns';
+import { LastRuns, type RunsState } from './LastRuns';
 import { render } from '@testing-library/react';
 
 /**
@@ -116,11 +116,15 @@ describe('LAST RUNS — status is not colour alone (WCAG 1.4.1)', () => {
 
 describe('LAST RUNS — the honest empty states are content, not decoration', () => {
   it('renders a written sentence for each not-yet state rather than a blank or a zero', () => {
-    for (const state of [
-      { kind: 'loading' } as const,
-      { kind: 'ready', rows: [] } as const,
-      { kind: 'failed', message: 'ECONNREFUSED' } as const,
-    ]) {
+    // Annotated rather than `as const` on each element: `as const` makes `rows` a
+    // `readonly []`, which is not assignable to `RunsState`'s mutable `RunRow[]`. That was
+    // invisible until `tsconfig.test.json` began typechecking the suite.
+    const states: RunsState[] = [
+      { kind: 'loading' },
+      { kind: 'ready', rows: [] },
+      { kind: 'failed', message: 'ECONNREFUSED' },
+    ];
+    for (const state of states) {
       const { container, unmount } = render(<LastRuns state={state} />);
       const p = container.querySelector('p');
       expect(p).not.toBeNull();
