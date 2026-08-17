@@ -66,6 +66,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,7 +87,15 @@ const ROUTES = [
   '/p/agentos/chart',
   '/p/agentos/chart/sales',
   '/p/agentos/dashboards',
+  // M16 — THREADS took the fourth tab slot; both `/sessions` paths stay live underneath it
+  // rather than being redirected, so all four are loaded. Kept in step with the list in
+  // `smoke-routes.mjs` by hand: the lists are separate because that one pairs each path with
+  // an HTML marker, and the cost of that choice is exactly this — a route added to one gate
+  // is not covered by the other until someone copies it.
+  '/p/agentos/threads',
+  '/p/agentos/threads/3f9a0000-0000-0000-0000-000000000000',
   '/p/agentos/sessions',
+  '/p/agentos/sessions/abc123',
   '/offline',
 ];
 
@@ -288,6 +297,30 @@ export function isBackendAbsence(line, base) {
  * Boot
  * ------------------------------------------------------------------ */
 
+/**
+ * Ask the OS for a free port instead of hoping a fixed one is free.
+ *
+ * Concurrent agents are normal in this repo, and a hardcoded port turns that into a gate
+ * that fails for a reason having nothing to do with the code: `design-system-guardian` lost
+ * its page-load evidence to `EADDRINUSE 127.0.0.1:4399` twice in one dispatch, and reported
+ * the honest result — *"no page load observed by me"* — rather than a green it had not seen.
+ * A gate that a second reader cannot run is a gate with one reader.
+ *
+ * Binding to 0 and releasing is a race in principle: another process can take the port in
+ * the gap. In practice the window is milliseconds and the alternative — a fixed port — fails
+ * *reliably* rather than rarely. `--port` still overrides for a reproducible run.
+ */
+async function freePort() {
+  return new Promise((res, rej) => {
+    const srv = createServer();
+    srv.on('error', rej);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => res(port));
+    });
+  });
+}
+
 async function waitFor(fn, timeoutMs, label) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -345,9 +378,14 @@ async function visit(cdp, url, settleMs) {
 
 async function main() {
   const reuse = opt('--base');
-  const port = Number(opt('--port') ?? 4401);
+  const port = Number(opt('--port') ?? (reuse ? 0 : await freePort()));
   const base = reuse ?? `http://127.0.0.1:${port}`;
   const settleMs = Number(opt('--settle') ?? 2500);
+  // Fixed, deliberately, and it is the one limitation left in the concurrency story:
+  // **two of these running at once still share a distDir.** A per-port name would fix that
+  // and cost more than it buys — Next appends `<distDir>/types/**` to `apps/web/tsconfig.json`
+  // the first time it sees one, so a dynamic name would add a dead include entry on every
+  // run and churn a tracked file. Named here rather than left for someone to discover.
   const distDir = '.next-pagecheck';
 
   const browser = findBrowser();

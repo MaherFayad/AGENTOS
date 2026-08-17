@@ -43,13 +43,20 @@
  *    the page will throw. No browser required, and it is precisely the observation that
  *    diagnosed the outage.
  *
- * **What a fuller version needs, stated rather than implied:** a headless browser. Nothing
- * here catches a runtime error with a cause other than a missing import — a null deref in
- * an effect, a hydration mismatch, a thrown render. That needs a real page load with
- * console and `pageerror` listeners, which needs Playwright or a CDP driver plus a browser
- * binary in CI, and it is the same dependency Part VI's 1440px screenshot comparison has
- * been blocked on since M0. Filed as one request rather than two, since one browser buys
- * both.
+ * **What a fuller version needs — built on 2026-08-18, so this paragraph is now history.**
+ * Nothing here catches a runtime error whose cause is not a missing import: a null deref in
+ * an effect, a hydration mismatch, a thrown render. That needed a real page load with
+ * console and error listeners. It is `scripts/check-page-errors.mjs` (`npm run
+ * smoke:browser`), which drives the already-installed Chrome over CDP with Node's built-in
+ * `WebSocket` — no dependency, no lockfile change, no browser download. The browser was
+ * never the blocker; Chrome, Edge and a Playwright chromium cache were all already on disk
+ * while this item sat on the human-blocked list.
+ *
+ * **Part VI's 1440px comparison is still blocked, and on the other half:** *reference
+ * frames*, which no script can produce. That one is genuinely with the user.
+ *
+ * The two gates stay separate rather than merging. This one reads the artifact's *text* and
+ * needs no browser, so it is the one that survives a CI box with nothing installed.
  *
  * Usage:
  *   node scripts/smoke-routes.mjs                 boot a private dev server, check, exit
@@ -61,6 +68,7 @@
 
 import { spawn } from 'node:child_process';
 import { rm } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -77,13 +85,34 @@ const WEB = join(ROOT, 'apps', 'web');
  */
 const ROUTES = [
   { path: '/', marker: null },
-  { path: '/p/agentos/map', marker: 'CHART' },
-  { path: '/p/agentos/map/sales', marker: 'CHART' },
-  { path: '/p/agentos/map/sales/account-enrichment', marker: 'CHART' },
-  { path: '/p/agentos/chart', marker: 'MAP' },
-  { path: '/p/agentos/chart/sales', marker: 'MAP' },
-  { path: '/p/agentos/dashboards', marker: 'MAP' },
-  { path: '/p/agentos/sessions', marker: 'MAP' },
+  // These seven carried the bare words `CHART` and `MAP` until 2026-08-18, and they had the
+  // weakness `shell-navigation-engineer` proved on the eighth: **they would have passed
+  // against a shell with no tab bar at all**, because `app/layout.tsx` writes
+  // "MAP / DASHBOARDS / CHART / THREADS" into every page's `<meta name="description">`. The
+  // bare marker observed `<head>` surviving, which is not what this gate is for. Tightened
+  // to the tab's own text node, angle brackets included, and falsified: `>CHART<` fails
+  // against a page whose `<meta>` still names CHART.
+  { path: '/p/agentos/map', marker: '>CHART<' },
+  { path: '/p/agentos/map/sales', marker: '>CHART<' },
+  { path: '/p/agentos/map/sales/account-enrichment', marker: '>CHART<' },
+  { path: '/p/agentos/chart', marker: '>MAP<' },
+  { path: '/p/agentos/chart/sales', marker: '>MAP<' },
+  { path: '/p/agentos/dashboards', marker: '>MAP<' },
+  // M16 — THREADS took the fourth tab slot from SESSIONS (`Plan §23.5`, `Plan §23.8`).
+  // Both session paths stay live *underneath* it rather than being redirected: `/threads`
+  // is a `ViewMount` until `sessions-relay-engineer` builds the view, and a redirect would
+  // send a working screen to a placeholder. All four are requested here because the whole
+  // point of this gate is that a route which compiles is not a route that loads.
+  // The marker on these four is `>THREADS<` — the tab's own text node, angle brackets
+  // included — rather than `THREADS`. That is not fussiness: the bare word was tried and
+  // it PASSED against a deliberately un-renamed tab bar, because `app/layout.tsx` puts
+  // "MAP / DASHBOARDS / CHART / THREADS" in every page's `<meta name="description">`. A
+  // marker any part of the document can satisfy observes the document, not the control.
+  // Falsified both ways at 2026-08-18: `>THREADS<` fails on the un-renamed strip.
+  { path: '/p/agentos/threads', marker: '>THREADS<' },
+  { path: '/p/agentos/threads/3f9a0000-0000-0000-0000-000000000000', marker: '>THREADS<' },
+  { path: '/p/agentos/sessions', marker: '>THREADS<' },
+  { path: '/p/agentos/sessions/abc123', marker: '>THREADS<' },
   { path: '/offline', marker: null },
 ];
 
@@ -167,9 +196,29 @@ async function waitForReady(base, child, timeoutMs = 180_000) {
   return false;
 }
 
+/**
+ * Ask the OS for a free port rather than hoping a fixed one is free.
+ *
+ * Concurrent agents are normal in this repo, and the hardcoded 4399 turned that into a gate
+ * that failed for a reason having nothing to do with the code: `design-system-guardian` lost
+ * its page-load evidence to `EADDRINUSE 127.0.0.1:4399` twice in one dispatch and reported
+ * the honest result — *"no page load observed by me"* — rather than a green it had not seen.
+ * A gate a second reader cannot run is a gate with one reader.
+ */
+async function freePort() {
+  return new Promise((res, rej) => {
+    const srv = createServer();
+    srv.on('error', rej);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => res(port));
+    });
+  });
+}
+
 async function main() {
   const reuse = opt('--base');
-  const port = Number(opt('--port') ?? 4399);
+  const port = Number(opt('--port') ?? (reuse ? 0 : await freePort()));
   const base = reuse ?? `http://127.0.0.1:${port}`;
   const distDir = '.next-smoke';
 
@@ -179,6 +228,12 @@ async function main() {
   if (!reuse) {
     // A private distDir. Sharing `.next` with a developer's `next dev` corrupts both —
     // see the comment block in apps/web/next.config.mjs.
+    //
+    // This `rm` used to run *before* the port was known to be usable, so a run that was
+    // about to die on EADDRINUSE first deleted the build directory of the run already
+    // holding the port. `shell-navigation-engineer` lost an in-flight build that way.
+    // Ordering it after `freePort()` is most of the fix; the rest is that a free port means
+    // this process is the only one using this distDir for the length of the run.
     await rm(join(WEB, distDir), { recursive: true, force: true }).catch(() => {});
     // The Next CLI directly under this node, not through `npx`: a shelled-out `npx` needs
     // `shell: true` on Windows, which is both a DEP0190 warning and one more process
