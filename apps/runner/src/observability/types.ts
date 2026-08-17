@@ -5,6 +5,8 @@
  * Spec: §3.2 (runs emit traces) → §3.5 (Langfuse is the agent-ops data plane).
  */
 
+import type { AccountSource } from '@agnetos/contracts';
+
 export type RunStatus = 'ok' | 'error' | 'cancelled' | 'awaiting-approval';
 export type RunTrigger = 'manual' | 'schedule' | 'api' | 'audit';
 export type ToolStatus = 'ok' | 'error';
@@ -25,6 +27,38 @@ export type RunInit = {
   sessionId?: string;
   /** `dryRun: true` runs are traced but excluded from cost, LIVE and status derivation. */
   dryRun?: boolean;
+
+  // --- the project axis (ADR-015, migration 0005) --------------------------------
+  //
+  // These four are **optional on this type and required by the ledger**, and the split is
+  // deliberate. `--profile dev` has no Postgres and the metrics fakes construct a `RunInit`
+  // by hand, so making them required here would break callers that never reach a database.
+  // The place they cannot be absent is the place they are actually written: `recordRun`
+  // refuses a row it cannot attribute, rather than letting Postgres raise a NOT NULL
+  // violation whose message names a column and not a cause.
+
+  /** `ops.project.id` — which project's ledger this row belongs in. */
+  projectId?: string;
+  /**
+   * `{project}/{department}/{slug}` (ADR-014 §2) — the addressable agent, and the identity
+   * every operations row hangs off. Run history never follows a fork or a promotion.
+   */
+  agentRef?: string;
+  /**
+   * `{layer}:{path}@sha256:…` — which file actually won the cascade, at what content.
+   *
+   * Never derived. "Which code-reviewer did I run?" is a bug class with no error message
+   * (`Plan §21.9`), so a plausible reconstruction here would be worse than a refusal.
+   */
+  sourceRef?: string;
+  /** `ops.billing_account.id`, when the payer is known. */
+  accountId?: string | null;
+  /**
+   * How the payer was chosen (ADR-015 Q20). `unattributed` is a **named** state, not a
+   * missing one: "we do not know who paid" must be its own bucket on a cost-by-account
+   * surface rather than rows a chart quietly drops.
+   */
+  accountSource?: AccountSource;
 };
 
 /** Token counts for one model call. Whatever the SDK reports; all fields optional. */
@@ -93,6 +127,13 @@ export type RunRecord = {
   activityEvent: string | null;
   activityDetail: string | null;
   error: string | null;
+  /** The project axis, carried from `RunInit`. `null` ⇒ the run was never attributed. */
+  projectId: string | null;
+  agentRef: string | null;
+  sourceRef: string | null;
+  accountId: string | null;
+  /** Never `null` — an unknown payer is the value `unattributed`, not an absent one. */
+  accountSource: AccountSource;
 };
 
 export type ToolCallRecord = {

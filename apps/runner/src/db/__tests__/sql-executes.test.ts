@@ -56,6 +56,9 @@ import { pruneRetention } from '../prune.ts';
 import type { DbClient } from '../../observability/types.ts';
 import { projectIdForSlug } from '../../lib/project.ts';
 
+/** The seeded project (migration 0005 §3). The write probes have to belong somewhere. */
+const PROBE_PROJECT_ID = projectIdForSlug('agentos');
+
 const DATABASE_URL = process.env.DATABASE_URL;
 const SKIP = !DATABASE_URL;
 const SKIP_REASON =
@@ -379,6 +382,12 @@ test('the write path and the prune plan cleanly against a real Postgres', { skip
         inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
         costUsd: 0, costSource: 'sdk', toolCallCount: 1, errorCount: 0, redactionCount: 0,
         activityEvent: 'Probe', activityDetail: 'probe', error: null,
+        // The project axis (migration 0005). `recordRun` refuses a row it cannot attribute,
+        // so these are not decoration in a probe — without them the statement is never built
+        // and this test would silently stop checking the insert.
+        projectId: PROBE_PROJECT_ID, agentRef: 'agentos/sales/probe',
+        sourceRef: 'project:agents/sales/probe/SKILL.md@sha256:probe',
+        accountId: null, accountSource: 'unattributed',
       } as never,
       [
         {
@@ -389,6 +398,7 @@ test('the write path and the prune plan cleanly against a real Postgres', { skip
     );
     rec.label('writeOutput — app.agent_outputs upsert');
     await writeOutput(rec.db, {
+      projectId: PROBE_PROJECT_ID,
       runId: 'run_probe', agent: 'sales/probe', department: 'sales',
       kind: 'deal', entityKey: 'probe', payload: { value: 1 },
     });

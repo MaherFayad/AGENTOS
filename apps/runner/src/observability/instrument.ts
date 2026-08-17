@@ -234,6 +234,14 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
         activityEvent: activity.event,
         activityDetail: activity.detail,
         error: redactedError,
+        // Carried, never derived. `agent_ref` could be reconstructed as
+        // `${project}/${agent}` and `source_ref` could not — so neither is, because a
+        // provenance field that is right half the time is worse than one that refuses.
+        projectId: init.projectId ?? null,
+        agentRef: init.agentRef ?? null,
+        sourceRef: init.sourceRef ?? null,
+        accountId: init.accountId ?? null,
+        accountSource: init.accountSource ?? 'unattributed',
       };
 
       spans.unshift({
