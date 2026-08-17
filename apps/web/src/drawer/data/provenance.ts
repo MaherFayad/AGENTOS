@@ -20,27 +20,31 @@
  * the grammar ever changes, exactly one function fails.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * WHERE THE DRAWER CAN ACTUALLY GET IT TODAY — ONE PLACE, AND IT IS NOT THE ONE YOU WANT
+ * TWO SOURCES, IN THIS ORDER — AND THE SECOND ONE ALONE IS WHY THIS SLICE FAILED ONCE
  *
- * `SseStartData.sourceRef` (`packages/contracts/src/api.ts`) carries it, and that
- * contract's own comment assigns the render to us:
+ * 1. **`AgentDetail.sourceRef`** (`GET /api/p/:project/agents/:slug`), which is the answer
+ *    the drawer wants: it is present the moment the drawer opens, and the route resolves
+ *    through the same call dispatch uses (`resolveForDispatch`), so it names the file that
+ *    *would* run right now. `packages/contracts/src/api.ts` makes it **required**, on the
+ *    stated grounds that there is no state in which the runner has an `AgentDetail` and does
+ *    not know where it came from.
+ * 2. **`SseStartData.sourceRef`**, the file that won the last time *this* agent ran in this
+ *    session. Narrower — it is anchored to an event, not to now — and it is the fallback.
  *
- *   > `drawer-engineer` renders the layer half of this as the provenance badge
- *   > (`⌂` global · `▣` project) in the drawer header.
+ * This file was written when only (2) existed and said so at length. (1) landed inside the
+ * same milestone, in `packages/contracts` and in the runner, and this comment went on
+ * asserting that `AgentDetail` "carries no `sourceRef`" for the rest of it. The consumer
+ * was never wired, so the header said SOURCE UNKNOWN for **every agent, always** — zero runs
+ * have ever executed, and the run stream was the only source it read. Nothing was red: the
+ * component test injected a `DrawerProvenance` as a prop, the parser test was pure, and the
+ * one expression that chose between the two sources had no test at all. That expression is
+ * now `drawerProvenance` below and `JobDrawer.test.tsx` drives it from a fetched
+ * `AgentDetail` with no run — the seam, not the component.
  *
- * So a run tells us. **`GET /api/agents/:slug` does not** — `AgentDetail` is
- * `{slug, path, frontmatter, body, runnable}` and carries no `sourceRef`, and the route
- * behind it (`loadAgent`) does not go through `resolveThroughCascade` at all; it reads
- * `<repo>/agents/{department}/{slug}/SKILL.md` directly. There is no field to read and
- * inventing one would be a guess wearing a badge.
- *
- * That is why `unknown` exists below and why it is the default the drawer opens on. It is
- * `unknown`, not `global`, for exactly the reason `unpriced` is not `$0.00` two sections
- * further down the same drawer: the honest empty state is the one that does not have to be
- * unlearned. The endpoint that has to carry it is named in
- * `comms/handoffs/M15-drawer-engineer-provenance-header.md` and requested by message —
- * `AgentDetail.sourceRef`, same grammar, from `resolveThroughCascade`. When it lands,
- * `provenanceOfAgent` gains one call site and nothing else in the drawer changes.
+ * `unknown` still exists and is still not `global`, for the reason `unpriced` is not `$0.00`
+ * two sections further down the same drawer. It is now what it should always have been: a
+ * state that needs a *reason* — a runner older than the contract, or a ref in a grammar this
+ * app does not read — rather than the state the drawer opens in.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * THREE OF THE BADGE'S FIVE STATES ARE UNREACHABLE, DELIBERATELY
@@ -182,4 +186,32 @@ export interface RunProvenanceSource {
 export function provenanceOfAgent(slug: string | null, run: RunProvenanceSource): DrawerProvenance {
   if (!slug || run.agent !== slug) return PROVENANCE_UNKNOWN;
   return provenanceOfSourceRef(run.sourceRef);
+}
+
+/**
+ * What the open drawer shows: the agent read first, the run stream second.
+ *
+ * **The order is the claim.** `AgentDetail.sourceRef` comes from the same resolution
+ * dispatch would perform, asked just now — *the file that would run*. A run's `source_ref`
+ * is the file that **did** run, which may be a resolution taken minutes ago against a tree
+ * that has since changed. When they agree (the normal case — resolution is deterministic,
+ * ADR-014 decision 9) the order is invisible; when they disagree, the header should describe
+ * the agent in front of you, not the history of it.
+ *
+ * The fallback is not decoration: an `AgentDetail` from a runner older than the contract
+ * carries no ref, and a run that has already streamed its `start` event does. Neither source
+ * can produce a *wrong* layer — `provenanceOfAgent` still refuses to attribute one agent's
+ * run to another agent's header — so the only thing this ordering can cost is freshness, and
+ * it spends it in the direction of the newer fact.
+ *
+ * Both arguments are `unknown` rather than `string`: the values come off the wire, and the
+ * parser's contract is that anything it cannot read is `unknown`, never a guess.
+ */
+export function drawerProvenance(
+  slug: string | null,
+  agentSourceRef: unknown,
+  run: RunProvenanceSource,
+): DrawerProvenance {
+  const fromDetail = provenanceOfSourceRef(agentSourceRef);
+  return fromDetail.kind === 'known' ? fromDetail : provenanceOfAgent(slug, run);
 }

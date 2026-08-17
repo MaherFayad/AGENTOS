@@ -9,6 +9,10 @@ import type { AgentDoc } from './types';
 function doc(overrides: Partial<AgentDoc['frontmatter']> = {}): AgentDoc {
   return {
     slug: 'sales/account-enrichment',
+    // The projection does not read it — provenance is the header's, from `AgentDetail` —
+    // but the field is required so that no constructor of an `AgentDoc` can quietly stop
+    // carrying it. `null` here says this fixture is about frontmatter and nothing else.
+    sourceRef: null,
     frontmatter: {
       name: 'Account Enrichment',
       department: 'sales',

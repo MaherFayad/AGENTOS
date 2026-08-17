@@ -18,7 +18,7 @@ import { useFocusTrap } from './a11y/useFocusTrap';
 import { ApiCallError, downloadUrl, fetchAgent, fetchRuns, postSchedule } from './data/client';
 import { initialValues, toRunPayload, validateInputs, type InputValues } from './data/inputs';
 import { projectAgent, type DrawerModel } from './data/project';
-import { provenanceOfAgent, type DrawerProvenance } from './data/provenance';
+import { drawerProvenance, type DrawerProvenance } from './data/provenance';
 import type { AgentDoc } from './data/types';
 import { openDrawer } from './events';
 import { GlassPanel } from './primitives';
@@ -169,15 +169,23 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
   /**
    * `Plan §23.6` — which library this agent came from.
    *
-   * Derived on every render from the run stream's `source_ref` and nothing else, so it is a
-   * projection of the cascade rather than a copy the drawer keeps: there is no state to
-   * update, nothing to invalidate and no way for it to survive a change it did not see.
-   * `provenanceOfAgent` refuses to attribute a run's provenance to any agent but the one
-   * that ran, so opening a second drawer cannot inherit the first one's answer — it goes
-   * back to `unknown`, which is the truth. See `data/provenance.ts` for why
-   * `GET /api/agents/:slug` cannot answer this today.
+   * Derived on every render from the two things that can say — the fetched `AgentDetail`
+   * first, the run stream second — and never stored, so it is a projection of the cascade
+   * rather than a copy the drawer keeps: there is no state to update, nothing to invalidate
+   * and no way for it to survive a change it did not see. Opening a second drawer cannot
+   * inherit the first one's answer: the doc is refetched, and `provenanceOfAgent` refuses to
+   * attribute a run's provenance to any agent but the one that ran.
+   *
+   * **This line read the run stream alone for the whole of M15**, which meant SOURCE UNKNOWN
+   * on every agent, because no run has ever executed. `data/provenance.ts` carries the full
+   * account; `JobDrawer.test.tsx` now drives this expression from a fetched `AgentDetail`
+   * with no run, which is the only test that would have caught it.
    */
-  const provenance: DrawerProvenance = provenanceOfAgent(slug, run.state);
+  const provenance: DrawerProvenance = drawerProvenance(
+    slug,
+    agent.kind === 'ready' ? agent.doc.sourceRef : null,
+    run.state,
+  );
   const view = isChart ? 'chart' : 'map';
   const state = open ? 'open' : 'closed';
 

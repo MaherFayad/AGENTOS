@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { sourceRef } from '@agnetos/contracts';
 import {
   PROVENANCE_UNKNOWN,
+  drawerProvenance,
   parseSourceRef,
   provenanceOfAgent,
   provenanceOfSourceRef,
@@ -101,11 +102,62 @@ describe('layer → badge state', () => {
   });
 });
 
+/**
+ * The agent read answers first, the run stream second.
+ *
+ * The test that used to sit here asserted the opposite as a *requirement* — `it('opens
+ * unknown: the agent detail the drawer reads carries no source_ref')` — and it went on
+ * passing after `AgentDetail.sourceRef` shipped, inside the same milestone, because it was
+ * pinning a fact about the contract rather than a property of this module. A test that
+ * agrees with a stale comment is worse than no test: it makes the fix look like a
+ * regression. It is replaced, not deleted.
+ */
+describe('two sources, in order', () => {
+  const DETAIL = REF.project;
+  const RUN = { agent: 'sales/database-mining', sourceRef: REF.global };
+
+  it('reads the agent detail before the run stream', () => {
+    // Both are true statements about different moments: the detail is the file that WOULD
+    // run, resolved just now through the same call dispatch uses; the run is the file that
+    // DID run, possibly against a tree that has since changed. The header describes the
+    // agent in front of you.
+    expect(drawerProvenance('sales/database-mining', DETAIL, RUN)).toMatchObject({
+      kind: 'known',
+      state: 'project',
+    });
+  });
+
+  it('falls back to the run stream when the detail carried none', () => {
+    // A runner older than the contract. The run's `start` event still said, so the header
+    // still knows — narrower claim, same grammar.
+    expect(drawerProvenance('sales/database-mining', null, RUN)).toMatchObject({
+      kind: 'known',
+      state: 'global',
+    });
+    expect(drawerProvenance('sales/database-mining', undefined, RUN)).toMatchObject({ kind: 'known' });
+  });
+
+  it('is unknown only when neither source said — and never global by default', () => {
+    // The honest empty state, and now a state that needs a reason rather than the one the
+    // drawer opens in. Same rule as `unpriced` two sections down the drawer, where a
+    // missing cost is not $0.00.
+    expect(drawerProvenance('sales/database-mining', null, {})).toEqual(PROVENANCE_UNKNOWN);
+    expect(drawerProvenance(null, null, {})).toEqual(PROVENANCE_UNKNOWN);
+  });
+
+  it('does not let an unreadable detail ref shadow a run that knows', () => {
+    // The fallback is on `unknown`, not on absence: a ref in a grammar this app cannot read
+    // is exactly as uninformative as no ref at all, and must not silence the run.
+    expect(drawerProvenance('sales/database-mining', 'library:x@md5:beef', RUN)).toMatchObject({
+      kind: 'known',
+      state: 'global',
+    });
+  });
+});
+
 describe('unknown is not global', () => {
-  it('opens unknown: the agent detail the drawer reads carries no source_ref', () => {
-    // `AgentDetail` is {slug, path, frontmatter, body, runnable}. There is no field to read
-    // and none is invented — the same rule as `unpriced` two sections down the drawer,
-    // where a missing cost is not $0.00.
+  it('stays unknown when nothing but a run could have said, and no run has run', () => {
+    // `provenanceOfAgent` on its own: no agent, or an empty run state, is not a layer.
     expect(provenanceOfAgent('sales/database-mining', {})).toEqual(PROVENANCE_UNKNOWN);
     expect(provenanceOfAgent(null, {})).toEqual(PROVENANCE_UNKNOWN);
   });

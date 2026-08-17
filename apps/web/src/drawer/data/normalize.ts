@@ -56,6 +56,14 @@ export function normalizeAgentDoc(raw: unknown, slugHint?: string): AgentDoc {
   return {
     slug,
     path: typeof raw.path === 'string' ? raw.path : undefined,
+    /**
+     * From the **envelope**, never from `source` — a `source_ref` written into an agent's
+     * own frontmatter would be a file claiming its own provenance, which is the one claim
+     * the cascade exists to make on its behalf. `raw.sourceRef` is `AgentDetail.sourceRef`
+     * and nothing else; anything missing or non-string becomes `null`, and the header then
+     * says it does not know rather than guessing a layer.
+     */
+    sourceRef: typeof raw.sourceRef === 'string' ? raw.sourceRef : null,
     frontmatter,
     body,
     runnable: normalizeRunnable(raw.runnable),

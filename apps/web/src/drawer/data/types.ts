@@ -69,6 +69,27 @@ export interface AgentDoc {
   slug: string;
   /** Repo-relative path of the SKILL.md. Shown in no UI; useful in an error sentence. */
   path?: string;
+  /**
+   * `{layer}:{path}@sha256:…` — which file **won the cascade** for this agent in this
+   * project, at what content (ADR-014 §2), straight from `AgentDetail.sourceRef`. The header
+   * projects the layer half of it as the provenance badge (`Plan §23.6`); `data/provenance.ts`
+   * is its only reader and holds nothing of its own.
+   *
+   * **A required key with a nullable value, and both halves are deliberate.**
+   *
+   * *Required*, unlike `path` above, because this field is the one that got lost. The
+   * contract shipped `sourceRef` and the drawer's model did not, so the header said SOURCE
+   * UNKNOWN for every agent for the whole of M15 and no test was red (M15 verdict, blocking
+   * item 1). A required key means `normalizeAgentDoc` cannot quietly stop carrying it again:
+   * deleting the line fails to compile rather than falling back to an honest-looking blank.
+   *
+   * *Nullable*, unlike the contract's `sourceRef: string`, because the contract describes
+   * what today's runner sends and this type describes what this app may actually receive —
+   * a runner older than the contract sends nothing, and `null` says so without fabricating
+   * an `''` that would read like a value. It is never rendered; `parseSourceRef` turns
+   * anything it cannot read into `unknown`, which is the only other thing the header says.
+   */
+  sourceRef: string | null;
   frontmatter: AgentFrontmatter;
   /** The SKILL.md body below the frontmatter block. Unused by the drawer today. */
   body?: string;
