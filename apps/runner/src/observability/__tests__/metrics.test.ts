@@ -115,7 +115,11 @@ test('GET /api/metrics/runs shapes durable LAST RUNS rows, trace link included',
   assert.equal(row.traceUrl, 'http://langfuse.tailnet:3000/project/local/traces/deadbeef');
   assert.equal(db.calls[0].params[0], PROJECT.id, 'the project is $1');
   assert.equal(db.calls[0].params[1], 'sales/account-enrichment');
-  assert.equal(db.calls[0].params[5], 5);
+  // `$6` is the thread filter (M16) and `$7` is the limit. Null here because this request
+  // named no thread — the slot exists and is a no-op, which is what an optional predicate
+  // looks like when nobody asked for it.
+  assert.equal(db.calls[0].params[5], null);
+  assert.equal(db.calls[0].params[6], 5);
 });
 
 test('GET /api/runs is not claimed here — runner-engineer serves the live view', async () => {

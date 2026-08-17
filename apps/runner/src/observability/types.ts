@@ -49,6 +49,26 @@ export type RunAttribution = {
    * (`Plan §21.9`), so a plausible reconstruction here would be worse than a refusal.
    */
   sourceRef: string;
+  /**
+   * `ops.thread.id` — **the thread this run is a turn of** (ADR-023, `Plan §12`).
+   *
+   * Optional here, and it is the *column's* nullability that decides that, not taste:
+   * `ops.agent_runs.thread_id` ships nullable in `0008` because a `NOT NULL` its only writer
+   * cannot satisfy is M15's most expensive defect wearing a different column name.
+   *
+   * **As of M16 the writer exists.** `runner-engineer`'s `startRun` opens a thread for every
+   * run and `recordRun` names the column, so the constraint is now *satisfiable* — but it is
+   * not landed in this change, and the reason is written down rather than left as a gap: this
+   * plane was being edited by `observability-engineer` in the same session, and
+   * `observability/__tests__/threads-observability.test.ts` already encodes the handshake for
+   * the day it lands (it reads every migration, and requires `SpanScope`'s
+   * `agnetos.thread.id` to lose its `?` the moment one says `SET NOT NULL`). Two agents
+   * editing one shape in one session is how a shape acquires two readings, which is the
+   * defect this board has now paid for four times. The trigger is theirs and it is armed.
+   *
+   * Consumer: `observability-engineer` — `thread_id` on the metrics endpoints and LAST RUNS.
+   */
+  threadId?: string;
   /** `ops.billing_account.id`, when the payer is known. */
   accountId?: string | null;
   /**
@@ -75,7 +95,15 @@ export type RunInit = RunAttribution & {
   inputs?: Record<string, unknown>;
   model?: string;
   trigger: RunTrigger;
-  /** Set when the run was started from a SESSIONS thread (§3.1). */
+  /**
+   * Set when the run was started from a SESSIONS thread (§3.1).
+   *
+   * **Not a synonym for `threadId`,** which `RunAttribution` above declares. A session
+   * thread's conversation is end-to-end encrypted and cannot enter `ops.message` at all
+   * (`message_never_holds_session_content`, CLAUDE.md rule 5); a thread id is a row in
+   * `ops.thread`. The two travel together on a session-started run and mean different
+   * things.
+   */
   sessionId?: string;
   /** `dryRun: true` runs are traced but excluded from cost, LIVE and status derivation. */
   dryRun?: boolean;
@@ -128,6 +156,22 @@ export type RunRecord = {
   model: string | null;
   trigger: RunTrigger;
   sessionId: string | null;
+  /**
+   * `ops.agent_runs.thread_id`. `null` ⇒ this run belongs to no thread.
+   *
+   * **Nullable because the column is, and that is the rule rather than a coincidence:
+   * this type is the shape of a row that was *read back*, not of a call that was made.**
+   * `ops.agent_runs.thread_id` is nullable (`0008_threads.sql` §3), so a NULL is a legal
+   * row, and a `RunRecord` typed `string` would be a claim about the database that the
+   * schema does not make. It becomes `string` in the same change as migration `0009`'s
+   * `SET NOT NULL` and not before — the same anchor `SpanScope` uses, for the same reason.
+   *
+   * **Carried here because a writer cannot name a column the record does not hold.**
+   * `db/ledger.ts`'s INSERT — `runner-engineer`'s, not this module's — names `thread_id`
+   * and binds this value as of M16 (REQ-OBS-38), so the chain from `RunInit` to the ledger
+   * is complete in source. **It has never carried a value: zero runs have executed.**
+   */
+  threadId: string | null;
   dryRun: boolean;
   status: RunStatus;
   startedAt: string;

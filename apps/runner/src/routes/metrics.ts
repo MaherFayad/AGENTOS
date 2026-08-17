@@ -40,6 +40,23 @@
  * database is down" and "we forgot to say whose rows we wanted" have different fixes, and
  * folding the second into the first would train everyone to ignore the single alarm that
  * means a project axis was dropped somewhere.
+ *
+ * ## Threads are a filter, not a route (`Plan §12`, ADR-023)
+ *
+ * `?thread=<uuid>` narrows `/metrics/query`, `/metrics/runs` and `/metrics/activity`, and
+ * `threadId` rides on every run and activity row. **There is no `/metrics/threads`.** A
+ * thread is a set of runs and a run is still a run: one run, one trace, four traces to a
+ * four-run thread. Adding a thread rollup would be a second way to compute `cost` and
+ * `runs`, and two ways to compute one number is how a dashboard and a drawer start
+ * disagreeing about the same client's spend. Everything a thread surface needs is answered
+ * by the endpoints above with one more query parameter.
+ *
+ * **And the state to read those numbers through: `thread_id` has never held a value.** The
+ * chain is complete in source — `db/ledger.ts`'s INSERT names the column and binds it
+ * (REQ-OBS-38) — but **zero runs have executed**, so `ops.agent_runs` is empty, every
+ * `threadId` below is `null`, and every `?thread=` answers zero runs. The filter, the query,
+ * the column and the bind all exist and agree; none of it has been observed. Completed is
+ * not validated.
  */
 
 import {
@@ -133,6 +150,45 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function isAccountFilter(value: string): boolean {
   return value === UNATTRIBUTED_ACCOUNT || UUID_RE.test(value);
 }
+
+/**
+ * `?thread=` — `ops.thread.id`, a uuid and nothing else (`Plan §12`, ADR-023).
+ *
+ * There is deliberately **no `unthreaded` bucket** here, and the asymmetry with `account`
+ * is the point rather than an oversight. `unattributed` is a *value the ledger stores*
+ * (`account_source`), so asking for it is asking for rows that say something. "No thread"
+ * is a NULL, it is every row in the table today, and a bucket for it would be a filter
+ * whose answer is "everything" dressed up as a category. It is added the day someone has
+ * a question it answers.
+ */
+function isThreadFilter(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+/**
+ * Read and validate `?thread=`. Returns the id, `null` for "no filter", or a refusal.
+ *
+ * Refused **before** the database, like `bad_account`: a malformed id that reached the SQL
+ * would be compared as text and quietly answer zero runs, which is the same shape as a
+ * thread that genuinely has none — and those two must not print the same empty list.
+ */
+function readThreadFilter(q: URLSearchParams): { id: string | null } | MetricsResponse {
+  const raw = q.get('thread');
+  if (raw === null) return { id: null };
+  if (!isThreadFilter(raw)) {
+    return fail(
+      400,
+      'bad_thread',
+      `"${raw}" is not a thread id.`,
+      'A thread is identified by the uuid in ops.thread.id — the same id the THREADS view and ' +
+        'the composer address. Omit ?thread= for every run in this project.',
+    );
+  }
+  return { id: raw };
+}
+
+const isRefusal = (v: { id: string | null } | MetricsResponse): v is MetricsResponse =>
+  'status' in v;
 
 function clampLimit(raw: string | null, fallback: number, max: number): number {
   const n = raw === null ? fallback : Number(raw);
@@ -344,7 +400,13 @@ async function runMetrics(
     if (path === '/api/metrics/runs') {
       const agent = q.get('agent');
       const limit = clampLimit(q.get('limit'), 5, 50);
-      const rows = await lastRuns(db, { projectId, agent: agent ?? undefined }, limit);
+      const thread = readThreadFilter(q);
+      if (isRefusal(thread)) return thread;
+      const rows = await lastRuns(
+        db,
+        { projectId, agent: agent ?? undefined, threadId: thread.id ?? undefined },
+        limit,
+      );
       return {
         status: 200,
         body: {
@@ -367,6 +429,18 @@ async function runMetrics(
             // `{project}/{department}/{slug}` (ADR-014 §2). The addressable agent, so a
             // row can say which library's agent it was without a second lookup.
             agentRef: r.agent_ref ?? null,
+            /**
+             * The thread this run belongs to (`Plan §12`), or `null` for a run that
+             * belongs to none.
+             *
+             * **`null` on every row today — because there are no rows.** The writer
+             * names and binds the column (REQ-OBS-38); zero runs have executed, so
+             * `ops.agent_runs` is empty. A consumer rendering this must read `null` as
+             * "no thread recorded", never as "this run stands alone": those become
+             * different facts the day the first run happens, and only one of them is a
+             * thing to draw.
+             */
+            threadId: r.thread_id ?? null,
             traceUrl: r.trace_url,
           })),
         },
@@ -477,11 +551,18 @@ async function runMetrics(
             'The accounts this project has seen are on GET /api/p/:project/metrics/accounts.',
         );
       }
+      const thread = readThreadFilter(q);
+      if (isRefusal(thread)) return thread;
       const filter = {
         projectId,
         agent: q.get('agent') ?? undefined,
         department: q.get('department') ?? undefined,
         account: account ?? undefined,
+        // One more predicate on the same query — `runs`, `cost`, `latency_p50` and
+        // `error_rate` answer for a thread through the code path that answers for an
+        // agent. No thread rollup exists, on purpose: two ways to compute one number is
+        // how they start disagreeing.
+        threadId: thread.id ?? undefined,
       };
       const hours = RANGES[range as Range];
       const current = await metric(db, name as MetricName, filter, hours, 0);
@@ -510,7 +591,9 @@ async function runMetrics(
     if (path === '/api/metrics/activity') {
       const limit = clampLimit(q.get('limit'), 12, 100);
       const department = q.get('department');
-      const rows = await activityFeed(db, projectId, department, limit);
+      const thread = readThreadFilter(q);
+      if (isRefusal(thread)) return thread;
+      const rows = await activityFeed(db, projectId, department, limit, thread.id);
       return {
         status: 200,
         body: {
@@ -526,6 +609,10 @@ async function runMetrics(
             agentName: r.agent_name,
             department: r.department,
             status: r.status,
+            // Attribution, not a row source: the feed is still agent runs, and a thread
+            // with no run has nothing to report. `null` on every row today because the
+            // table is empty — see `/metrics/runs` above.
+            threadId: r.thread_id ?? null,
             traceUrl: r.trace_url,
           })),
         },

@@ -73,10 +73,17 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
     // typed to require them (`SpanScope`). Computed once, spread everywhere — a span
     // that forgets is a type error at the site that added it, not a gap discovered
     // during a deletion request. See `SpanScope` for why it is a type and not a habit.
+    //
+    // `agnetos.thread.id` rides along and is deliberately **not** required (see
+    // `SpanScope`): `attributes()` drops `undefined`, so a run with no thread emits no
+    // thread attribute rather than an empty one. One run is still one trace — a thread
+    // spanning four runs is four traces correlated by this id, which is the assumption
+    // ADR-023 was built to leave intact.
     const scope: SpanScope = {
       'agnetos.run.id': runId,
       'agnetos.project.id': init.projectId,
       'agnetos.agent.ref': init.agentRef,
+      'agnetos.thread.id': init.threadId,
     };
 
     const hits: RedactionHit[] = [];
@@ -242,6 +249,11 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
         model,
         trigger: init.trigger,
         sessionId: init.sessionId ?? null,
+        // Carried onto the record because the ledger writer cannot name a column the
+        // record does not hold. It is not yet in `ledger.ts`'s INSERT — that file is
+        // `runner-engineer`'s and they are writing the thread-creating route in this same
+        // milestone. REQ-OBS-38, declared-and-unbuilt.
+        threadId: init.threadId ?? null,
         dryRun: Boolean(init.dryRun),
         status: outcome.status,
         startedAt: startedAt.toISOString(),
@@ -297,6 +309,12 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
           'langfuse.trace.metadata.project': init.projectId,
           'langfuse.trace.metadata.agent_ref': init.agentRef,
           'langfuse.trace.metadata.source_ref': init.sourceRef,
+          // Trace-level, and that is the point of putting it here as well as on every
+          // span. "Show me this thread's four runs" is a *trace list* filter, and a trace
+          // list filters on metadata; per-span attributes answer a different question.
+          // Absent when the run has no thread — `attributes()` drops undefined, so a
+          // threadless run carries no empty key for a filter to match on by accident.
+          'langfuse.trace.metadata.thread': init.threadId,
           'langfuse.trace.metadata.agent': init.agent,
           'langfuse.trace.metadata.department': init.department,
           'langfuse.trace.metadata.trigger': init.trigger,

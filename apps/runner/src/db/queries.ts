@@ -71,9 +71,34 @@ export type MetricFilter = {
    * recorded. Validated at the route before it reaches here (`Plan §11`).
    */
   account?: string;
+  /**
+   * `ops.thread.id` — *"which runs belong to this thread"* (`Plan §12`, ADR-023).
+   *
+   * A filter, deliberately, and **not a second aggregation model.** A thread is a set of
+   * runs; a run is still a run and still one trace. So `thread` joins `agent`, `department`
+   * and `account` as one more optional predicate over `ops.agent_runs`, and every metric,
+   * series, breakdown, LAST RUNS row and activity row answers for a thread by the same
+   * code path that answers for an agent. Nothing new aggregates, nothing new is cached, and
+   * there is no `/metrics/threads` rollup to fall out of step with `/metrics/query`.
+   *
+   * Not a `GROUP BY` option — see `GROUP_BY`.
+   */
+  threadId?: string;
 };
 
-/** Columns a metric may be grouped by. A closed set — never a value from a request. */
+/**
+ * Columns a metric may be grouped by. A closed set — never a value from a request.
+ *
+ * **`thread` is deliberately not in it, and the reason is a label rather than a join.**
+ * Grouping by `thread_id` is one word of SQL; the result is a `bar-list` whose labels are
+ * uuids. A thread has no title by decision — `contracts/thread-model.md` §9.6 answers it
+ * *no, not in M16*, because a title is either a field nobody fills or the first message
+ * truncated, and the second is a copy of the highest-PII value in the database. So a
+ * thread breakdown could only render identifiers, and a widget full of uuids is a panel
+ * that looks like data and answers nothing. It is added the day threads have a label that
+ * is safe to render, and `MetricFilter.threadId` already answers *"this thread's runs"*
+ * without it.
+ */
 export const GROUP_BY = { agent: 'agent', department: 'department' } as const;
 export type GroupBy = keyof typeof GROUP_BY;
 export const isGroupBy = (v: string): v is GroupBy => Object.hasOwn(GROUP_BY, v);
@@ -141,9 +166,26 @@ const ACCOUNT_PREDICATE = `
            OR account_id::text = $7)`;
 
 /**
+ * The thread predicate (`Plan §12`, ADR-023). Optional, like `account` and unlike the
+ * project: *"every thread in this project"* is a sentence someone means every time they
+ * open a dashboard.
+ *
+ * Compared as `::text` rather than cast to `uuid` for the same reason `account` is: a
+ * malformed parameter becomes a no-match instead of a 500 from a cast Postgres performs
+ * before it reads a row. The route refuses a non-uuid first (`bad_thread`); this is the
+ * second mechanism, and it is what catches a caller that is not the route.
+ *
+ * A run with `thread_id IS NULL` never matches a thread filter — which is correct and, for
+ * now, total: **zero runs have executed, so this table is empty** and every thread filter
+ * answers zero runs. That is an honest zero from a real query, not a stub.
+ */
+const THREAD_PREDICATE = `
+      AND ($8::text IS NULL OR thread_id::text = $8)`;
+
+/**
  * Window + filter predicate shared by every ops query.
  *
- * `$1` is the project. `$2`/`$3` are the window bounds in hours ago; `$4`–`$7` are the
+ * `$1` is the project. `$2`/`$3` are the window bounds in hours ago; `$4`–`$8` are the
  * optional filters, each a no-op when null.
  */
 const RUN_SCOPE = `
@@ -153,7 +195,7 @@ const RUN_SCOPE = `
       AND started_at <  now() - ${hoursAgo('$3')}
       AND ($4::text IS NULL OR agent = $4)
       AND ($5::text IS NULL OR department = $5)
-      AND ($6::text IS NULL OR status = $6)${ACCOUNT_PREDICATE}
+      AND ($6::text IS NULL OR status = $6)${ACCOUNT_PREDICATE}${THREAD_PREDICATE}
 `;
 
 const scopeParams = (filter: MetricFilter, from: number, to: number) =>
@@ -165,6 +207,7 @@ const scopeParams = (filter: MetricFilter, from: number, to: number) =>
     filter.department ?? null,
     filter.status ?? null,
     filter.account ?? null,
+    filter.threadId ?? null,
   ] as const;
 
 /**
@@ -267,7 +310,7 @@ export async function metricBreakdown(
     WHERE ${RUN_SCOPE}
     GROUP BY 1
     ORDER BY value DESC NULLS LAST
-    LIMIT $8
+    LIMIT $9
   `;
   const { rows } = await db.query<{ label: string; value: number | null; runs: number; unpriced: number }>(
     sql,
@@ -419,6 +462,11 @@ export async function billingAccountCount(db: DbClient): Promise<number> {
  * `trace_url` is selected here rather than composed by the caller: the drawer row must
  * deep-link to the trace of *that* run, and the only place that knows the trace id is
  * the row the instrumentation wrote.
+ *
+ * `thread_id` is selected for the same reason one row over: a LAST RUNS row that belongs
+ * to a thread must be able to say so without a second query, and *"the other three runs of
+ * this thread"* is then this same function with `filter.threadId` set. One run, one trace,
+ * four traces to a four-run thread — correlated here, never merged.
  */
 export async function lastRuns(
   db: DbClient,
@@ -428,7 +476,8 @@ export async function lastRuns(
 ) {
   const sql = `
     SELECT run_id, agent, agent_ref, agent_name, department, status, started_at, duration_ms,
-           cost_usd, cost_source, account_id, account_source, tool_call_count, trace_url
+           cost_usd, cost_source, account_id, account_source, tool_call_count, trace_url,
+           thread_id
     FROM ops.agent_runs
     WHERE ${PROJECT_PREDICATE}
       AND ${REAL_RUNS}
@@ -436,8 +485,9 @@ export async function lastRuns(
       AND ($3::text IS NULL OR department = $3)
       AND ($4::text IS NULL OR status = $4)
       AND ($5::float8 IS NULL OR started_at >= now() - ${hoursAgo('$5')})
+      AND ($6::text IS NULL OR thread_id::text = $6)
     ORDER BY started_at DESC
-    LIMIT $6
+    LIMIT $7
   `;
   const { rows } = await db.query(sql, [
     requireProject(filter),
@@ -445,30 +495,47 @@ export async function lastRuns(
     filter.department ?? null,
     filter.status ?? null,
     fromHoursAgo,
+    filter.threadId ?? null,
     limit,
   ]);
   return rows;
 }
 
-/** The activity feed (§2.5). Agent runs are the activity in phase 1. */
+/**
+ * The activity feed (§2.5). Agent runs are the activity in phase 1.
+ *
+ * **The feed is still agent runs, and a thread does not become a feed item.** `Plan §12`
+ * makes a thread the addressable unit; it does not make it a thing that *happened*. A
+ * thread that was opened and has not run has nothing to report, and a feed row saying so
+ * would be a timestamped non-event on the one surface whose whole value is that every line
+ * is a thing an agent did. So `thread_id` rides on the run row as an attribution handle —
+ * a feed line can link to its thread — and the feed's row source is unchanged.
+ */
 export async function activityFeed(
   db: DbClient,
   projectId: string,
   department: string | null,
   limit: number,
+  threadId: string | null = null,
 ) {
   const sql = `
     SELECT run_id, agent, agent_ref, agent_name, department, status, started_at,
-           activity_event, activity_detail, trace_url
+           activity_event, activity_detail, trace_url, thread_id
     FROM ops.agent_runs
     WHERE ${PROJECT_PREDICATE}
       AND ${REAL_RUNS}
       AND activity_event IS NOT NULL
       AND ($2::text IS NULL OR department = $2)
+      AND ($3::text IS NULL OR thread_id::text = $3)
     ORDER BY started_at DESC
-    LIMIT $3
+    LIMIT $4
   `;
-  const { rows } = await db.query(sql, [requireProject({ projectId }), department, limit]);
+  const { rows } = await db.query(sql, [
+    requireProject({ projectId }),
+    department,
+    threadId,
+    limit,
+  ]);
   return rows;
 }
 
