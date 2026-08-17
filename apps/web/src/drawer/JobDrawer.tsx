@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { DEFAULT_LOCALE, translate, type StringKey, type Vars } from '@/i18n';
+import { useProjectSegment } from '@/components/shell';
 import { useFocusTrap } from './a11y/useFocusTrap';
 import { ApiCallError, downloadUrl, fetchAgent, fetchRuns, postSchedule } from './data/client';
 import { initialValues, toRunPayload, validateInputs, type InputValues } from './data/inputs';
@@ -58,8 +59,17 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
   const isChart = side === 'right';
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * Which project's library answers (M15, ADR-015). `useProjectSegment` and not
+   * `useShell()`: the latter throws outside `<ShellProvider>`, and this component is
+   * mounted three ways — the map route, `DrawerHost` on the chart route, and bare in
+   * tests. `shell-navigation-engineer`'s call, and it also means the project is read the
+   * same way in every mount rather than drilled from two hosts, which would give the
+   * drawer two ways to learn one fact.
+   */
+  const project = useProjectSegment();
   const capabilities = useRunnerAvailability();
-  const run = useRunStream();
+  const run = useRunStream({ project });
 
   const [agent, setAgent] = useState<AgentState>({ kind: 'idle' });
   const [runs, setRuns] = useState<RunsState>({ kind: 'loading' });
@@ -80,7 +90,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
     setAgent({ kind: 'loading' });
     setScheduleResult(null);
     setErrors({});
-    fetchAgent(slug, controller.signal)
+    fetchAgent(project, slug, controller.signal)
       .then((doc) => {
         const model = projectAgent(doc);
         setAgent({ kind: 'ready', doc, model });
@@ -92,7 +102,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
         setAgent({ kind: 'failed', message: failure.message, hint: failure.hint });
       });
     return () => controller.abort();
-  }, [slug, open]);
+  }, [slug, open, project]);
 
   useEffect(() => {
     if (!slug || !open) {
@@ -101,7 +111,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
     }
     const controller = new AbortController();
     setRuns({ kind: 'loading' });
-    fetchRuns(slug, 5, controller.signal)
+    fetchRuns(project, slug, 5, controller.signal)
       .then((rows) => setRuns({ kind: 'ready', rows }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -111,7 +121,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
         });
       });
     return () => controller.abort();
-  }, [slug, open]);
+  }, [slug, open, project]);
 
   useEffect(() => {
     if (run.active || run.state.phase === 'done' || run.state.phase === 'error') setConsoleHeld(true);
@@ -134,7 +144,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
     (cron: string) => {
       if (!slug) return;
       setScheduleBusy(true);
-      postSchedule(slug, cron)
+      postSchedule(project, slug, cron)
         .then((response) => {
           setScheduleResult(
             response.nextRunAt
@@ -147,7 +157,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
         })
         .finally(() => setScheduleBusy(false));
     },
-    [slug],
+    [slug, project],
   );
 
   const onDismissConsole = useCallback(() => {
@@ -230,7 +240,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
                   running={run.active}
                   scheduleBusy={scheduleBusy}
                   scheduleResult={scheduleResult}
-                  downloadHref={downloadUrl(model.slug)}
+                  downloadHref={downloadUrl(project, model.slug)}
                   runs={runs}
                 />
               ) : (
@@ -248,7 +258,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
                   running={run.active}
                   scheduleBusy={scheduleBusy}
                   scheduleResult={scheduleResult}
-                  downloadHref={downloadUrl(model.slug)}
+                  downloadHref={downloadUrl(project, model.slug)}
                   runs={runs}
                 />
               )
@@ -283,7 +293,8 @@ interface AnatomyProps {
   running: boolean;
   scheduleBusy: boolean;
   scheduleResult: string | null;
-  downloadHref: string;
+  /** `null` when the URL names no project, so there is no address to link at. */
+  downloadHref: string | null;
   runs: RunsState;
 }
 

@@ -116,13 +116,32 @@ export function DashboardDetail({
                 <Eyebrow size="sm">Mission Control</Eyebrow>
                 <p className={cx(s.footerLead, 'text-small font-semibold')}>{panel.footer.lead}</p>
                 <p className={cx(s.footerDetail, 'text-small')}>{panel.footer.detail}</p>
+                {/* §2.5.7's CTA. `href` is an in-app path with no project segment (the
+                    schema forbids one), so it is prefixed here with the project the reader
+                    is already in — an approvals queue is project-scoped, and a link that
+                    dropped the segment would offer one client's queue under another's
+                    name. With no `href` this is deliberately not a link: see
+                    `PanelFooterCta` for why a dead one is worse than a label. */}
                 {panel.footer.cta ? (
-                  <a
-                    href={panel.footer.cta.href}
-                    className="text-small text-ivory-2 underline decoration-line underline-offset-4 hover:text-ivory"
-                  >
-                    {panel.footer.cta.label}
-                  </a>
+                  panel.footer.cta.href ? (
+                    <a
+                      href={href(panel.footer.cta.href)}
+                      className="text-small text-ivory-2 underline decoration-line underline-offset-4 hover:text-ivory"
+                    >
+                      {panel.footer.cta.label}
+                    </a>
+                  ) : (
+                    <p className="text-small text-ivory-2" data-testid="dash-footer-cta-pending">
+                      {panel.footer.cta.label}
+                      {/* --ink-2, not --ink-3: this sentence is the only thing on screen
+                          explaining why the label above is not clickable, so it is required
+                          reading and the disabled token is not available to it (tokens
+                          contract §9.2 — the delete-the-text test). */}
+                      {panel.footer.cta.note ? (
+                        <span className="text-meta text-ink-2"> · {panel.footer.cta.note}</span>
+                      ) : null}
+                    </p>
+                  )
                 ) : null}
               </footer>
             ) : null}

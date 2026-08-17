@@ -69,7 +69,18 @@ export function ChartView({
   return (
     <section className="mx-auto flex w-full max-w-[1240px] flex-col gap-5 px-6 py-6">
       <ChartStyles />
-      <DepartmentTabs departments={departments} active={active} onSelect={select} counts={counts} />
+      {/* Counts are withheld when the library could not be read, and that is a correctness
+          fix, not caution. A dimmed tab is a *claim* — "no jobs are mapped in this
+          department" (REQ-CHT-05). Derived from a failed load it is seven false claims,
+          made on the same screen that is simultaneously saying the library is unreadable.
+          Unknown is not zero (Part VII.3, BOARD rule 9); with `counts` absent every tab
+          renders at full weight and only the empty state speaks. */}
+      <DepartmentTabs
+        departments={departments}
+        active={active}
+        onSelect={select}
+        counts={error ? undefined : counts}
+      />
 
       <div id="chart-panel" role="tabpanel" aria-labelledby={`chart-tab-${active}`} className="flex flex-col gap-5">
         <TitleBlock departmentLabel={activeLabel} stats={stats} />

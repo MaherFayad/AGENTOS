@@ -35,14 +35,23 @@ export interface UseRunStream {
 }
 
 export interface UseRunStreamOptions {
+  /**
+   * The project this run belongs to (M15, ADR-015). Required rather than optional: a
+   * default would be an ambient default, and starting a run under one project's name with
+   * another project's library is the failure the whole segment exists to prevent.
+   * `null` is a legitimate value and means the URL names no project — the transport
+   * refuses, once, without sending anything.
+   */
+  project: string | null;
   /** Swap in `mockTransport(...)` in tests. Production always gets the fetch transport. */
   transport?: RunTransport;
   maxRetries?: number;
 }
 
-export function useRunStream(options: UseRunStreamOptions = {}): UseRunStream {
+export function useRunStream(options: UseRunStreamOptions): UseRunStream {
   const transport = options.transport ?? fetchRunTransport;
   const maxRetries = options.maxRetries ?? MAX_RETRIES;
+  const project = options.project;
 
   const [state, dispatch] = useReducer(consoleReducer, initialConsoleState);
   const abortRef = useRef<AbortController | null>(null);
@@ -67,6 +76,7 @@ export function useRunStream(options: UseRunStreamOptions = {}): UseRunStream {
 
       try {
         await transport(request, {
+          project,
           lastEventId: lastEventIdRef.current,
           // Present only after `start`: a retry before that is a run that never began, so
           // re-POSTing is correct. After it, this forces the GET re-attach and there is
@@ -107,7 +117,7 @@ export function useRunStream(options: UseRunStreamOptions = {}): UseRunStream {
         dispatch({ type: 'transport-error', message, retryable });
       }
     },
-    [transport, maxRetries],
+    [transport, maxRetries, project],
   );
 
   const start = useCallback(
@@ -131,20 +141,26 @@ export function useRunStream(options: UseRunStreamOptions = {}): UseRunStream {
     dispatch({ type: 'reset' });
   }, []);
 
-  const decide = useCallback(async (decision: 'approve' | 'deny') => {
-    const runId = runIdRef.current;
-    if (!runId) return;
-    try {
-      await postApproval(runId, decision);
-      dispatch({ type: 'approval-sent', decision });
-    } catch (error) {
-      dispatch({
-        type: 'transport-error',
-        message: error instanceof Error ? error.message : 'The decision could not be sent.',
-        retryable: true,
-      });
-    }
-  }, []);
+  const decide = useCallback(
+    async (decision: 'approve' | 'deny') => {
+      const runId = runIdRef.current;
+      if (!runId) return;
+      try {
+        // Same project the run was started under. A decision addressed to a different
+        // project is `run_not_found`, and an approval that quietly lands on the wrong
+        // queue is worse than one that fails.
+        await postApproval(project, runId, decision);
+        dispatch({ type: 'approval-sent', decision });
+      } catch (error) {
+        dispatch({
+          type: 'transport-error',
+          message: error instanceof Error ? error.message : 'The decision could not be sent.',
+          retryable: true,
+        });
+      }
+    },
+    [project],
+  );
 
   return { state, active: isRunActive(state), start, cancel, decide, reset };
 }

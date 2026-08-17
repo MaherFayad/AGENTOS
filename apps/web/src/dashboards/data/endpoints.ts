@@ -27,12 +27,78 @@
  * `filter: {status}`. Those return `unsupported` with a sentence saying so. Filed with
  * `observability-engineer`; nothing here guesses around it.
  *
- * Pure and dependency-free on purpose — `node --test` loads it directly, and it must not
- * value-import `@agnetos/contracts` (Node ESM cannot resolve that package's extensionless
- * barrel). The department list is injected by the caller for the same reason.
+ * WHY THERE IS NO `/api/…` LITERAL LEFT IN THIS FILE
+ *
+ * M15 moved every metrics route under `/api/p/:project` (ADR-015 Q1, `Plan §10`). This
+ * file held five paths as string literals, so nothing broke at build time and nothing
+ * failed at review time: every URL it built began answering **400 `project_scope_missing`**,
+ * which `use-resolved.tsx` classified as "cannot reach the runner" — so every widget on
+ * every Command Center went `unavailable` under a sentence blaming the tailnet, for a fault
+ * that was one line of client code.
+ *
+ * That is milder than the map's version of the same bug (nothing rendered a stale number,
+ * and no zero was invented — see `resolve.ts`'s gate), but it is the same mechanism, and a
+ * literal is what made it possible. So there is no longer one to type: the project prefix
+ * comes from `PROJECT_ROUTE_PREFIX` in `@agnetos/contracts`, filled by `projectPath`, and
+ * the suffixes live in one named table below. `data/endpoints.test.ts` asserts the built
+ * URLs against the contract and against the pre-M15 spellings by name.
+ *
+ * **A `null` project means *do not ask* — never "ask the unscoped one".** `planLangfuse`
+ * returns `unsupported` with `NO_PROJECT`, so `urlsOf` yields nothing, no request is made
+ * and the widget prints a sentence saying the address names no project. The unscoped paths
+ * are still mounted precisely so a stale client gets a named refusal; calling one on
+ * purpose would turn that deliberate 400 into a shrug, and there is no default project to
+ * fall back to by design (ADR-015 Q2).
+ *
+ * The department list is still injected by the caller rather than imported, because
+ * ADR-001's order is a *caller's* fact here and one import is cheaper to reason about than
+ * two. Type-only imports stay type-only.
  *
  * Owner: dashboards-engineer · Spec §2.5, §3.5 · contracts/panel-schema.md
  */
+
+import { PROJECT_ROUTE_PREFIX, projectPath } from '@agnetos/contracts';
+
+/* ---------------------------------------------------------------- the paths */
+
+/**
+ * The metrics suffixes this module can reach, under `/api/p/:project`.
+ *
+ * These mirror `METRICS_ROUTES` in `apps/runner/src/routes/metrics.ts`, which is
+ * `observability-engineer`'s and is not exported from `packages/contracts` — so this is
+ * the one copy that still exists, and it is a named table rather than five inline strings
+ * so that the copy is greppable and has an owner. A `decision-request` asks for the table
+ * to be lifted into the contracts package; until it lands, `endpoints.test.ts` pins these
+ * against the shapes the runner documents.
+ */
+const METRICS_PATHS = {
+  /** One aggregate over one window, plus `previous` and `delta`. Echoes its filter. */
+  query: '/metrics/query',
+  /** The registered named-query surface. `runs_per_day` and `cost_by_agent` live here. */
+  sql: '/metrics/sql',
+  /** The durable ledger rows behind a `data-table`. */
+  runs: '/metrics/runs',
+  /** Human sentences — agent runs ARE the activity feed (§2.5). */
+  activity: '/metrics/activity',
+} as const;
+
+/**
+ * `/api/p/<project>` for a project we can name, `null` for one we cannot.
+ *
+ * `projectPath` **throws** on a segment that is not a slug (`packages/contracts`' own
+ * predicate). That is right one level down and wrong here: a malformed segment in the
+ * address bar is a reason to stop asking, not a reason to throw out of a render. Same
+ * shape and same reason as `scopedPath` in `map/data/socket.ts` and `projectApiUrl` in
+ * `components/shell/useSearchIndex.ts`.
+ */
+function projectBase(project: string | null | undefined): string | null {
+  if (project === null || project === undefined) return null;
+  try {
+    return projectPath(PROJECT_ROUTE_PREFIX, project);
+  } catch {
+    return null;
+  }
+}
 
 /* --------------------------------------------------------------- the ranges */
 
@@ -120,6 +186,19 @@ export const NO_WINDOW =
 export const FILTER_NOT_APPLIED =
   'The metrics route returned a figure without the filter this asked for, so it is withheld rather than mislabelled.';
 
+/**
+ * Printed when the address names no project. Deliberately not phrased as an outage: the
+ * runner is fine and the ledger may be full — this client did not say whose numbers it
+ * wanted, and there is no default project to guess with (ADR-015 Q2).
+ *
+ * The wording matches `NO_PROJECT_SENTENCE` in `components/shell/useSearchIndex.ts`
+ * because a reader who sees it in the search panel and on a KPI tile in the same minute
+ * is looking at one cause.
+ */
+export const NO_PROJECT =
+  'This address does not name a project, and every metrics route now belongs to one. ' +
+  'Open it from the project switcher and this fills in.';
+
 /** A `shape: "list"` query on an `activity-feed` widget wants sentences, not rows. */
 export type QueryIntent = 'activity' | 'default';
 
@@ -127,6 +206,11 @@ export interface PlanOptions {
   intent?: QueryIntent;
   /** ADR-001's ordered department slugs, injected so this module imports nothing. */
   departments?: readonly string[];
+  /**
+   * The project whose numbers these are. **Absent or `null` builds no URL at all** — see
+   * the header. There is deliberately no default and no unscoped fallback.
+   */
+  project?: string | null;
 }
 
 const qs = (params: Record<string, string | number | undefined>): string => {
@@ -157,6 +241,12 @@ export function planLangfuse(
   const filter = query.filter ?? {};
   const range = toRunnerRange(query.range);
 
+  // Before anything else: a URL that cannot name its project is not built. This is the
+  // first check rather than the last so that no branch below can construct one by
+  // forgetting the prefix — the shape of the bug this file was repaired for.
+  const base = projectBase(options.project);
+  if (base === null) return { kind: 'unsupported', message: NO_PROJECT };
+
   if (shape === 'scalar') {
     if (!range) return { kind: 'unsupported', message: NO_WINDOW };
     if (filter.status) return { kind: 'unsupported', message: NO_STATUS_FILTER };
@@ -165,7 +255,7 @@ export function planLangfuse(
     if (filter.department) want.department = filter.department;
     return {
       kind: 'scalar',
-      url: `/api/metrics/query?${qs({ metric: query.metric, range: range.token, ...want })}`,
+      url: `${base}${METRICS_PATHS.query}?${qs({ metric: query.metric, range: range.token, ...want })}`,
       metric: query.metric,
       want,
       delta: query.compare === 'previous-period',
@@ -179,7 +269,10 @@ export function planLangfuse(
       return { kind: 'unsupported', message: NO_SERIES_ROUTE };
     }
     if (!range) return { kind: 'unsupported', message: NO_WINDOW };
-    return { kind: 'runs-series', url: `/api/metrics/sql/runs_per_day?${qs({ days: range.days })}` };
+    return {
+      kind: 'runs-series',
+      url: `${base}${METRICS_PATHS.sql}/runs_per_day?${qs({ days: range.days })}`,
+    };
   }
 
   if (shape !== 'list') return { kind: 'unsupported', message: NO_BREAKDOWN_ROUTE };
@@ -191,7 +284,10 @@ export function planLangfuse(
       return { kind: 'unsupported', message: NO_BREAKDOWN_ROUTE };
     }
     if (!range) return { kind: 'unsupported', message: NO_WINDOW };
-    return { kind: 'cost-by-agent', url: `/api/metrics/sql/cost_by_agent?${qs({ days: range.days })}` };
+    return {
+      kind: 'cost-by-agent',
+      url: `${base}${METRICS_PATHS.sql}/cost_by_agent?${qs({ days: range.days })}`,
+    };
   }
 
   if (query.groupBy === 'department') {
@@ -209,9 +305,9 @@ export function planLangfuse(
       kind: 'runs-by-department',
       parts: departments.map((slug) => ({
         slug,
-        url: `/api/metrics/query?${qs({ metric: 'runs', range: range.token, department: slug })}`,
+        url: `${base}${METRICS_PATHS.query}?${qs({ metric: 'runs', range: range.token, department: slug })}`,
       })),
-      totalUrl: `/api/metrics/query?${qs({ metric: 'runs', range: range.token })}`,
+      totalUrl: `${base}${METRICS_PATHS.query}?${qs({ metric: 'runs', range: range.token })}`,
     };
   }
 
@@ -225,7 +321,7 @@ export function planLangfuse(
     if (filter.agent || filter.status) return { kind: 'unsupported', message: NO_BREAKDOWN_ROUTE };
     return {
       kind: 'activity',
-      url: `/api/metrics/activity?${qs({ limit, department: filter.department })}`,
+      url: `${base}${METRICS_PATHS.activity}?${qs({ limit, department: filter.department })}`,
       limit,
     };
   }
@@ -234,7 +330,7 @@ export function planLangfuse(
   if (filter.status) return { kind: 'unsupported', message: NO_STATUS_FILTER };
   return {
     kind: 'runs-list',
-    url: `/api/metrics/runs?${qs({ limit, agent: filter.agent })}`,
+    url: `${base}${METRICS_PATHS.runs}?${qs({ limit, agent: filter.agent })}`,
     limit,
     // `/api/metrics/runs` takes a row cap, not a window, so a "last 10 in this window"
     // table trims client-side. Trimming can only *remove* rows from a top-N list; it can

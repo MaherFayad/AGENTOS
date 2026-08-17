@@ -6,7 +6,14 @@
  * The tabs and their ORDER come from `packages/contracts` (ADR-001) via
  * `ChartView`; this component never contains a department name. It takes the list as a
  * prop precisely so that hardcoding one is impossible here.
+ *
+ * **Arrow keys follow reading order** (`MIRRORS['shell.segmentedControl']` — *"tab order is
+ * reading order"*). The bar is a flex row, so `dir="rtl"` reverses it; the handler reverses
+ * with it via `inlineStep`, whose header carries the full account of why it exists and of
+ * the one place in CHART it must not be applied.
  */
+
+import { elementDirection, inlineStep } from '../model/direction';
 
 export interface DepartmentTab {
   slug: string;
@@ -17,7 +24,14 @@ export interface DepartmentTabsProps {
   departments: readonly DepartmentTab[];
   active: string;
   onSelect: (slug: string) => void;
-  /** Jobs per department slug — a department with none is dimmed, not hidden. */
+  /**
+   * Jobs per department slug — a department with none is dimmed, never hidden or reordered
+   * (REQ-CHT-05): the rollout gap is the information.
+   *
+   * **Absent means unknown, and unknown is not zero.** `ChartView` withholds it when the
+   * library could not be read, because dimming is a claim about the library and a failed
+   * load has nothing to claim with.
+   */
   counts?: Readonly<Record<string, number>>;
 }
 
@@ -37,11 +51,18 @@ export function DepartmentTabs({ departments, active, onSelect, counts }: Depart
       aria-label="Departments"
       data-testid="chart-department-tabs"
       onKeyDown={(event) => {
-        if (event.key === 'ArrowRight') step(1);
-        else if (event.key === 'ArrowLeft') step(-1);
-        else return;
+        const delta = inlineStep(event.key, elementDirection(event.currentTarget));
+        if (delta === 0) return;
+        step(delta);
         event.preventDefault();
       }}
+      /* `overflow-x-auto`, not `flex-wrap`: at 1440px the seven tabs are one row, which is
+         the frame Part VI is judged against, and a bar that wraps would put the active
+         underline above the rule instead of on it. Narrower than the bar it scrolls, and
+         no tab is dropped or truncated — roving focus calls `.focus()`, which brings the
+         tab into view, so the keyboard reaches all seven at any width. What is still
+         missing is the *affordance* that the bar continues; that is filed, see
+         comms/specs/chart-matrix.md REQ-CHT-49 and its Deliberately-not-done entry. */
       className="flex items-end gap-6 overflow-x-auto border-b border-line"
     >
       {departments.map((department) => {

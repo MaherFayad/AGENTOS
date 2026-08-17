@@ -5,9 +5,32 @@
  * Failures come back as a sentence, not an exception type the UI has to decode — the
  * drawer's job is to tell the truth about what it could not reach.
  *
+ * ---
+ *
+ * ## Every path is built from the route table, not typed here (M15, ADR-015)
+ *
+ * M15 moved every project-shaped route under `/api/p/:project`. This file held five paths
+ * as string literals, so nothing broke at build time and nothing failed legibly at run
+ * time: `GET /api/agents/:slug` began answering **400 `project_scope_missing`** and the
+ * drawer rendered that as *"this agent could not be loaded"* — a sentence about the agent,
+ * for a fault in the address. The drawer could not open an agent or start a run against a
+ * current runner for a day, and no test, type or screen said so.
+ *
+ * A literal is what made that possible, so there is no longer one to type: the paths come
+ * from `RUNNER_ROUTES`, the same table the server mounts from, the same shape as
+ * `map/data/socket.ts`. The next time a route moves, this file moves with it or fails to
+ * compile.
+ *
+ * **`null` project means *do not ask*, never *ask the unscoped one*.** The pre-project
+ * paths are still mounted and refuse by name so the migration stays visible
+ * (`LEGACY_UNSCOPED_PATHS`); falling back to one would convert that deliberate 400 into a
+ * shrug, and a 400 swallowed by a fallback is exactly how this stayed invisible.
+ *
  * Owner: drawer-engineer
  */
 
+import { PROJECT_ROUTE_PREFIX, RUNNER_ROUTES } from '@agnetos/contracts';
+import { NO_PROJECT_SENTENCE, projectApiUrl } from '@/components/shell/useSearchIndex';
 import { API_BASE } from '../run/transport';
 import { normalizeAgentDoc, normalizeRuns } from './normalize';
 import type { AgentDoc, RunRow } from './types';
@@ -90,13 +113,60 @@ function slugPath(slug: string): string {
   return slug.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 
-/** `GET /api/agents/:slug` — parsed frontmatter + body. */
-export async function fetchAgent(slug: string, signal?: AbortSignal): Promise<AgentDoc> {
-  return normalizeAgentDoc(await getJson(`/api/agents/${slugPath(slug)}`, signal), slug);
+/**
+ * The project-scoped path for a route template, or a refusal that says why.
+ *
+ * `projectApiUrl` is `shell-navigation-engineer`'s shared seam (their answer of
+ * 2026-08-17: *"it is exported and it is the seam"*), not a fourth private copy. It
+ * returns `null` both when there is no project and when the segment in the address bar is
+ * not a slug — `projectPath` throws on the latter, and a malformed URL is a reason to stop
+ * asking, not a reason to throw out of a render.
+ *
+ * Turning that `null` into an `ApiCallError` here means the drawer's existing failure
+ * surface prints the reason: one sentence, in the panel, naming the fix. No request leaves
+ * the browser.
+ */
+function scopedPath(template: string, project: string | null): string {
+  const path = projectApiUrl(template, project);
+  if (path === null) throw new ApiCallError(NO_PROJECT_SENTENCE);
+  return path;
+}
+
+/** `/api/p/:project/agents/*` with the wildcard filled in. */
+function agentPath(project: string | null, slug: string): string {
+  return scopedPath(RUNNER_ROUTES.agent.path, project).replace('*', slugPath(slug));
+}
+
+/** `GET /api/p/:project/agents/:slug` — parsed frontmatter + body. */
+export async function fetchAgent(
+  project: string | null,
+  slug: string,
+  signal?: AbortSignal,
+): Promise<AgentDoc> {
+  return normalizeAgentDoc(await getJson(agentPath(project, slug), signal), slug);
 }
 
 /**
- * `GET /api/metrics/runs?agent=&limit=5` — the LAST RUNS rows
+ * `GET /api/p/:project/metrics/runs` — the one template in this file with no export to
+ * import.
+ *
+ * The metrics surface is `observability-engineer`'s and lives in `apps/runner`, which a
+ * web module may not import; `@agnetos/contracts` carries only their `COST_TICKER_ROUTE`.
+ * So the half that **moved** — the project prefix — comes from the contract, and only the
+ * suffix is written here. That is deliberately the same construction their own route table
+ * uses (`METRICS_ROUTES` in `apps/runner/src/routes/metrics.ts`), and for the reason stated
+ * there: *"kept as suffixes rather than written out in full so that the project prefix has
+ * exactly one spelling in this codebase … and a prefix with one spelling is a prefix that
+ * cannot drift."*
+ *
+ * A `decision-request` is open with `observability-engineer` to export their route table
+ * from `@agnetos/contracts` beside `COST_TICKER_ROUTE`, at which point this constant is
+ * deleted rather than corrected.
+ */
+const METRICS_RUNS_PATH = `${PROJECT_ROUTE_PREFIX}/metrics/runs`;
+
+/**
+ * `GET /api/p/:project/metrics/runs?agent=&limit=5` — the LAST RUNS rows
  * (owner: `observability-engineer`, `comms/specs/observability.md`).
  *
  * **Not `GET /api/runs`.** That route is the runner's *in-memory* queue view
@@ -113,31 +183,62 @@ export async function fetchAgent(slug: string, signal?: AbortSignal): Promise<Ag
  * `/api/runs` is still the right read for anything about *this process* — the live queue,
  * a run that has not been flushed to the ledger yet. It is simply not history.
  */
-export async function fetchRuns(slug: string, limit = 5, signal?: AbortSignal): Promise<RunRow[]> {
+export async function fetchRuns(
+  project: string | null,
+  slug: string,
+  limit = 5,
+  signal?: AbortSignal,
+): Promise<RunRow[]> {
+  const path = scopedPath(METRICS_RUNS_PATH, project);
   return normalizeRuns(
-    await getJson(`/api/metrics/runs?agent=${encodeURIComponent(slug)}&limit=${limit}`, signal),
+    await getJson(`${path}?agent=${encodeURIComponent(slug)}&limit=${limit}`, signal),
     limit,
   );
 }
 
-/** `POST /api/schedule` — writes `schedule:` into frontmatter via a git commit. */
-export async function postSchedule(slug: string, cron: string): Promise<{ ok?: boolean; nextRunAt?: string; commitSha?: string }> {
-  return (await postJson('/api/schedule', { agent: slug, cron })) as { ok?: boolean; nextRunAt?: string; commitSha?: string };
+/** `POST /api/p/:project/schedule` — writes `schedule:` into frontmatter via a git commit. */
+export async function postSchedule(
+  project: string | null,
+  slug: string,
+  cron: string,
+): Promise<{ ok?: boolean; nextRunAt?: string; commitSha?: string }> {
+  return (await postJson(scopedPath(RUNNER_ROUTES.schedule.path, project), { agent: slug, cron })) as {
+    ok?: boolean;
+    nextRunAt?: string;
+    commitSha?: string;
+  };
 }
 
-/** `POST /api/approvals/:runId` — resumes or aborts a run paused at its plan. */
-export async function postApproval(runId: string, decision: 'approve' | 'deny', note?: string): Promise<void> {
-  await postJson(`/api/approvals/${encodeURIComponent(runId)}`, { decision, ...(note ? { note } : {}) });
+/** `POST /api/p/:project/approvals/:runId` — resumes or aborts a run paused at its plan. */
+export async function postApproval(
+  project: string | null,
+  runId: string,
+  decision: 'approve' | 'deny',
+  note?: string,
+): Promise<void> {
+  const path = scopedPath(RUNNER_ROUTES.approvalDecision.path, project).replace(
+    ':runId',
+    encodeURIComponent(runId),
+  );
+  await postJson(path, { decision, ...(note ? { note } : {}) });
 }
 
 /**
  * `GET /api/status` — `{tailscale, queueDepth}`. Used only to answer "is the runner
  * there?", so ▶ Run can be honestly enabled or honestly disabled.
+ *
+ * **Deliberately unscoped, and not an oversight to be fixed later.** `RUNNER_ROUTES.status`
+ * is `scope: 'coordinator'` — it describes the process, not a project's data — and both
+ * `runner-engineer` (*"the coordinator itself — /api/status, /api/projects"*) and
+ * `shell-navigation-engineer` (*"`/api/status` staying unscoped is correct and I have
+ * written it down as such, so nobody 'fixes' it later"*) have said so in writing. The
+ * template still comes from the route table, so "unscoped" is a fact this file reads rather
+ * than a string it asserts.
  */
 export async function fetchRunnerStatus(
   signal?: AbortSignal,
 ): Promise<{ tailscale?: string; queueDepth?: number; runnerConfigured?: boolean }> {
-  return (await getJson('/api/status', signal)) as {
+  return (await getJson(RUNNER_ROUTES.status.path, signal)) as {
     tailscale?: string;
     queueDepth?: number;
     runnerConfigured?: boolean;
@@ -148,11 +249,17 @@ export async function fetchRunnerStatus(
  * `Take it ↓` — the SKILL.md folder as a zip.
  *
  * NOT IN THE CONTRACT YET. A `decision-request` is open with `runner-engineer` for
- * `GET /api/agents/:slug/download`. Until it is answered the button is disabled with a
- * tooltip that says so, rather than linking at a 404.
+ * `GET /api/p/:project/agents/:slug/download`. Until it is answered the button is disabled
+ * with a tooltip that says so, rather than linking at a 404.
  */
 export const DOWNLOAD_ROUTE_AGREED = false;
 
-export function downloadUrl(slug: string): string {
-  return `${API_BASE}/api/agents/${slugPath(slug)}/download`;
+/**
+ * `null` when the URL names no project — an `<a download>` is a URL and not a call, so
+ * there is nothing to throw at and nothing to catch. The caller renders no link, which is
+ * the same answer the disabled button already gives for the larger reason above.
+ */
+export function downloadUrl(project: string | null, slug: string): string | null {
+  const path = projectApiUrl(RUNNER_ROUTES.agent.path, project);
+  return path === null ? null : `${API_BASE}${path.replace('*', slugPath(slug))}/download`;
 }

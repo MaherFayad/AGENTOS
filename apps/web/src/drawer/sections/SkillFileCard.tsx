@@ -38,7 +38,8 @@ export function SkillFileCard({
   scheduleResult,
 }: {
   fileCount: number;
-  downloadHref: string;
+  /** `null` when the URL names no project (M15) — there is no address to link at. */
+  downloadHref: string | null;
   capabilities: Capabilities;
   /** The agent's current cron, from frontmatter. Prefills the schedule field. */
   schedule: string | null;
@@ -63,7 +64,7 @@ export function SkillFileCard({
       {inWords ? <p className={s.sectionNote}>Scheduled: {inWords}.</p> : null}
 
       <div className={s.actions}>
-        {capabilities.download ? (
+        {capabilities.download && downloadHref ? (
           // A real <a download>, not a button with a click handler: it must survive
           // middle-click, right-click-save and a long-press on a phone. `Pill` is
           // button-only today (design-system-guardian owns it — an `as` prop is requested
