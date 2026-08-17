@@ -63,8 +63,10 @@ async function fetchPayload(url: string, signal: AbortSignal): Promise<GraphPayl
   }
 }
 
-async function loadGraph(signal: AbortSignal): Promise<GraphResource | 'abort'> {
-  const primary = await fetchPayload(graphHttpUrl(), signal);
+async function loadGraph(project: string, signal: AbortSignal): Promise<GraphResource | 'abort'> {
+  const url = graphHttpUrl(project);
+  if (url === null) return 'abort';
+  const primary = await fetchPayload(url, signal);
   if (primary === 'abort') return 'abort';
   if (!('reason' in primary)) return { state: 'ready', data: primary };
 
@@ -89,10 +91,29 @@ function parseDelta(raw: unknown): GraphDelta | null {
 }
 
 /**
- * One fetch of the stored layout, then `/ws/graph` deltas. No polling — search already
- * polls `/api/graph`, and a second interval would fight the live-drop animation.
+ * One fetch of the stored layout, then `WS /ws/p/:project/graph` deltas. No polling —
+ * search already polls the same graph route on its own interval, and a second one would
+ * fight the live-drop animation.
+ *
+ * ## `project === null` waits; it does not ask
+ *
+ * There are only two honest answers to "the URL names no project" and this is the one
+ * chosen (M15 / REQ-MAP-39): **issue no request of any kind and stay `loading`.** Not the
+ * unscoped route, which now answers 400 and whose swallowed failure is exactly how this
+ * regression stayed invisible for a milestone; and not the `/graph.json` artifact either,
+ * because an artifact that names no project would put an unlabelled roster on screen under
+ * whatever heading the reader supplies from memory.
+ *
+ * `loading` rather than an empty state because "not yet" is literally what is true.
+ * `MapView` is only mounted by `app/(views)/p/[project]/map/**`, so a null segment is not
+ * a state a person can navigate to: it means the pathname has not resolved yet, and a
+ * pre-M15 link is being rewritten by `[...legacy]/page.tsx` — which renders its own
+ * message, not the galaxy. Nothing is being hidden here, because nothing was asked.
  */
-export function useGraph(provided?: GraphPayload): {
+export function useGraph(
+  project: string | null,
+  provided?: GraphPayload,
+): {
   resource: GraphResource;
   arrivingIds: ReadonlySet<string>;
 } {
@@ -109,16 +130,20 @@ export function useGraph(provided?: GraphPayload): {
       return;
     }
 
+    // No project ⇒ no fetch, no socket, no artifact. See the note on this function.
+    if (project === null) return;
+
     const controller = new AbortController();
-    void loadGraph(controller.signal).then((result) => {
+    void loadGraph(project, controller.signal).then((result) => {
       if (result === 'abort') return;
       if (result.state === 'ready') payloadRef.current = result.data;
       setResource(result);
     });
 
+    const socketUrl = graphSocketUrl(project);
     let socket: WebSocket | null = null;
     try {
-      socket = new WebSocket(graphSocketUrl());
+      socket = socketUrl === null ? null : new WebSocket(socketUrl);
     } catch {
       socket = null;
     }
@@ -143,7 +168,7 @@ export function useGraph(provided?: GraphPayload): {
         }
 
         if (frame.type === 'stale') {
-          void loadGraph(controller.signal).then((result) => {
+          void loadGraph(project, controller.signal).then((result) => {
             if (result === 'abort') return;
             if (result.state === 'ready') payloadRef.current = result.data;
             setResource(result);
@@ -168,7 +193,7 @@ export function useGraph(provided?: GraphPayload): {
       controller.abort();
       socket?.close();
     };
-  }, [provided]);
+  }, [project, provided]);
 
   useEffect(() => {
     if (arrivingIds.size === 0) return;

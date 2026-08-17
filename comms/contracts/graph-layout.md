@@ -7,7 +7,7 @@ client-side, so node positions are stable between visits (§2.1 — theirs is st
 map that reshuffles every reload feels cheap). The client runs d3-force only for
 interaction warmth (drag springs), seeded from these positions.
 
-## Payload — `GET /api/graph`
+## Payload — `GET /api/p/:project/graph`
 
 ```jsonc
 {
@@ -121,7 +121,40 @@ numeral; `YOUR TREE` filters to installed/live only).
 
 ## Deltas over WebSocket
 
-`/ws/graph` pushes `{version, added[], removed[], changed[]}`. The client re-seeds the
-simulation with existing positions frozen and lets only new nodes settle — so a weekly
-agent drop animates in without the whole map jumping. This is a feature, not an
+`WS /ws/p/:project/graph` pushes `{version, added[], removed[], changed[]}`. The client
+re-seeds the simulation with existing positions frozen and lets only new nodes settle — so
+a weekly agent drop animates in without the whole map jumping. This is a feature, not an
 optimization; do not replace it with a full refetch.
+
+## Both endpoints name their project, and a client may not spell them itself
+
+M15 moved both under `/api/p/:project` and `/ws/p/:project` (ADR-015). The unscoped forms
+still exist and answer **400 `project_scope_missing`**; the unscoped socket path is not
+registered at all.
+
+**Build both URLs from `RUNNER_ROUTES` via `projectPath()`** — never from a string literal.
+This is not style. The map held the two paths as literals, so when they moved, the HTTP
+call took a 400 that the client counted as one more "not built" and fell through to the
+static artifact, and the socket connected to nothing. The galaxy still drew, from a file,
+and live drops silently stopped for a milestone. A literal is what made a route change
+survivable-looking; a helper makes it a compile error.
+
+When the caller cannot name a project, the correct URL is **`null` — do not ask.** Not the
+unscoped path (a 400 swallowed by a fallback is precisely the failure above) and not the
+artifact (see below). Reference implementations: `apps/web/src/map/data/socket.ts` and
+`projectApiUrl` in `apps/web/src/components/shell/useSearchIndex.ts`.
+
+## Artifact — `/graph.json`, and the day it stops being safe
+
+`npm run graph:build` writes `apps/web/public/graph.json` and the client falls back to it
+when the runner cannot serve the payload (ADR-003). It is what makes the map work with no
+runner at all, and it stays.
+
+**It carries no project, and the payload has no field for one.** That is sound only while
+the coordinator mounts exactly one library, which is the M15 state (`/api/status` →
+`projects.mounted`). The moment a second library is mounted, this file becomes one
+project's map served under whatever project the URL happens to name — the exact hazard the
+segment exists to remove. The fix at that point is a `project` field on `GraphPayload`
+written by `scripts/build-graph.mjs` and checked against the URL's segment before the
+fallback is accepted, or dropping the fallback. Whoever mounts the second project owns
+that change; it is deliberately not pre-built here (`comms/specs/map.md` REQ-MAP-40).

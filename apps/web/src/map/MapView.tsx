@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import type { GraphNode, GraphPayload } from '@agnetos/contracts';
 import { findDepartment } from '@agnetos/contracts';
 import { DURATION, useReducedMotion, withReducedMotion } from '@/components/primitives/motion';
-import { useProjectHref } from '@/components/shell/useProjectHref';
+import { useProjectHref, useProjectSegment } from '@/components/shell/useProjectHref';
 import { openDrawer } from '@/drawer/events';
 import { useT } from '@/i18n';
 import { emit, on } from '@/lib/shell-bus';
@@ -68,7 +68,11 @@ export function MapView({
   const href = useProjectHref();
   const t = useT();
   const reduced = useReducedMotion();
-  const { resource, arrivingIds } = useGraph(provided);
+  // One seam for both halves of the project axis: the URLs the map *builds* (`href`) and
+  // the URLs it *calls* (`useGraph`) read the same segment off the same pathname. M15
+  // wired the first and left the second on the pre-project paths — REQ-MAP-39.
+  const project = useProjectSegment();
+  const { resource, arrivingIds } = useGraph(project, provided);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
