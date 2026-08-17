@@ -84,7 +84,38 @@ export function toUnixNano(date: Date): string {
   return `${BigInt(date.getTime()) * 1_000_000n}`;
 }
 
-type AttrValue = string | number | boolean | undefined | null;
+export type AttrValue = string | number | boolean | undefined | null;
+
+/**
+ * The three ids **every** span in this system carries, and the reason they are a type
+ * rather than a convention.
+ *
+ * PDPL rule 4 (*client data does not cross clients*) was enforceable in Postgres, in the
+ * library plane and in the brain, and merely *stateable* here: `instrument.ts` wrote
+ * agent, department, trigger, status, dry_run, cost_source and redactions onto the root
+ * span and no project, so N clients' traces landed in one Langfuse project, interleaved,
+ * with no attribute to filter on. Rule 7 (right to erasure) is the harder half — a
+ * deletion request has to be answerable by *selecting* a subject's data, and a trace
+ * store with no client axis offers nothing to select by.
+ *
+ * The fix is structural on purpose. Making this a required member of `OtelSpan`
+ * means a span that cannot name its project **does not compile** — the same shape
+ * `lib/graph.ts` and `lib/panels.ts` took when they stopped importing `RunnerConfig`
+ * so that reaching for the coordinator's path became a type error rather than a habit.
+ * A span added next year gets the project because the compiler names the site, not
+ * because whoever added it remembered this paragraph.
+ *
+ * All three are ids: a uuid and two slug paths (`{project}/{department}/{slug}`,
+ * `{layer}:{path}@sha256:…`). None can carry client content, so none needs redacting.
+ */
+export type SpanScope = {
+  'agnetos.run.id': string;
+  'agnetos.project.id': string;
+  'agnetos.agent.ref': string;
+};
+
+/** Span attributes: anything you like, **plus** the scope, which is not optional. */
+export type SpanAttributes = SpanScope & Record<string, AttrValue>;
 
 function attributes(map: Record<string, AttrValue>): unknown[] {
   const out: unknown[] = [];
@@ -107,7 +138,8 @@ export type OtelSpan = {
   endTime: Date;
   /** OTLP status: 1 = OK, 2 = ERROR. */
   error?: string;
-  attributes: Record<string, AttrValue>;
+  /** Scoped, always. See `SpanScope` — omitting the project is a compile error. */
+  attributes: SpanAttributes;
 };
 
 /** Build the OTLP/JSON body for a set of spans that share a trace. */

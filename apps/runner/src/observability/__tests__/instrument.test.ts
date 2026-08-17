@@ -12,7 +12,17 @@ import { composeActivity, formatDuration, renderActivityRow } from '../activity.
 import { priceRun } from '../pricing.ts';
 import { assertLocalSink, buildOtlpPayload, newTraceId, toUnixNano } from '../langfuse.ts';
 import { refreshEnvSecrets } from '../redact.ts';
-import type { RunRecord, ToolCallRecord } from '../types.ts';
+import type { RunAttribution, RunRecord, ToolCallRecord } from '../types.ts';
+
+/**
+ * Every `startRun` below spreads this, because there is no longer a way not to: the three
+ * ids are required on `RunInit`. Written out once so the tests read about what they test.
+ */
+const ATTRIBUTION: RunAttribution = {
+  projectId: '11111111-1111-4111-8111-111111111111',
+  agentRef: 'agnetos/sales/account-enrichment',
+  sourceRef: 'project:agents/sales/account-enrichment/SKILL.md@sha256:abc',
+};
 
 function harness() {
   const sent: Record<string, unknown>[] = [];
@@ -48,6 +58,7 @@ test('a run produces one trace, with a span per tool call under a single root', 
   const { obs, sent, runs, tools } = harness();
 
   const trace = obs.startRun({
+    ...ATTRIBUTION,
     agent: 'sales/account-enrichment',
     department: 'sales',
     agentName: 'Account Enrichment',
@@ -88,7 +99,7 @@ test('a run produces one trace, with a span per tool call under a single root', 
 test('cost is derived from published rates and says so', async () => {
   refreshEnvSecrets({});
   const { obs } = harness();
-  const trace = obs.startRun({ agent: 'sales/a', department: 'sales', trigger: 'api' });
+  const trace = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', agentRef: 'agnetos/sales/a', department: 'sales', trigger: 'api' });
   trace.usage({ model: 'claude-opus-5', inputTokens: 1_000_000, outputTokens: 100_000 });
   const record = await trace.finish({ status: 'ok' });
 
@@ -100,7 +111,7 @@ test('cost is derived from published rates and says so', async () => {
 test('an SDK-reported cost beats our arithmetic', async () => {
   refreshEnvSecrets({});
   const { obs } = harness();
-  const trace = obs.startRun({ agent: 'sales/a', department: 'sales', trigger: 'api' });
+  const trace = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', agentRef: 'agnetos/sales/a', department: 'sales', trigger: 'api' });
   trace.usage({ model: 'claude-opus-5', inputTokens: 1_000_000, outputTokens: 100_000, costUsd: 6.9 });
   const record = await trace.finish({ status: 'ok' });
   assert.equal(record.costUsd, 6.9);
@@ -110,7 +121,7 @@ test('an SDK-reported cost beats our arithmetic', async () => {
 test('an unknown model yields no cost rather than a plausible one', async () => {
   refreshEnvSecrets({});
   const { obs } = harness();
-  const trace = obs.startRun({ agent: 'sales/a', department: 'sales', trigger: 'api' });
+  const trace = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', agentRef: 'agnetos/sales/a', department: 'sales', trigger: 'api' });
   trace.usage({ model: 'some-model-we-do-not-price', inputTokens: 5_000, outputTokens: 900 });
   const record = await trace.finish({ status: 'ok' });
   assert.equal(record.costUsd, null, 'standing rule 9: never invent a number');
@@ -126,7 +137,7 @@ test('Sonnet 5 introductory pricing applies only until it expires', () => {
 test('a run cannot be finished twice', async () => {
   refreshEnvSecrets({});
   const { obs, runs } = harness();
-  const trace = obs.startRun({ agent: 'sales/a', department: 'sales', trigger: 'api' });
+  const trace = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', agentRef: 'agnetos/sales/a', department: 'sales', trigger: 'api' });
   await trace.finish({ status: 'ok' });
   await assert.rejects(() => trace.finish({ status: 'ok' }), /already finished/);
   assert.equal(runs.length, 1, 'a double finish must not double-count a run');
@@ -151,7 +162,7 @@ test('a Langfuse outage does not fail the run or lose the ledger row', async () 
     onSinkError: (_e, runId) => warnings.push(runId),
   });
 
-  const trace = obs.startRun({ agent: 'sales/a', department: 'sales', trigger: 'manual' });
+  const trace = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', agentRef: 'agnetos/sales/a', department: 'sales', trigger: 'manual' });
   const record = await trace.finish({ status: 'ok' });
 
   assert.equal(runs.length, 1, 'the number the dashboards read is still written');
@@ -239,7 +250,14 @@ test('the OTLP payload is well formed', () => {
       name: 'run:sales/a',
       startTime: at,
       endTime: at,
-      attributes: { 'langfuse.trace.name': 'run:sales/a', 'agnetos.count': 3, 'agnetos.ok': true },
+      attributes: {
+        'langfuse.trace.name': 'run:sales/a',
+        'agnetos.count': 3,
+        'agnetos.ok': true,
+        'agnetos.run.id': 'r1',
+        'agnetos.project.id': ATTRIBUTION.projectId,
+        'agnetos.agent.ref': ATTRIBUTION.agentRef,
+      },
     },
   ]) as Record<string, unknown>;
 
@@ -249,4 +267,138 @@ test('the OTLP payload is well formed', () => {
   assert.deepEqual(attrs.find((a) => a.key === 'agnetos.count')?.value, { intValue: '3' });
   assert.deepEqual(attrs.find((a) => a.key === 'agnetos.ok')?.value, { boolValue: true });
   assert.deepEqual(span.status, { code: 1 });
+});
+
+// ---------------------------------------------------------------------------------
+// The project axis on the trace plane (PDPL rule 4 · rule 7 · `Plan §22` sign-off).
+//
+// Structural, and labelled structural: zero runs have ever executed, so no span has ever
+// been shipped to a real Langfuse with or without these attributes. What these tests
+// prove is that the runner *emits* them and that a span without them cannot be written.
+// They do not prove that Langfuse indexes them, because nothing has ever been indexed.
+// ---------------------------------------------------------------------------------
+
+function attrOf(span: Record<string, unknown>, key: string): string | undefined {
+  const attrs = span.attributes as { key: string; value: Record<string, string> }[];
+  return attrs.find((a) => a.key === key)?.value.stringValue;
+}
+
+test('every span a run emits names its project — not only the root', async () => {
+  refreshEnvSecrets({});
+  const { obs, sent } = harness();
+
+  const trace = obs.startRun({
+    ...ATTRIBUTION,
+    agent: 'sales/account-enrichment',
+    department: 'sales',
+    trigger: 'manual',
+  });
+  trace.tool('exa.search', { q: 'acme' }).ok({ hits: 3 });
+  trace.tool('firecrawl.scrape', { url: 'https://acme.sa' }).error('timeout');
+  trace.event('plan', { note: 'drafted' });
+  trace.usage({ model: 'claude-opus-5', inputTokens: 10, outputTokens: 10 });
+  await trace.finish({ status: 'ok' });
+
+  const spans = spansOf(sent[0]);
+  // root + 2 tools + 1 event + 1 generation. Named so a future span type that forgets
+  // the scope fails the count as well as the attribute.
+  assert.equal(spans.length, 5);
+  for (const span of spans) {
+    assert.equal(
+      attrOf(span, 'agnetos.project.id'),
+      ATTRIBUTION.projectId,
+      `span ${String(span.name)} must carry its project`,
+    );
+    assert.equal(attrOf(span, 'agnetos.agent.ref'), ATTRIBUTION.agentRef);
+  }
+});
+
+test('a span that cannot name its project does not compile', () => {
+  // The point of the whole change: this is a *type* error, caught by
+  // `npx tsc --noEmit -p apps/runner/tsconfig.json`, not a runtime check anybody can
+  // forget to run. `@ts-expect-error` fails the typecheck if the error ever stops
+  // happening, so deleting `SpanScope` from `OtelSpan` breaks this test rather than
+  // quietly re-opening the hole.
+  const unscoped = () =>
+    buildOtlpPayload([
+      {
+        traceId: newTraceId(),
+        spanId: 'aaaaaaaaaaaaaaaa',
+        name: 'run:sales/a',
+        startTime: new Date(0),
+        endTime: new Date(0),
+        // @ts-expect-error — attributes without `SpanScope` is not a valid span
+        attributes: { 'langfuse.trace.name': 'run:sales/a' },
+      },
+    ]);
+  assert.equal(typeof unscoped, 'function');
+});
+
+test('the trace carries a project handle at trace level, which is what erasure selects on', async () => {
+  refreshEnvSecrets({});
+  const { obs, sent } = harness();
+  const trace = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', department: 'sales', trigger: 'api' });
+  await trace.finish({ status: 'ok' });
+
+  const root = spansOf(sent[0])[0];
+  // Span-level `agnetos.project.id` survives an observation export; trace-level
+  // `langfuse.trace.metadata.project` is what a *trace list* filters on. Erasure needs
+  // the second one, so both are asserted rather than one standing in for the other.
+  assert.equal(attrOf(root, 'langfuse.trace.metadata.project'), ATTRIBUTION.projectId);
+  assert.equal(attrOf(root, 'langfuse.trace.metadata.agent_ref'), ATTRIBUTION.agentRef);
+  assert.equal(attrOf(root, 'langfuse.trace.metadata.source_ref'), ATTRIBUTION.sourceRef);
+});
+
+test("two projects' traces are separable by attribute, which they were not before", async () => {
+  refreshEnvSecrets({});
+  const { obs, sent } = harness();
+  const b = { ...ATTRIBUTION, projectId: '22222222-2222-4222-8222-222222222222', agentRef: 'client-b/sales/a' };
+
+  const one = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', department: 'sales', trigger: 'api' });
+  one.tool('exa.search').ok();
+  await one.finish({ status: 'ok' });
+
+  const two = obs.startRun({ ...b, agent: 'sales/a', department: 'sales', trigger: 'api' });
+  two.tool('exa.search').ok();
+  await two.finish({ status: 'ok' });
+
+  const all = sent.flatMap((payload) => spansOf(payload));
+  assert.equal(all.length, 4);
+  const projectA = all.filter((s) => attrOf(s, 'agnetos.project.id') === ATTRIBUTION.projectId);
+  const projectB = all.filter((s) => attrOf(s, 'agnetos.project.id') === b.projectId);
+  assert.equal(projectA.length, 2);
+  assert.equal(projectB.length, 2);
+  assert.equal(projectA.length + projectB.length, all.length, 'no span is unattributable');
+});
+
+test('the activity line is redacted before it reaches the ledger or the feed', async () => {
+  refreshEnvSecrets({});
+  const { obs, runs } = harness();
+
+  // Case 1 — the agent's own sentence. `summary` is free prose an agent chose, and it
+  // is the same class of payload `runner-engineer` removed from the cross-project
+  // approvals queue last night: a structured input flattened into words.
+  const summarised = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', department: 'sales', trigger: 'manual' });
+  const withSummary = await summarised.finish({
+    status: 'ok',
+    summary: { event: 'Proposal drafted', detail: 'client_name: Fatima Al-Harbi · sent for review' },
+  });
+  assert.equal(withSummary.activityDetail?.includes('Fatima Al-Harbi'), false);
+  assert.equal(withSummary.activityEvent, 'Proposal drafted', 'the sentence survives; the payload does not');
+  assert.ok(withSummary.activityDetail?.includes('sent for review'), 'redaction is surgical, not a blanket');
+  assert.ok(withSummary.redactionCount >= 1, 'the activity hits are counted, not silently dropped');
+
+  // Case 2 — no summary, so the fallback sentence is built from the artefact *filename*,
+  // which the agent also chose. `<contact>-proposal.md` puts a person's address into
+  // `ops.agent_runs.activity_detail` and onto the §2.5 feed, the most-read widget on the
+  // dashboard. This is the half that is derived rather than received, which is why it
+  // was the half with no redaction pass on it.
+  const bare = obs.startRun({ ...ATTRIBUTION, agent: 'sales/a', department: 'sales', trigger: 'manual' });
+  const withArtifact = await bare.finish({
+    status: 'ok',
+    artifacts: [{ path: '/out/fatima.alharbi@acme.sa-proposal.md', kind: 'md' }],
+  });
+  assert.equal(withArtifact.activityDetail?.includes('fatima.alharbi@acme.sa'), false);
+  assert.ok(withArtifact.activityDetail?.includes('written'), 'the row still says a file was written');
+  assert.equal(JSON.stringify(runs).includes('fatima.alharbi@acme.sa'), false, 'nor into the ledger row');
 });

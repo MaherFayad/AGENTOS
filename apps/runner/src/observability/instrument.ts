@@ -17,7 +17,7 @@
  */
 
 import { composeActivity } from './activity.ts';
-import { buildOtlpPayload, newSpanId, newTraceId, type OtelSpan } from './langfuse.ts';
+import { buildOtlpPayload, newSpanId, newTraceId, type OtelSpan, type SpanScope } from './langfuse.ts';
 import { priceRun } from './pricing.ts';
 import { redact, type RedactionHit } from './redact.ts';
 import type {
@@ -69,6 +69,16 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
     const startedAt = now();
     const traceUrl = deps.sink.urlFor(traceId);
 
+    // Every span this run emits carries these three, because `OtelSpan.attributes` is
+    // typed to require them (`SpanScope`). Computed once, spread everywhere — a span
+    // that forgets is a type error at the site that added it, not a gap discovered
+    // during a deletion request. See `SpanScope` for why it is a type and not a habit.
+    const scope: SpanScope = {
+      'agnetos.run.id': runId,
+      'agnetos.project.id': init.projectId,
+      'agnetos.agent.ref': init.agentRef,
+    };
+
     const hits: RedactionHit[] = [];
     const redactedInputs = init.inputs ? redact(init.inputs, 'inputs') : null;
     if (redactedInputs) hits.push(...redactedInputs.hits);
@@ -113,7 +123,7 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
             'langfuse.observation.output': redactedOutput ? json(redactedOutput.value) : undefined,
             'agnetos.tool.name': name,
             'agnetos.tool.status': status,
-            'agnetos.run.id': runId,
+            ...scope,
           },
         });
 
@@ -162,7 +172,7 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
           }),
           'langfuse.observation.cost_details':
             typeof u.costUsd === 'number' ? json({ total: u.costUsd }) : undefined,
-          'agnetos.run.id': runId,
+          ...scope,
         },
       });
     }
@@ -181,7 +191,7 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
         attributes: {
           'langfuse.observation.type': 'event',
           'langfuse.observation.output': redactedDetail ? json(redactedDetail.value) : undefined,
-          'agnetos.run.id': runId,
+          ...scope,
         },
       });
     }
@@ -196,7 +206,19 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
       const redactedError = outcome.error ? (redact(outcome.error, 'error').value as string) : null;
       const agentName = init.agentName ?? humaniseSlug(init.agent);
 
-      const activity = composeActivity({
+      // The activity line is composed from two things a person or an agent wrote:
+      // `outcome.summary` (free prose the agent chose) and an artefact *filename* (which
+      // the agent also chose, and which is exactly where a name or an email ends up:
+      // `ACME-fatima.alharbi@acme.sa-proposal.md`). It was going into `ops.agent_runs`
+      // and onto the §2.5 feed unredacted — every other payload in this module passes
+      // through `redact` and this one did not, because it is *derived* rather than
+      // *received* and so did not look like an input.
+      //
+      // Compose first, redact after: the redactor has to see the finished sentence,
+      // since the leak can straddle the join between the summary and the facts clause.
+      // Still at instrumentation, still before the sink and before Postgres — rule 3 is
+      // about *where* the pass runs, not about how early in this function it sits.
+      const composed = composeActivity({
         agentName,
         status: outcome.status,
         trigger: init.trigger,
@@ -206,6 +228,9 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
         artifacts: outcome.artifacts,
         summary: outcome.summary,
       });
+      const redactedActivity = redact(composed, 'activity');
+      if (redactedActivity) hits.push(...redactedActivity.hits);
+      const activity = redactedActivity.value as typeof composed;
 
       const record: RunRecord = {
         runId,
@@ -237,9 +262,11 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
         // Carried, never derived. `agent_ref` could be reconstructed as
         // `${project}/${agent}` and `source_ref` could not — so neither is, because a
         // provenance field that is right half the time is worse than one that refuses.
-        projectId: init.projectId ?? null,
-        agentRef: init.agentRef ?? null,
-        sourceRef: init.sourceRef ?? null,
+        // No `?? null` on the first three any more: they are required on `RunInit`, so a
+        // fallback here would be unreachable code that reads like a supported case.
+        projectId: init.projectId,
+        agentRef: init.agentRef,
+        sourceRef: init.sourceRef,
         accountId: init.accountId ?? null,
         accountSource: init.accountSource ?? 'unattributed',
       };
@@ -258,6 +285,18 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
           'langfuse.observation.input': redactedInputs ? json(redactedInputs.value) : undefined,
           'langfuse.observation.model.name': model ?? undefined,
           'langfuse.observation.cost_details': costUsd === null ? undefined : json({ total: costUsd }),
+          // Trace-*level* metadata, set on the root because that is the documented
+          // mapping. `agnetos.project.id` below is on every span and is what an
+          // exported observation carries; these two are what the Langfuse UI and its
+          // API can filter a *trace list* on, which is the operation a deletion request
+          // actually needs. Both are ids, so neither can carry client content.
+          //
+          // Never verified against a running Langfuse: zero runs have executed, so no
+          // trace has ever been shipped with or without this attribute (Part VII.3 —
+          // this is structural, and saying so is the point).
+          'langfuse.trace.metadata.project': init.projectId,
+          'langfuse.trace.metadata.agent_ref': init.agentRef,
+          'langfuse.trace.metadata.source_ref': init.sourceRef,
           'langfuse.trace.metadata.agent': init.agent,
           'langfuse.trace.metadata.department': init.department,
           'langfuse.trace.metadata.trigger': init.trigger,
@@ -265,7 +304,7 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
           'langfuse.trace.metadata.dry_run': Boolean(init.dryRun),
           'langfuse.trace.metadata.cost_source': costSource,
           'langfuse.trace.metadata.redactions': hits.length,
-          'agnetos.run.id': runId,
+          ...scope,
         },
       });
 

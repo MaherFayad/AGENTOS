@@ -76,6 +76,9 @@ test('no PII reaches the Langfuse client or the ledger', async () => {
     agentName: 'Account Enrichment',
     trigger: 'manual',
     model: 'claude-opus-5',
+    projectId: '11111111-1111-4111-8111-111111111111',
+    agentRef: 'agnetos/sales/account-enrichment',
+    sourceRef: 'project:agents/sales/account-enrichment/SKILL.md@sha256:abc',
     inputs: {
       account_url: 'https://example.sa',
       // Free text is the realistic leak: an operator pastes a lead's details in.
@@ -152,6 +155,56 @@ test('every value rule redacts a representative sample', () => {
     const out = redactString(samples[rule.id], 'sample', []);
     assert.ok(!out.includes(samples[rule.id]), `rule "${rule.id}" did not redact its own sample`);
   }
+});
+
+test('flattening a payload into prose does not get it past the key denylist', () => {
+  refreshEnvSecrets({});
+
+  // This is `buildPlanSummary(record, inputs)` in the shape it actually reaches
+  // `trace.event('plan', …)` — `renderInputs` joined with newlines, then `\n` → ` · `.
+  // The same object, unflattened, is fully redacted by the key pass. The flattened
+  // version used to be redacted only where a *value* happened to look like something a
+  // regex knows, which caught the email and nothing else. Four of the five leaked.
+  const inputs = {
+    client_name: 'Fatima Al-Harbi',
+    address: '12 King Fahd Road, Riyadh',
+    date_of_birth: '1990-04-12',
+    salary: '45000 SAR',
+    contact_email: PII.email,
+  };
+  const prose =
+    `Lead Enricher (sales/lead-enricher) · ` +
+    Object.entries(inputs)
+      .map(([k, v]) => `- ${k}: ${v}`)
+      .join(' · ') +
+    ` · Delivers to Slack #acme-deals when it finishes.`;
+
+  const flat = redactString(prose, 'event.plan.summary', []);
+  for (const value of Object.values(inputs)) {
+    assert.ok(!flat.includes(value), `"${value}" survived flattening into prose`);
+  }
+  // "Riyadh" is the reason the value does not stop at a comma.
+  assert.ok(!flat.includes('Riyadh'), 'a value must run past its own commas');
+  // Over-redaction has a floor: the sentence still says what agent ran and where it
+  // delivers, which is what the span is for.
+  assert.ok(flat.includes('Lead Enricher (sales/lead-enricher)'));
+  assert.ok(flat.includes('#acme-deals'));
+});
+
+test('a permitted key does not shield a denylisted one behind it', () => {
+  refreshEnvSecrets({});
+  // `notes` is not denylisted and must not be; the bug this guards is a scan that lets
+  // the outer permitted key consume the inner denylisted one and never test it.
+  const out = redactString('notes: ordinary text address: 12 King Fahd Road', 'p', []);
+  assert.ok(out.includes('ordinary text'), 'a permitted key keeps its value');
+  assert.ok(!out.includes('12 King Fahd Road'), 'the denylisted key behind it is still redacted');
+});
+
+test('the key-in-string pass counts its hits like every other rule', () => {
+  refreshEnvSecrets({});
+  const hits: { rule: string; label: string; path: string }[] = [];
+  redactString('client_name: Fatima Al-Harbi', 'p', hits);
+  assert.deepEqual(hits, [{ rule: 'key-in-string:clientname', label: 'clientname', path: 'p' }]);
 });
 
 test('an order number that is not a card survives; a PAN does not', () => {

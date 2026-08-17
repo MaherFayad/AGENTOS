@@ -11,8 +11,60 @@ export type RunStatus = 'ok' | 'error' | 'cancelled' | 'awaiting-approval';
 export type RunTrigger = 'manual' | 'schedule' | 'api' | 'audit';
 export type ToolStatus = 'ok' | 'error';
 
+/**
+ * Who a run belongs to. **Required**, all three, and that is a reversal recorded rather
+ * than a silent edit.
+ *
+ * These fields shipped optional on `RunInit` with a comment defending the split: the
+ * ledger's `assertAttributed` refuses an unattributed row at runtime, and requiring them
+ * here was said to break `--profile dev` and the metrics fakes. That reasoning was wrong
+ * in one specific way. `assertAttributed` guards **Postgres**, which is one of the three
+ * places a run's data lands; the other two are the **trace store** and the **artefact
+ * directory**, and neither is behind that check. So a run could reach Langfuse with no
+ * project and be recorded there, and only fail later at the ledger — which is a leak that
+ * has already happened by the time anything refuses.
+ *
+ * The dev-profile argument does not survive contact either: naming your project has never
+ * needed a database. Every real caller resolves a `MountedProject` before it calls
+ * `startRun`, in every profile. What optionality bought was that a *test* could omit them,
+ * which is exactly the caller that should not be allowed to.
+ *
+ * `assertAttributed` stays. Two mechanisms, deliberately redundant, for the same reason
+ * the read path has two: the type is what stops the mistake being written, and the
+ * runtime check is what catches an `as` cast, a JSON boundary or a value that is present
+ * and empty. Neither is a substitute for the other.
+ */
+export type RunAttribution = {
+  /** `ops.project.id` — which project's ledger, trace and artefacts this run belongs in. */
+  projectId: string;
+  /**
+   * `{project}/{department}/{slug}` (ADR-014 §2) — the addressable agent, and the identity
+   * every operations row hangs off. Run history never follows a fork or a promotion.
+   */
+  agentRef: string;
+  /**
+   * `{layer}:{path}@sha256:…` — which file actually won the cascade, at what content.
+   *
+   * Never derived. "Which code-reviewer did I run?" is a bug class with no error message
+   * (`Plan §21.9`), so a plausible reconstruction here would be worse than a refusal.
+   */
+  sourceRef: string;
+  /** `ops.billing_account.id`, when the payer is known. */
+  accountId?: string | null;
+  /**
+   * How the payer was chosen (ADR-015 Q20). `unattributed` is a **named** state, not a
+   * missing one: "we do not know who paid" must be its own bucket on a cost-by-account
+   * surface rather than rows a chart quietly drops.
+   *
+   * This one stays optional because `unattributed` is a truthful default — it asserts
+   * ignorance. `projectId` has no truthful default; any value it could fall back to is a
+   * guess about whose data this is.
+   */
+  accountSource?: AccountSource;
+};
+
 /** Everything known when a run starts. Passed to `startRun`. */
-export type RunInit = {
+export type RunInit = RunAttribution & {
   /** `department/agent` — the same slug the graph payload uses. */
   agent: string;
   /** Department slug from ADR-001. Denormalised so metrics never join to frontmatter. */
@@ -27,38 +79,6 @@ export type RunInit = {
   sessionId?: string;
   /** `dryRun: true` runs are traced but excluded from cost, LIVE and status derivation. */
   dryRun?: boolean;
-
-  // --- the project axis (ADR-015, migration 0005) --------------------------------
-  //
-  // These four are **optional on this type and required by the ledger**, and the split is
-  // deliberate. `--profile dev` has no Postgres and the metrics fakes construct a `RunInit`
-  // by hand, so making them required here would break callers that never reach a database.
-  // The place they cannot be absent is the place they are actually written: `recordRun`
-  // refuses a row it cannot attribute, rather than letting Postgres raise a NOT NULL
-  // violation whose message names a column and not a cause.
-
-  /** `ops.project.id` — which project's ledger this row belongs in. */
-  projectId?: string;
-  /**
-   * `{project}/{department}/{slug}` (ADR-014 §2) — the addressable agent, and the identity
-   * every operations row hangs off. Run history never follows a fork or a promotion.
-   */
-  agentRef?: string;
-  /**
-   * `{layer}:{path}@sha256:…` — which file actually won the cascade, at what content.
-   *
-   * Never derived. "Which code-reviewer did I run?" is a bug class with no error message
-   * (`Plan §21.9`), so a plausible reconstruction here would be worse than a refusal.
-   */
-  sourceRef?: string;
-  /** `ops.billing_account.id`, when the payer is known. */
-  accountId?: string | null;
-  /**
-   * How the payer was chosen (ADR-015 Q20). `unattributed` is a **named** state, not a
-   * missing one: "we do not know who paid" must be its own bucket on a cost-by-account
-   * surface rather than rows a chart quietly drops.
-   */
-  accountSource?: AccountSource;
 };
 
 /** Token counts for one model call. Whatever the SDK reports; all fields optional. */
