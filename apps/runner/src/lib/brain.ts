@@ -13,11 +13,32 @@
  * reported alongside it instead, so it can inform without inflating).
  */
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { BrainCompleteness } from '@agnetos/contracts';
-import { commitCompanyFile, lastCommitIso } from './git';
+import { agentRef as makeAgentRef, type BrainCompleteness } from '@agnetos/contracts';
+import { ApiError } from './errors';
+import { commitCompanyFile, lastCommitIso, repoRelative } from './git';
 import type { RunnerConfig } from './config';
+import type { MountedProject } from './project';
+
+/**
+ * A **tier** of the brain: one `company/` directory and the file inside it.
+ *
+ * `company/COMPANY.md` rule 9 splits the brain in two under N projects — a **global** tier
+ * holding facts about *us*, injected into every run of every project, and a **project**
+ * tier holding facts about *that client*. Every function below takes the tier it is about
+ * rather than reading one path out of `RunnerConfig`, because "one path in the config" is
+ * exactly the shape that makes project two's interview overwrite project one's brain.
+ *
+ * Both `RunnerConfig` and `MountedProject` satisfy this structurally, so the coordinator's
+ * own tier (`GET /api/status`, the watcher) keeps working unchanged while the run pipeline
+ * passes the mounted project.
+ */
+export interface BrainTier {
+  companyDir: string;
+  companyFile: string;
+  companySourcesDir: string;
+}
 
 /**
  * Minimum characters before the interview's artifact is trusted to replace the brain.
@@ -78,16 +99,19 @@ async function loadCounter(config: RunnerConfig): Promise<
  * If that module is unreachable, this reports **zero** — never a guess, and never a number
  * that could be higher than the truth.
  */
-export async function computeBrainCompleteness(config: RunnerConfig): Promise<BrainCompleteness> {
+export async function computeBrainCompleteness(
+  config: RunnerConfig,
+  tier: BrainTier = config,
+): Promise<BrainCompleteness> {
   let markdown: string | null = null;
   try {
-    markdown = await readFile(config.companyFile, 'utf8');
+    markdown = await readFile(tier.companyFile, 'utf8');
   } catch {
     markdown = null;
   }
 
   const [sources, measure] = await Promise.all([
-    countSources(config.companySourcesDir),
+    countSources(tier.companySourcesDir),
     loadCounter(config),
   ]);
 
@@ -99,10 +123,13 @@ export async function computeBrainCompleteness(config: RunnerConfig): Promise<Br
     return { ...toCompleteness(measurement), sources, updatedAt: null };
   }
 
-  let updatedAt = await lastCommitIso(config, 'company/COMPANY.md');
+  // The pathspec is derived from the tier, not written out as `company/COMPANY.md`. A
+  // literal here would date the *coordinator's* brain onto every project's number the day a
+  // second library is mounted — an "updated 3 days ago" about somebody else's file.
+  let updatedAt = await lastCommitIso(config, repoRelative(config, tier.companyFile));
   if (updatedAt === null) {
     try {
-      updatedAt = (await stat(config.companyFile)).mtime.toISOString();
+      updatedAt = (await stat(tier.companyFile)).mtime.toISOString();
     } catch {
       updatedAt = null;
     }
@@ -135,10 +162,19 @@ function toCompleteness(m: BrainMeasurement): Omit<BrainCompleteness, 'sources' 
   };
 }
 
-/** COMPANY.md, or `null` when the brain has not been written yet. */
-export async function readCompanyBrain(config: RunnerConfig): Promise<string | null> {
+/**
+ * COMPANY.md for one tier, or `null` when that tier's brain has not been written yet.
+ *
+ * The run pipeline passes the **mounted project**, never the coordinator's config: §3.3
+ * injects this into every invocation, so a tier resolved from the wrong place is client A's
+ * company context reaching an agent running for client B on every single call, with no
+ * error message. There is deliberately **no global fallback** — `project-scoping.md` Q8b is
+ * still open and the conservative side of an unanswered question is the one that cannot
+ * leak (adding a fallback later is additive; removing one after the fact is not).
+ */
+export async function readCompanyBrain(tier: BrainTier): Promise<string | null> {
   try {
-    return await readFile(config.companyFile, 'utf8');
+    return await readFile(tier.companyFile, 'utf8');
   } catch {
     return null;
   }
@@ -151,8 +187,46 @@ export async function readCompanyBrain(config: RunnerConfig): Promise<string | n
  * by adding a line — and SKILL.md files are exactly what an "import this agent from
  * GitHub" flow (Part IV) brings in from outside. A constant in the runner cannot be
  * granted by a file that arrives later.
+ *
+ * **It is half a key, not a key.** `department/slug` is identical in every project under
+ * the cascade, so this constant answers "is this the interview?" and cannot answer "whose
+ * interview?". `brainWriteRef` is what the gate actually compares against.
  */
 export const INTERVIEW_AGENT_SLUG = 'intelligence/company-interview';
+
+/**
+ * The one `agent_ref` allowed to replace **this project's** brain:
+ * `{project}/intelligence/company-interview` (ADR-014 §2).
+ *
+ * This is the write-path consequence `company/COMPANY.md` rule 9 spells out, made into a
+ * mechanism. The gate used to be `agentSlug !== INTERVIEW_AGENT_SLUG` against a single
+ * configured `companyFile`, and **both halves were project-blind**: every project has an
+ * `intelligence/company-interview`, and `config.companyFile` is one path. At N=2 that is
+ * not a display bug — project two's interview overwrites project one's brain and the commit
+ * that follows enshrines the overwrite as the brain's new history, on a file §3.3 injects
+ * into every subsequent run of the project it just destroyed.
+ *
+ * Deriving the permitted ref *from the project being written to* is what makes the two
+ * facts one fact: there is no pair of arguments for which the agent named and the file
+ * written can disagree about the project.
+ */
+export function brainWriteRef(project: MountedProject): string {
+  return makeAgentRef(project.slug, INTERVIEW_AGENT_SLUG);
+}
+
+/** `<global>` — the root of the configured global library, or `null` when there is none. */
+function globalLibraryRoot(config: RunnerConfig): string | null {
+  // `config.globalLibraryDir` is `<global>/agents`; the tier we must protect is its sibling
+  // `<global>/company`. Guarding the whole root rather than that one directory is
+  // deliberate: it costs nothing and it does not have to be re-reasoned if the global
+  // library ever grows a second copy-bearing folder.
+  return config.globalLibraryDir === null ? null : dirname(config.globalLibraryDir);
+}
+
+function isInside(root: string, target: string): boolean {
+  const rel = relative(resolve(root), resolve(target));
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
 
 export interface BrainWriteBack {
   /** Repo-relative path written. */
@@ -206,11 +280,16 @@ function looksLikeTheBrain(markdown: string): boolean {
 
 export async function writeBackBrain(
   config: RunnerConfig,
-  agentSlug: string,
+  project: MountedProject,
+  agentRef: string,
   artifact: { absolutePath: string; kind: string } | null,
   inputs: Record<string, unknown> = {},
 ): Promise<BrainWriteBack | null> {
-  if (agentSlug !== INTERVIEW_AGENT_SLUG) return null;
+  // Keyed on the `agent_ref`, and the ref is derived from the project whose file is about
+  // to be written. `intelligence/company-interview` running for project B therefore cannot
+  // reach project A's brain: not because a caller remembered to check, but because the only
+  // ref that passes is the one this project's own interview carries.
+  if (agentRef !== brainWriteRef(project)) return null;
   if (!artifact || artifact.kind !== 'md') return null;
 
   // The mode the human picked in the drawer. Absent is treated as writing, because
@@ -226,17 +305,54 @@ export async function writeBackBrain(
   if (markdown.trim().length < MIN_ANSWER_CHARS) return null;
   if (!looksLikeTheBrain(markdown)) return null;
 
-  await mkdir(dirname(config.companyFile), { recursive: true });
-  await writeFile(config.companyFile, markdown, 'utf8');
+  /**
+   * The global tier is refused outright, and loudly.
+   *
+   * COMPANY.md rule 9: the global tier holds facts about *us* and is injected into every
+   * run of **every** project, "which is precisely why nothing client-identifying may ever
+   * be written into it". The interview is a client-facing agent. A client's ICP, pricing or
+   * red line written there is a breach of PDPL rule 4 on every subsequent invocation for
+   * every other client, with no code defect required and no error message.
+   *
+   * This throws rather than returning `null` like the other refusals. `null` is the right
+   * answer for the common, legitimate cases — a different agent, the wrong mode, a document
+   * that is not a brain. This one is never legitimate, and a silent `null` here would look
+   * exactly like "the interview produced nothing", which is the sentence that stops anyone
+   * looking.
+   */
+  const globalRoot = globalLibraryRoot(config);
+  if (globalRoot !== null && isInside(globalRoot, project.companyFile)) {
+    // `git_write_refused` — the runner's existing write-boundary code, reused rather than
+    // invented. A `brain_write_refused` code would read better and would be an edit to
+    // `ApiErrorCode` in `packages/contracts`, which is `runner-engineer`'s under
+    // `api-contracts.md`. It is proposed to them as a decision-request; it is not taken here.
+    throw new ApiError(
+      'git_write_refused',
+      'The company interview may not write the global tier of the brain.',
+      {
+        hint:
+          `Nothing was written. ${project.companyFile} is inside the global library at ${globalRoot}, and ` +
+          'the global tier (COMPANY.md sections 5 and 7) is injected into every run of every project — a ' +
+          "client's facts written there reach every other client on every invocation (company/COMPANY.md " +
+          'rule 9, Part VII.4). The interview writes its own project tier and nothing else.',
+        retryable: false,
+      },
+    );
+  }
 
-  const completeness = await computeBrainCompleteness(config);
+  await mkdir(dirname(project.companyFile), { recursive: true });
+  await writeFile(project.companyFile, markdown, 'utf8');
+
+  const completeness = await computeBrainCompleteness(config, project);
   const commitSha = await commitCompanyFile(
     config,
-    config.companyFile,
-    `brain: company interview — ${completeness.answered} of ${completeness.total} topics answered`,
+    project.companyFile,
+    `brain(${project.slug}): company interview — ${completeness.answered} of ${completeness.total} topics answered`,
   );
 
-  return { path: 'company/COMPANY.md', commitSha, completeness };
+  // The path that was actually written, not a literal. `company/COMPANY.md` was true of the
+  // one mount and would have been a quiet lie about any other.
+  return { path: repoRelative(config, project.companyFile), commitSha, completeness };
 }
 
 /**
@@ -249,9 +365,10 @@ export async function writeBackBrain(
 export async function writeBrainSnapshot(
   config: RunnerConfig,
   completeness: BrainCompleteness,
+  tier: BrainTier = config,
 ): Promise<string> {
-  const path = join(config.companyDir, '.brain.json');
-  await mkdir(config.companyDir, { recursive: true });
+  const path = join(tier.companyDir, '.brain.json');
+  await mkdir(tier.companyDir, { recursive: true });
   await writeFile(
     path,
     `${JSON.stringify(

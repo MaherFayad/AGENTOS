@@ -163,6 +163,19 @@ export async function startRun(
     model: config.model,
     trigger: 'manual',
     dryRun,
+    // The project axis on the write path (ADR-015). `agentRef` and `sourceRef` come from
+    // the cascade, not from this function: they are what the *dispatch* resolved, and
+    // rebuilding either here would be a second reading of a question already answered.
+    projectId: project.id,
+    agentRef: dispatch.agentRef,
+    sourceRef: dispatch.sourceRef,
+    // Honest, and honestly narrow: no billing account exists yet and the runner does not
+    // read `ops.project.default_account_id` in M15, so every run records `unattributed` —
+    // a named bucket a cost-by-account surface must render, not a NULL it can drop
+    // (ADR-015 Q20). It becomes a real id when accounts do; guessing one now would put a
+    // payer in the ledger that nobody ever configured.
+    accountId: null,
+    accountSource: 'unattributed',
   });
 
   const state = store.create({
@@ -193,7 +206,10 @@ export async function startRun(
     approvalRequired: record.approvalRequired,
   });
 
-  void execute(services, state, record, inputs, dryRun, langfuseTrace, obsTrace).catch((err) => {
+  // `project` and `dispatch.agentRef` travel into `execute` because the brain is read and
+  // written there. Passing `config` alone was the mechanism by which every project's
+  // interview wrote one file (company/COMPANY.md rule 9).
+  void execute(services, project, dispatch.agentRef, state, record, inputs, dryRun, langfuseTrace, obsTrace).catch((err) => {
     services.logger.error({ err, runId: state.runId }, 'run failed outside its own error handling');
   });
 
@@ -208,6 +224,9 @@ function toObsStatus(status: 'ok' | 'error' | 'denied' | 'canceled'): 'ok' | 'er
 
 async function execute(
   services: RunnerServices,
+  project: MountedProject,
+  /** `{project}/{department}/{slug}` — the only key the brain write-back gate accepts. */
+  agentRef: string,
   state: RunState,
   record: AgentRecord,
   inputs: Record<string, RunInputValue>,
@@ -263,7 +282,11 @@ async function execute(
   };
 
   try {
-    const company = await readCompanyBrain(config);
+    // The **project's** brain, not the coordinator's. §3.3 injects this into every single
+    // invocation, so resolving it from config would be client A's company context reaching
+    // an agent running for client B on every call — the PDPL boundary, not a scoping
+    // preference (`project-scoping.md` Q8b).
+    const company = await readCompanyBrain(project);
     const prompt = buildPrompt(record, inputs, company);
     brainInjected = prompt.brainInjected;
 
@@ -394,9 +417,9 @@ async function execute(
 
       // `inputs` is passed so the write-back can honour the mode the human chose:
       // `review-gaps` reports on the brain and must never replace it.
-      const brainWrite = await writeBackBrain(config, record.slug, artifact, inputs);
+      const brainWrite = await writeBackBrain(config, project, agentRef, artifact, inputs);
       if (brainWrite) {
-        await writeBrainSnapshot(config, brainWrite.completeness);
+        await writeBrainSnapshot(config, brainWrite.completeness, project);
         state.stream.emit('token', {
           text: `[company brain updated — ${brainWrite.completeness.answered} of ${brainWrite.completeness.total} topics answered, commit ${brainWrite.commitSha.slice(0, 8)}]\n`,
         });

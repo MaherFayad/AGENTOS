@@ -21,7 +21,13 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../config.ts';
-import { computeBrainCompleteness, writeBackBrain, INTERVIEW_AGENT_SLUG } from '../brain.ts';
+import { mountedProject } from '../project.ts';
+import {
+  brainWriteRef,
+  computeBrainCompleteness,
+  writeBackBrain,
+  INTERVIEW_AGENT_SLUG,
+} from '../brain.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 
@@ -160,11 +166,16 @@ const REAL_BRAIN = [
 const GAP_REPORT =
   '# Gap report\n\nSections that are thin: identity, offers, pricing. Nine of twenty answered.\n';
 
-async function writeBackFixture(
-  markdown: string,
-  inputs: Record<string, unknown>,
-  git = false,
-) {
+const BEFORE = '## 1. Identity\n\nThe brain as it stands, which must survive.\n';
+
+/**
+ * Build a repo fixture with a brain, an artifact and (optionally) a git repo.
+ *
+ * Returns the pieces rather than running the write-back, because the isolation tests below
+ * need to hand `writeBackBrain` a project and a ref that **disagree** — which is the whole
+ * question — and a fixture that computed both from one config could not express that.
+ */
+async function repoFixture(markdown: string, git = false) {
   const root = await mkdtemp(join(tmpdir(), 'agnetos-writeback-'));
   await mkdir(join(root, 'company', 'sources'), { recursive: true });
   await mkdir(join(root, 'agents'), { recursive: true });
@@ -176,26 +187,43 @@ async function writeBackFixture(
       });
     }
   }
-  const before = '## 1. Identity\n\nThe brain as it stands, which must survive.\n';
-  await writeFile(join(root, 'company', 'COMPANY.md'), before, 'utf8');
+  await writeFile(join(root, 'company', 'COMPANY.md'), BEFORE, 'utf8');
   const artifactPath = join(root, 'scratch', 'output.md');
   await writeFile(artifactPath, markdown, 'utf8');
+  return { root, artifactPath, brainPath: join(root, 'company', 'COMPANY.md') };
+}
 
+/** Run `fn` with `AGNETOS_REPO_ROOT` pointed at a fixture, and put it back afterwards. */
+async function withRepoRoot<T>(root: string, fn: () => Promise<T>): Promise<T> {
   const previous = process.env.AGNETOS_REPO_ROOT;
   process.env.AGNETOS_REPO_ROOT = root;
   try {
-    const result = await writeBackBrain(
-      loadConfig(),
-      INTERVIEW_AGENT_SLUG,
-      { absolutePath: artifactPath, kind: 'md' },
-      inputs,
-    );
-    const after = await readFile(join(root, 'company', 'COMPANY.md'), 'utf8');
-    return { result, after, unchanged: after === before };
+    return await fn();
   } finally {
     if (previous === undefined) delete process.env.AGNETOS_REPO_ROOT;
     else process.env.AGNETOS_REPO_ROOT = previous;
   }
+}
+
+async function writeBackFixture(
+  markdown: string,
+  inputs: Record<string, unknown>,
+  git = false,
+) {
+  const { root, artifactPath, brainPath } = await repoFixture(markdown, git);
+  return withRepoRoot(root, async () => {
+    const config = loadConfig();
+    const project = mountedProject(config);
+    const result = await writeBackBrain(
+      config,
+      project,
+      brainWriteRef(project),
+      { absolutePath: artifactPath, kind: 'md' },
+      inputs,
+    );
+    const after = await readFile(brainPath, 'utf8');
+    return { result, after, unchanged: after === BEFORE };
+  });
 }
 
 test('review-gaps never replaces the brain, however good its report looks', async () => {
@@ -221,4 +249,161 @@ test('a real brain in first-run mode IS written back — the guard confines, it 
   assert.equal(after, REAL_BRAIN);
   assert.equal(result.path, 'company/COMPANY.md');
   assert.ok(result.commitSha.length > 0, 'and it is committed — git history is brain versioning');
+});
+
+/* --------------------------------------------------------------------------
+ * Cross-project isolation on the brain's WRITE path.
+ *
+ * `company/COMPANY.md` rule 9 states the failure in full: every project has its own
+ * `intelligence/company-interview`, so a gate keyed on `department/slug` and a target read
+ * from one configured `companyFile` are **both** project-blind. At N=2, project two's
+ * interview overwrites project one's brain and the commit that follows enshrines the
+ * overwrite as that brain's history — on the file §3.3 injects into every subsequent run of
+ * the project it just destroyed. No error message, no defect anywhere else.
+ *
+ * These three tests are the structural proof that the mechanism is now the mechanism. They
+ * do not need a database, an API key or a second real library, which is why they are
+ * obtainable in M15 at all: `project-scoping.md` §6 says cross-project isolation can only be
+ * proved **structurally** here, and this is what structurally means on a write path.
+ * -------------------------------------------------------------------------- */
+
+/** A second project mounted from the same coordinator, with its own library on disk. */
+async function secondProject(root: string) {
+  const dir = join(root, 'projects', 'client-b');
+  await mkdir(join(dir, 'company', 'sources'), { recursive: true });
+  await mkdir(join(dir, 'agents'), { recursive: true });
+  await writeFile(join(dir, 'company', 'COMPANY.md'), '## 1. Identity\n\nClient B.\n', 'utf8');
+  return {
+    id: 'ignored-in-these-tests',
+    slug: 'client-b',
+    name: 'Client B',
+    status: 'active' as const,
+    libraryPath: dir,
+    workspaceRoot: join(dir, 'scratch'),
+    agentsDir: join(dir, 'agents'),
+    overridesDir: join(dir, 'agents', '_overrides'),
+    companyDir: join(dir, 'company'),
+    companyFile: join(dir, 'company', 'COMPANY.md'),
+    companySourcesDir: join(dir, 'company', 'sources'),
+    panelsDir: join(dir, 'panels'),
+  };
+}
+
+test("project two's interview cannot overwrite project one's brain", async () => {
+  const { root, artifactPath, brainPath } = await repoFixture(REAL_BRAIN, true);
+  await withRepoRoot(root, async () => {
+    const config = loadConfig();
+    const projectOne = mountedProject(config);
+    const projectTwo = await secondProject(root);
+
+    // The exact shape of the failure rule 9 describes: the *same* agent, `department/slug`
+    // identical in both libraries, running for client-b, handed project one's mount.
+    const result = await writeBackBrain(
+      config,
+      projectOne,
+      brainWriteRef(projectTwo),
+      { absolutePath: artifactPath, kind: 'md' },
+      { mode: 'first-run' },
+    );
+
+    assert.equal(result, null, 'refused: the agent_ref names client-b, the mount is agentos');
+    assert.equal(
+      await readFile(brainPath, 'utf8'),
+      BEFORE,
+      "project one's brain is byte-identical — and therefore nothing was committed over it",
+    );
+  });
+});
+
+test('the target is derived from the mounted project, not from a path in the config', async () => {
+  // The other half of the same gate. If the file written were `config.companyFile`, this
+  // would write project one's brain while claiming to be client-b's run — which is the
+  // overwrite above arriving from the write side instead of the gate side.
+  const { root, artifactPath, brainPath } = await repoFixture(REAL_BRAIN, true);
+  await withRepoRoot(root, async () => {
+    const config = loadConfig();
+    // Mounted as client-b, but sharing the fixture's git repo so the commit can succeed.
+    const projectTwo = { ...(await secondProject(root)), companyDir: join(root, 'company') };
+    projectTwo.companyFile = join(root, 'company', 'CLIENT-B.md');
+    projectTwo.companySourcesDir = join(root, 'company', 'sources');
+
+    const result = await writeBackBrain(
+      config,
+      projectTwo,
+      brainWriteRef(projectTwo),
+      { absolutePath: artifactPath, kind: 'md' },
+      { mode: 'first-run' },
+    );
+
+    assert.ok(result, 'client-b writing client-b is the legitimate case and must work');
+    assert.equal(result.path, 'company/CLIENT-B.md', 'the reported path is the one written…');
+    assert.equal(await readFile(projectTwo.companyFile, 'utf8'), REAL_BRAIN, '…and it was written');
+    assert.equal(
+      await readFile(brainPath, 'utf8'),
+      BEFORE,
+      'the coordinator-configured COMPANY.md was not touched — the config path is no longer the target',
+    );
+  });
+});
+
+test('a write to the global tier is refused outright, loudly', async () => {
+  // COMPANY.md rule 9: the global tier is injected into every run of every project, so a
+  // client's facts written there reach every other client on every invocation. The interview
+  // is a client-facing agent; this is never a legitimate write, so it throws rather than
+  // returning the `null` that the legitimate refusals return — a silent null here reads as
+  // "the interview produced nothing", which is the sentence that stops anyone looking.
+  const { root, artifactPath } = await repoFixture(REAL_BRAIN, true);
+  const globalRoot = join(root, 'global');
+  await mkdir(join(globalRoot, 'company'), { recursive: true });
+  await mkdir(join(globalRoot, 'agents'), { recursive: true });
+  const globalBrain = join(globalRoot, 'company', 'COMPANY.md');
+  await writeFile(globalBrain, BEFORE, 'utf8');
+
+  const previousGlobal = process.env.AGNETOS_GLOBAL_LIBRARY;
+  process.env.AGNETOS_GLOBAL_LIBRARY = globalRoot;
+  try {
+    await withRepoRoot(root, async () => {
+      const config = loadConfig();
+      const global = { ...(await secondProject(root)), slug: 'global-tier' };
+      global.companyDir = join(globalRoot, 'company');
+      global.companyFile = globalBrain;
+      global.companySourcesDir = join(globalRoot, 'company', 'sources');
+
+      await assert.rejects(
+        () =>
+          writeBackBrain(
+            config,
+            global,
+            brainWriteRef(global),
+            { absolutePath: artifactPath, kind: 'md' },
+            { mode: 'first-run' },
+          ),
+        (error: unknown) => (error as { code?: string }).code === 'git_write_refused',
+        'the refusal must be an error a human sees, not a null a caller ignores',
+      );
+      assert.equal(await readFile(globalBrain, 'utf8'), BEFORE, 'and nothing was written');
+    });
+  } finally {
+    if (previousGlobal === undefined) delete process.env.AGNETOS_GLOBAL_LIBRARY;
+    else process.env.AGNETOS_GLOBAL_LIBRARY = previousGlobal;
+  }
+});
+
+test('INTERVIEW_AGENT_SLUG alone is not a key — the ref must carry the project', async () => {
+  // Guards the regression directly: if the gate ever goes back to comparing the bare slug,
+  // this passes a ref that is *not* project-qualified and the write must still be refused.
+  const { root, artifactPath, brainPath } = await repoFixture(REAL_BRAIN, true);
+  await withRepoRoot(root, async () => {
+    const config = loadConfig();
+    const project = mountedProject(config);
+    const result = await writeBackBrain(
+      config,
+      project,
+      INTERVIEW_AGENT_SLUG,
+      { absolutePath: artifactPath, kind: 'md' },
+      { mode: 'first-run' },
+    );
+    assert.equal(result, null);
+    assert.equal(await readFile(brainPath, 'utf8'), BEFORE);
+  });
 });
