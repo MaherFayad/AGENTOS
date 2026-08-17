@@ -16,39 +16,28 @@
 
 import { z } from 'zod';
 
+import { DEPARTMENT_SLUGS, type DepartmentSlug } from './departments';
+
 /* ------------------------------------------------------------------ *
  * Enums — ADR-001 and Part IV
  * ------------------------------------------------------------------ */
 
 /**
- * The seven canonical departments, in ADR-001 order. Order is significant: it is the
- * CHART tab order (§2.6.1) and the MAP branch angle order (index × 360/7 starting at
- * −90°, so `sales` sits at twelve o'clock).
+ * The department slug as it appears in a SKILL.md field — an alias, never a second
+ * declaration.
  *
- * Nothing else in the codebase may hardcode a department name. `departments.ts` (the
- * angle/rail table) imports this array rather than restating it.
+ * The enum itself lives in `departments.ts` (ADR-001: that file "exports the ordered
+ * array; nothing else may hardcode a department name"). This module used to declare its
+ * own `DEPARTMENTS` and `DEPARTMENT_LABELS` beside it. Two modules exporting one runtime
+ * name is not a tidiness problem: `index.ts` star-exports both, and Next's barrel
+ * optimizer discards the *entire* barrel on a wildcard collision, which took every view
+ * in the web app down until 2026-08-17. See ADR-035.
+ *
+ * Import `DEPARTMENT_SLUGS` (the literal tuple, for `z.enum` and iteration),
+ * `DEPARTMENT_LABELS` (display strings) or `DEPARTMENTS` (the angle/rail table) from
+ * `./departments`. Do not re-export any of them from here.
  */
-export const DEPARTMENTS = [
-  'sales',
-  'deals',
-  'marketing',
-  'operations',
-  'intelligence',
-  'customer',
-  'back-office',
-] as const;
-export type Department = (typeof DEPARTMENTS)[number];
-
-/** Display labels. `back-office` is the slug and path segment; `Back Office` is the label. */
-export const DEPARTMENT_LABELS: Record<Department, string> = {
-  sales: 'Sales',
-  deals: 'Deals',
-  marketing: 'Marketing',
-  operations: 'Operations',
-  intelligence: 'Intelligence',
-  customer: 'Customer',
-  'back-office': 'Back Office',
-};
+export type Department = DepartmentSlug;
 
 /** CHART rows (§2.6.3) and the drawer eyebrow (§2.3.1). Also the three `ladder` keys. */
 export const TIERS = ['human-led', 'assisted', 'autonomous'] as const;
@@ -281,7 +270,7 @@ export const agentFrontmatterSchema = z
   .object({
     name: z.string().min(1),
     description: z.string().min(1),
-    department: z.enum(DEPARTMENTS),
+    department: z.enum(DEPARTMENT_SLUGS),
     cluster: slug('cluster'),
     icon: slug('icon'),
     tier: z.enum(TIERS),
@@ -341,7 +330,7 @@ export const clusterDefinitionSchema = z
 export const clusterRegistrySchema = z
   .object(
     Object.fromEntries(
-      DEPARTMENTS.map((d) => [d, z.array(clusterDefinitionSchema).min(3)]),
+      DEPARTMENT_SLUGS.map((d) => [d, z.array(clusterDefinitionSchema).min(3)]),
     ) as Record<Department, z.ZodArray<typeof clusterDefinitionSchema>>,
   )
   .strict();

@@ -9,18 +9,44 @@
  * may hardcode a department name or angle."
  */
 
-/** Order is significant: it is the CHART tab order and the MAP branch angle order. */
-const ORDERED = [
-  ['sales', 'Sales'],
-  ['deals', 'Deals'],
-  ['marketing', 'Marketing'],
-  ['operations', 'Operations'],
-  ['intelligence', 'Intelligence'],
-  ['customer', 'Customer'],
-  ['back-office', 'Back Office'],
+/**
+ * The seven slugs, in canonical order — the CHART tab order and the MAP branch angle
+ * order. **This is the primary declaration**; everything else in this file derives from it.
+ *
+ * `as const` is load-bearing rather than stylistic: `z.enum()` needs a literal tuple, and
+ * a `readonly DepartmentSlug[]` does not satisfy it. Deriving this from a mapped array
+ * widens it back to an array and breaks `frontmatter.ts` at the type level (ADR-035).
+ */
+export const DEPARTMENT_SLUGS = [
+  'sales',
+  'deals',
+  'marketing',
+  'operations',
+  'intelligence',
+  'customer',
+  'back-office',
 ] as const;
 
-export type DepartmentSlug = (typeof ORDERED)[number][0];
+export type DepartmentSlug = (typeof DEPARTMENT_SLUGS)[number];
+
+/**
+ * Display labels. `back-office` is the slug and path segment; `Back Office` is the label.
+ *
+ * Typed `Record<DepartmentSlug, string>` and living beside the slugs on purpose: the two
+ * lists cannot drift, because omitting one is a compile error rather than a missing label
+ * discovered on screen.
+ */
+export const DEPARTMENT_LABELS: Record<DepartmentSlug, string> = {
+  sales: 'Sales',
+  deals: 'Deals',
+  marketing: 'Marketing',
+  operations: 'Operations',
+  intelligence: 'Intelligence',
+  customer: 'Customer',
+  'back-office': 'Back Office',
+};
+
+const ORDERED = DEPARTMENT_SLUGS.map((slug) => [slug, DEPARTMENT_LABELS[slug]] as const);
 
 /**
  * One row of the department table.
@@ -71,9 +97,6 @@ export const DEPARTMENTS: readonly DepartmentInfo[] = ORDERED.map(([slug, label]
     ] as const,
   };
 });
-
-/** The seven slugs in canonical order. Use for enum validation and tab rendering. */
-export const DEPARTMENT_SLUGS: readonly DepartmentSlug[] = DEPARTMENTS.map((d) => d.slug);
 
 const BY_SLUG = new Map<string, DepartmentInfo>(DEPARTMENTS.map((d) => [d.slug, d]));
 

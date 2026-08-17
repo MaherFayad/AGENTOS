@@ -23,26 +23,28 @@ export * from './project';
 export * from './threads';
 
 // ---------------------------------------------------------------------------
-// Ambiguity resolutions.
+// Ambiguity resolutions — and the one rule that governs them (ADR-035).
 //
-// Two modules exporting the same name is TS2308, a hard error — `export *` does not pick
-// a winner. An explicit re-export does. Each line below is a decision about which owner's
-// definition wins, not a formality; adding one without a reason in the comment is how a
-// consumer ends up importing a type that means something else.
+// **A VALUE exported by two starred modules is a defect, not something to resolve here.**
+// An explicit re-export makes TypeScript stop complaining, and that is the entire trap:
+// `tsc --noEmit` goes clean while Next's `optimizePackageImports` barrel optimizer, which
+// resolves the wildcards *separately* from the explicit re-export, hits the duplicate,
+// gives up on the whole barrel, and hands every client component `undefined` for every
+// named import from this package. That is not theoretical — `DEPARTMENTS` was declared in
+// both `departments.ts` and `frontmatter.ts` with a comment here calling the duplicate
+// "harmless", and it white-screened all four views for as long as it existed. `next build`
+// exited 0 the whole time. Fix the duplicate at its source; do not add a line below.
+//
+// `scripts/check-barrel-exports.mjs` enforces this and runs in CI.
+//
+// TYPES are different, and only because they are erased: `export type { … }` emits no
+// runtime binding, so no bundler ever sees two of them. A type resolution here is a real
+// decision about which owner's definition consumers get, and needs its reason stated.
 // ---------------------------------------------------------------------------
-
-// `DEPARTMENTS` — ADR-001: "packages/contracts/departments.ts exports the ordered array;
-// nothing else may hardcode a department name or angle." `frontmatter.ts` also declares a
-// `DEPARTMENTS` (a plain slug array); this file's version is the ordered
-// `DepartmentInfo[]` that carries the angles and rail neighbours, which is what the CHART
-// tab bar and the MAP branch layout both need. The duplicate in `frontmatter.ts` is
-// flagged to `agent-library-curator` — see
-// comms/inbox/agent-library-curator/…-departments-collision.md. When it is removed, this
-// line becomes redundant but stays harmless.
-export { DEPARTMENTS } from './departments';
 
 // `GraphDelta` — `graph.ts` owns it (comms/contracts/graph-layout.md, the normative
 // source for the `/ws/graph` payload). `api.ts` declares a generic `GraphDelta<TNode>`
 // whose own comment says it "does not fork the graph contract"; it still shadows the name,
 // so the concrete one wins here. `api.ts` keeps using its local version internally.
+// Type-only on both sides, so it is erased before any bundler runs.
 export type { GraphDelta } from './graph';
