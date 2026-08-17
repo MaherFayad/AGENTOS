@@ -447,6 +447,66 @@ export const en = {
     'Which library this agent came from is not known. The agent detail did not say, ' +
     'and no run of this agent has said either.',
 
+  /* ---------------------------------------------------------------------------
+   * Plan §12 — threads. Two registers: who a turn goes to, and how disruptively
+   * a message lands. Both are chrome, so neither has a colour to lean on and the
+   * words have to carry what the greys cannot.
+   *
+   * THE COUNT IS REAL AND THE MONEY IS NOT. `Plan §23.8` asks the composer to say
+   * `@@sales · 4 runs · ~$0.40`. The 4 is the resolved member count. The $0.40 has
+   * no source — zero runs have ever completed, so there is nothing to average —
+   * and a cost preview is exactly where a plausible number gets believed
+   * (BOARD rule 9). There is deliberately no key here that could hold one, and
+   * `i18n.test.ts` fails on a currency symbol appearing under `threads.`.
+   *
+   * "AT LEAST" IS NOT HEDGING. `#sales` is a lower bound, not a total: the lead
+   * answers *or delegates*, and a delegation is a second run
+   * (`TurnCost.runsAreExact === false`). A flat "1 run" beside a mechanism that
+   * routinely costs two is a plausible number one decimal place up.
+   *
+   * The level names lead their sentences and the sentences never name the level,
+   * so a translator may choose the three terms of art without rewriting four
+   * other keys around their choice.
+   * ------------------------------------------------------------------------ */
+  'threads.address.default': 'Chief of Staff',
+
+  'threads.cost.runs': {
+    zero: 'no runs',
+    one: '{count} run',
+    other: '{count} runs',
+  } satisfies Plural,
+  'threads.cost.runsAtLeast': {
+    one: 'at least {count} run',
+    other: 'at least {count} runs',
+  } satisfies Plural,
+  /* Not "0 runs". A count nobody took and a count that came back empty are two
+   * different facts, and the badge draws them differently for the same reason. */
+  'threads.cost.unresolved': 'Runs not counted yet',
+
+  'threads.interrupt.note': 'Note',
+  'threads.interrupt.steer': 'Steer',
+  'threads.interrupt.halt': 'Halt',
+
+  'a11y.threads.address.direct': 'Goes to {name}. One run, exactly.',
+  'a11y.threads.address.dispatch':
+    'Goes to the lead of {name}, which answers itself or delegates — so at least one run.',
+  'a11y.threads.address.fanout':
+    'Goes to every member of {name}, each answering independently. One run each.',
+  /* Deliberately does NOT name the role. Like the three interrupt sentences below, it
+   * describes what happens, so choosing the Arabic for "Chief of Staff" later does not
+   * force a rewrite of the sentence around it. */
+  'a11y.threads.address.default':
+    'No address, so this goes to the project’s default recipient, which triages, answers or routes — at least one run.',
+
+  'a11y.threads.interrupt.note':
+    'This waits in the mailbox and is read at the next tool boundary. Nothing in flight is disturbed.',
+  'a11y.threads.interrupt.steer':
+    'This is injected into the running session now and changes its course mid-task.',
+  'a11y.threads.interrupt.halt':
+    'This stops the work, checkpoints what is done, and asks you before continuing.',
+  'a11y.threads.interrupt.undeliverable':
+    'Nothing is running on this thread, so this would be refused rather than queued.',
+
   'a11y.mapCanvas': 'Agent galaxy. Use the arrow keys to move between departments.',
   'a11y.drawer': 'Agent detail',
   'a11y.carousel': 'Command centers',

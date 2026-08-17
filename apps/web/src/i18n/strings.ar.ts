@@ -425,6 +425,73 @@ export const ar: Catalog = {
       'and no run of this agent has said either.',
   ),
 
+  /* Plan §12 — threads. Added by design-system-guardian with the two monochrome
+   * registers, and split deliberately rather than filed wholesale as `todo()`.
+   *
+   * WRITTEN HERE: the counts and the behaviour sentences. «عملية تشغيل» is already
+   * this catalogue's word for a run (`shell.status.queue`), so reusing it is
+   * consistency, not a guess, and the five plural classes are grammar rather than
+   * taste. The behaviour sentences describe what each form and each level *does*
+   * and never name it, which is what makes writing them now safe.
+   *
+   * THE THREE LEVEL NAMES ARE ALSO WRITTEN, AND THE LINE AGAINST §10.7's PRECEDENT
+   * IS DRAWN ON PURPOSE. That precedent left five provenance terms as `todo()`
+   * because they are METAPHORS with no Arabic technical idiom — «fork» is a garden
+   * fork, and importing it is the textual equivalent of a faux italic.
+   * `note` · `steer` · `halt` are not metaphors; they are three actions, and MSA
+   * has a direct verbal noun for each. Guessing a metaphor and writing an ordinary
+   * verbal noun are different acts, and only the first is what this file's header
+   * warns against. `rtl-arabic-pdpl-specialist` owns the register and may overwrite
+   * all three without a decision-request; a message is filed saying so.
+   *
+   * LEFT AS `todo()`: «Chief of Staff» ALONE. It is a role title, not a UI verb,
+   * and it has at least three defensible renderings — رئيس الأركان is military,
+   * رئيس الديوان is administrative, مدير المكتب is corporate — whose choice says
+   * something about what this product thinks that agent IS. That is a company
+   * decision, not a translation one. So `a11y.threads.address.default` was reworded
+   * IN ENGLISH to describe the recipient rather than name it, and is written here:
+   * choosing the title later must not force a rewrite of the sentence around it.
+   *
+   * «على الأقلّ» is postposed, so the lower-bound form is not the exact form plus
+   * a prefix — which is also true of the mark that draws it. ------------------ */
+  'threads.address.default': todo('Chief of Staff'),
+
+  'threads.cost.runs': {
+    zero: 'لا عمليات تشغيل',
+    one: 'عملية تشغيل واحدة',
+    two: 'عمليتا تشغيل',
+    few: '{count} عمليات تشغيل',
+    many: '{count} عملية تشغيل',
+    other: '{count} عملية تشغيل',
+  },
+  'threads.cost.runsAtLeast': {
+    one: 'عملية تشغيل واحدة على الأقلّ',
+    two: 'عمليتا تشغيل على الأقلّ',
+    few: '{count} عمليات تشغيل على الأقلّ',
+    many: '{count} عملية تشغيل على الأقلّ',
+    other: '{count} عملية تشغيل على الأقلّ',
+  },
+  'threads.cost.unresolved': 'لم تُحصَ عمليات التشغيل بعد',
+
+  'threads.interrupt.note': 'ملاحظة',
+  'threads.interrupt.steer': 'توجيه',
+  'threads.interrupt.halt': 'إيقاف',
+
+  'a11y.threads.address.direct': 'يذهب إلى {name}. عملية تشغيل واحدة، بالضبط.',
+  'a11y.threads.address.dispatch':
+    'يذهب إلى مسؤول {name}، فيجيب بنفسه أو يوكّل غيره — أي عملية تشغيل واحدة على الأقلّ.',
+  'a11y.threads.address.fanout':
+    'يذهب إلى كلّ عضو في {name}، ويجيب كلٌّ منهم على حدة. عملية تشغيل لكلّ واحد.',
+  'a11y.threads.address.default':
+    'بلا عنوان، فيذهب هذا إلى المستقبِل الافتراضي للمشروع، الذي يفرز أو يجيب أو يحوّل — أي عملية تشغيل واحدة على الأقلّ.',
+
+  'a11y.threads.interrupt.note':
+    'ينتظر هذا في صندوق البريد ويُقرأ عند أوّل فاصل بين أداة وأخرى. ولا يتعطّل شيء جارٍ.',
+  'a11y.threads.interrupt.steer': 'يُحقَن هذا في الجلسة الجارية الآن ويغيّر مسارها أثناء العمل.',
+  'a11y.threads.interrupt.halt': 'يوقف هذا العملَ، ويحفظ ما أُنجِز، ثمّ يسألك قبل المتابعة.',
+  'a11y.threads.interrupt.undeliverable':
+    'لا شيء قيد التشغيل في هذا الخيط، فسيُرفض هذا بدل أن يُدرَج في الانتظار.',
+
   'a11y.mapCanvas': 'مجرّة الوكلاء. استخدم مفاتيح الأسهم للتنقّل بين الأقسام.',
   'a11y.drawer': 'تفاصيل الوكيل',
   'a11y.carousel': 'مراكز القيادة',

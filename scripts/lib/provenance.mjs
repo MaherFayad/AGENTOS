@@ -95,14 +95,28 @@ function stamp(d = new Date()) {
   };
 }
 
+/** Count the porcelain lines for one pathspec. `null` when git could not answer. */
+function dirtyCount(root, pathspec) {
+  const porcelain = git(['status', '--porcelain', '--', pathspec], root);
+  return porcelain === null ? null : porcelain.split('\n').filter((l) => l.trim()).length;
+}
+
+/**
+ * Where the checkers themselves live. A second pathspec rather than a wider scope — see
+ * the block comment below for why widening was rejected.
+ */
+const INSTRUMENT_DIR = 'scripts';
+
 /**
  * @param {string} root   repo root
  * @param {string} [scope] optional path prefix (e.g. 'apps/web') — dirtiness is reported for
  *                         the scanned scope, since that is what can invalidate the result.
+ * @param {string} [instrument] where the checker's own source lives. Reported SEPARATELY.
  * @returns {{at: string, iso: string, head: string|null, dirty: number|null,
+ *            instrumentDirty: number|null, instrument: string|null,
  *            scope: string|null, line: string}}
  */
-export function provenance(root, scope) {
+export function provenance(root, scope, instrument = INSTRUMENT_DIR) {
   const { at, iso } = stamp();
   const head = git(['rev-parse', '--short', 'HEAD'], root);
 
@@ -112,14 +126,57 @@ export function provenance(root, scope) {
   const porcelain = git(['status', '--porcelain', '--', scope ?? '.'], root);
   const dirty = porcelain === null ? null : porcelain.split('\n').filter((l) => l.trim()).length;
 
+  /* ───────────────────────────────────────────────────────────────────────────────────
+   * THE SCOPE CANNOT CONTAIN THE ONE FILE THAT MOST INVALIDATES THE RESULT.
+   *
+   * Found in M15's re-gate by `fidelity-qa-reviewer` and routed by
+   * `commandcenter-orchestrator`. `check-tokens.mjs` calls `provenance(ROOT, 'apps/web')`,
+   * and a run made from a worktree with `scripts/check-rtl.mjs` modified printed:
+   *
+   *     scanned at        2026-08-17 20:34 +03:00 · eaca677 · clean
+   *
+   * The scoping decision above is right and stays: dirtiness is reported for the scanned
+   * scope, because that is what can invalidate the result. **The exception is the
+   * instrument.** §8b exists so a number can be re-derived later, and the two inputs to
+   * that re-derivation are the scanned tree AND the checker that scanned it — a modified
+   * checker changes the number without changing a single scanned file. So the banner's
+   * `clean` was precisely wrong in the one case §8b was written for: a declared value read
+   * as an observed one, on the instrument that exists to stop exactly that.
+   *
+   * TWO FIGURES, NOT ONE WIDER FIGURE. Widening `scope` to the repo was rejected and the
+   * reason is about readers rather than about correctness: every banner would then read
+   * dirty on an unrelated `comms/` edit, which trains people to ignore the field — worse
+   * than the bug, because a field nobody reads fails silently. Reporting the instrument
+   * separately keeps the existing sentence meaning exactly what it already meant and adds
+   * the one clause it could not say.
+   *
+   * ASKED ONLY WHEN THE SCAN IS SCOPED. An unscoped run (`check-metrics`) already counts
+   * `scripts/` inside `dirty`, and printing it twice would be noise dressed as rigour.
+   * ─────────────────────────────────────────────────────────────────────────────────── */
+  const instrumentDirty = scope ? dirtyCount(root, instrument) : null;
+
   const where = scope ? ` under ${scope}` : '';
   const state =
     dirty === null ? 'dirty state unknown' : dirty === 0 ? 'clean' : `${dirty} uncommitted${where}`;
 
-  const id = head ?? (porcelain === null ? null : 'no commit');
-  const line = id === null ? `${at} · no git` : `${at} · ${id} · ${state}`;
+  // Named for what it is rather than counted: the useful fact is "the thing that produced
+  // this number is not the committed one", and a reader does not need to know it was two
+  // files rather than one to act on that.
+  const checker = instrumentDirty ? ` · checker modified under ${instrument}` : '';
 
-  return { at, iso, head, dirty, scope: scope ?? null, line };
+  const id = head ?? (porcelain === null ? null : 'no commit');
+  const line = id === null ? `${at} · no git` : `${at} · ${id} · ${state}${checker}`;
+
+  return {
+    at,
+    iso,
+    head,
+    dirty,
+    instrumentDirty,
+    instrument: scope ? instrument : null,
+    scope: scope ?? null,
+    line,
+  };
 }
 
 /**

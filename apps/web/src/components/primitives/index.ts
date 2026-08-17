@@ -1,18 +1,29 @@
 /**
- * The shared vocabulary. Nine primitives; everything else in the product
+ * The shared vocabulary. Eleven primitives; everything else in the product
  * composes from them (Part V — no component library).
  *
  *   import { Card, Chip, Eyebrow } from '@/components/primitives';
  *
- * Adding a tenth is a decision-request to design-system-guardian, not a pull
+ * Adding a twelfth is a decision-request to design-system-guardian, not a pull
  * request. Most "new primitive" needs are a prop on an existing one.
  *
- * **The ninth is `ProvenanceBadge`, and the count moved on a written decision
- * rather than on convenience** (tokens contract §10). Its natural host was
- * `Chip`, and that is exactly why it could not live there: `Chip` is the status
- * vocabulary and the one component allowed to spend data ink, while provenance
- * is chrome. A drifted fork is not unhealthy. Merging the two would teach every
- * reader that a coloured token and a grey one answer the same kind of question.
+ * **The last three moved the count on written decisions rather than on
+ * convenience** (tokens contract §10.4, §11.5). Every one of them was offered
+ * `Chip` as a host and refused it for the same reason: `Chip` is the product's
+ * *status* vocabulary and the one component allowed to spend data ink, and none
+ * of these three reports a status.
+ *
+ *   9. `ProvenanceBadge` — where an agent came from. A drifted fork is not
+ *      unhealthy; it runs. §10.
+ *  10. `AddressBadge` — who a turn goes to and what it costs in runs. A price is
+ *      not a condition, and `#` vs `@@` is the difference between one run and N.
+ *      §11.
+ *  11. `InterruptBadge` — how disruptively a message lands. A choice the sender
+ *      is about to make, not a state of the system. §11.
+ *
+ * Merging any of them into `Chip` would teach every reader — and every future
+ * implementer copying the nearest example — that a coloured token and a grey one
+ * answer the same kind of question.
  */
 export { Pill } from './Pill';
 export type { PillProps, PillVariant } from './Pill';
@@ -40,6 +51,12 @@ export type { GlassPanelProps } from './GlassPanel';
 
 export { ProvenanceBadge } from './ProvenanceBadge';
 export type { ProvenanceBadgeProps, ProvenanceState } from './ProvenanceBadge';
+
+export { AddressBadge, OPEN_ENDED_FORMS } from './AddressBadge';
+export type { AddressBadgeProps } from './AddressBadge';
+
+export { InterruptBadge, interruptsWorkInProgress } from './InterruptBadge';
+export type { InterruptBadgeProps } from './InterruptBadge';
 
 export { cx } from './cx';
 export type { ClassValue } from './cx';

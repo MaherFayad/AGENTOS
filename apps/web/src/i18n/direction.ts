@@ -46,6 +46,28 @@ export const MIRRORS = {
   'shell.corners': '§2.0 — top-bar and bottom-bar clusters swap sides',
   /** §2.3 drawer close ✕, all list bullets, chips, disclosure chevrons. */
   'component.disclosure': 'chevrons and carets point along the reading direction',
+  /** `Plan §12` — the addressing and interrupt badges as a whole. Declared 2026-08-17
+   *  by `design-system-guardian` when the two registers landed, and declared HERE
+   *  rather than decided in the component, because that is the lesson the carousel
+   *  cost: neither table named it, so three components each decided locally and one
+   *  shipped backwards.
+   *
+   *  A badge is a label in a sentence: mark, then sigil, then the run count, joined
+   *  by `·`. That is reading order, so the whole run mirrors — and it does so for
+   *  free, because the spacing is `gap` and the one enclosure edge is `border-s`.
+   *  The `@@` stack lip is inset symmetrically on the inline axis and offset only on
+   *  the block axis, so it is the same stack in both directions rather than a
+   *  physical property that had to be exempted.
+   *
+   *  THE PART THAT NEEDED A DECISION: `@`, `#` and `@@` are direction-NEUTRAL
+   *  characters (BiDi class ON), so an address sitting against Arabic text takes its
+   *  side from whatever runs beside it — `@@sales` can render with the sigils on the
+   *  wrong end of the name without anything in the component being wrong. The typed
+   *  address is therefore wrapped in `<bdi>`, so the run resolves by its own first
+   *  strong character (a kebab slug) instead of by its neighbour. This is the same
+   *  answer `ProvenanceBadge` gives `{commit}`, and it is not optional here: the
+   *  sigil is the character that distinguishes one run from N. */
+  'threads.addressBadge': '`Plan §12` — an address badge is a label in a sentence; its sigil run is bidi-isolated',
 } as const;
 
 /**
@@ -73,6 +95,24 @@ export const DOES_NOT_MIRROR = {
   /** §2.3 / §3.1 — the SSE console and any code/log output. Monospace program
    *  output is LTR by definition; mirroring it would reorder stack traces. */
   'component.console': '§2.3, §3.1 — program output is LTR',
+  /** `Plan §12` — the marks inside `AddressBadge` and `InterruptBadge`. Declared
+   *  2026-08-17 by `design-system-guardian`, alongside `MIRRORS['threads.addressBadge']`,
+   *  because the badge and the mark inside it answer this question differently and
+   *  a single entry would have hidden that.
+   *
+   *  Both sets of marks are drawn on the BLOCK axis: a message rises into the runs
+   *  it becomes, and work runs upward until something interrupts it. A stem, a
+   *  crossbar, a trident and a stop bar have no inline asymmetry at all, so there is
+   *  nothing to mirror — that was a drawing decision taken to make this one cheap,
+   *  not a discovery afterwards.
+   *
+   *  ONE EXCEPTION, AND IT IS THE ONE WORTH READING: `steer`'s stem steps sideways.
+   *  It is a change of course, not a direction of travel — the work is not heading
+   *  anywhere on the page — so which side it steps to means nothing, and mirroring it
+   *  would assert that it does. Same reasoning as `ProvenanceBadge`'s fork, whose
+   *  arms are lineage rather than motion: `check-rtl` will not flag SVG path data, so
+   *  this is a promise a reader can check rather than a rule a checker enforces. */
+  'threads.registerMarks': '`Plan §12` — arity and interrupt marks are counts and states on the block axis, not sentences',
 } as const;
 
 export type MirroredSurface = keyof typeof MIRRORS;

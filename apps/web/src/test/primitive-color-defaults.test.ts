@@ -185,14 +185,20 @@ describe('primitive defaults that spend a colour (design-tokens §9)', () => {
     }
   });
 
-  it('lets no call site anywhere in src/ inherit one of them in silence', () => {
+  /**
+   * The call-site sweep, extracted so it can be run against a SYNTHETIC armed list. That
+   * extraction is the whole point of the rewrite below — see the two tests that use it.
+   */
+  const sweep = (armed: { name: string; props: string[]; file: string }[]) => {
     const offenders: string[] = [];
-    for (const { name, props, file: own } of primitives) {
+    let tagsExamined = 0;
+    for (const { name, props, file: own } of armed) {
       if (props.length === 0) continue;
       for (const file of tsxFiles(SRC)) {
         if (file === own) continue;
         const src = stripComments(readFileSync(file, 'utf8'));
         for (const tag of callSites(src, name)) {
+          tagsExamined++;
           for (const prop of props) {
             if (!new RegExp(`\\b${prop}\\s*=`).test(tag)) {
               offenders.push(`${rel(file)}: <${name}> must state ${prop}=, not inherit it`);
@@ -201,6 +207,90 @@ describe('primitive defaults that spend a colour (design-tokens §9)', () => {
         }
       }
     }
-    expect(offenders.sort()).toEqual([]);
+    return { offenders: offenders.sort(), tagsExamined };
+  };
+
+  /**
+   * RENAMED AND SPLIT 2026-08-17 by the contract owner, on `commandcenter-orchestrator`'s
+   * finding, and the rename is the substance rather than the tidying.
+   *
+   * The single assertion this replaces was called *"lets no call site anywhere in src/
+   * inherit one of them in silence"* — a name promising an active, repo-wide guarantee —
+   * while its body opened with `if (props.length === 0) continue`. With
+   * `KNOWN_SUB_AA_DEFAULTS` empty and no primitive defaulting sub-AA, that loop iterated
+   * over an empty armed set and passed **without examining a single tag**. Green, fast,
+   * and checking nothing, under a name a reader would cite.
+   *
+   * §9.6a already argued the dormancy is *correct*: this is a trap, not a patrol, and
+   * "fixing" it by re-adding an entry to keep it busy is the exact defect corrected one
+   * paragraph above it — a guard that requires something to still be broken. So the
+   * dormancy stays and the SILENCE goes. Two tests instead of one:
+   *
+   *   1. the trap is dormant, and says so out loud with the number it examined;
+   *   2. the trap fires when armed, proved by arming it synthetically.
+   *
+   * That is the same shape as the deriver's own self-check: prove the mechanism by
+   * mutation rather than by leaving a real defect in place to lean on.
+   */
+  it('is dormant today, examines nothing, and does not pretend otherwise', () => {
+    const armed = primitives.filter((p) => p.props.length > 0);
+    const { offenders, tagsExamined } = sweep(primitives);
+
+    expect(offenders).toEqual([]);
+    // The vacuity, asserted rather than inherited. If a sub-AA default ever lands, this
+    // line goes red and the reader is sent to the test below instead of to a green tick
+    // that meant nothing.
+    expect(
+      armed,
+      'A primitive now defaults to a sub-AA text token, so this suite is no longer dormant. ' +
+        'That is not a failure of this assertion — it is the trap arming. Fix the default, ' +
+        'or record it in KNOWN_SUB_AA_DEFAULTS with a reason and route it to ' +
+        'design-system-guardian.',
+    ).toEqual([]);
+    expect(
+      tagsExamined,
+      'With no armed prop there is nothing to examine, and that is the honest state (§9.6a). ' +
+        'A nonzero count here would mean the dormancy reasoning above has gone stale.',
+    ).toBe(0);
+  });
+
+  it('patrols every call site in src/ the moment a sub-AA default appears', () => {
+    // The half the dormant test cannot cover: that the sweep WORKS. Armed synthetically
+    // against components the repo really uses, so the walk, the tag regex and the
+    // prop-stated branch are all exercised against real files — and, as with the deriver's
+    // own self-check above, nothing in the repo has to be broken for it to mean anything.
+    //
+    // BOTH DIRECTIONS, because one is not a proof. A sweep that always fires and a sweep
+    // that never fires are equally useless, and only the second one looks green.
+    const chip = primitives.find((p) => p.name === 'Chip')!;
+    const railLabel = primitives.find((p) => p.name === 'RailLabel')!;
+
+    // (a) FIRES. `__armedProbe` is a prop no call site states, because it does not exist —
+    // so every real `<Chip>` in the tree must be named. Deliberately a nonsense prop: a
+    // reader must not be able to mistake this arming for a rule anybody has to follow.
+    const fires = sweep([{ name: 'Chip', props: ['__armedProbe'], file: chip.file }]);
+    expect(
+      fires.tagsExamined,
+      '<Chip> must still be used somewhere in src/, or this proves nothing about the walk',
+    ).toBeGreaterThan(0);
+    expect(
+      fires.offenders.length,
+      'Armed on a prop no call site can possibly state, the sweep must name every <Chip> ' +
+        'in the tree. Empty here means the walk or the tag regex has stopped finding call ' +
+        'sites — the silent-green failure this pair exists to prevent.',
+    ).toBe(fires.tagsExamined);
+    expect(fires.offenders.every((o) => o.includes('<Chip> must state __armedProbe='))).toBe(true);
+
+    // (b) STAYS SILENT when the prop IS stated. `RailLabel.tone` is the real case §9.7
+    // ruled on: the default moved to `muted` and the two sites that want a specific tone
+    // say so out loud. Armed on it, the sweep must find the call sites and forgive them —
+    // which is what separates a guard from a tripwire that fires on everything.
+    const quiet = sweep([{ name: 'RailLabel', props: ['tone'], file: railLabel.file }]);
+    expect(quiet.tagsExamined, '<RailLabel> must still be used somewhere').toBeGreaterThan(0);
+    expect(
+      quiet.offenders,
+      'Every shipped <RailLabel> states its tone (§9.7). A name here is a real finding, ' +
+        'not a failure of this test.',
+    ).toEqual([]);
   });
 });
