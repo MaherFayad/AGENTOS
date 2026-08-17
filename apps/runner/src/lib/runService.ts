@@ -300,13 +300,36 @@ async function execute(
 
     const planSummary = buildPlanSummary(record, inputs);
     state.stream.emit('plan', { summary: planSummary, awaitingApproval: record.approvalRequired });
-    obsTrace?.event('plan', { summary: planSummary, awaitingApproval: record.approvalRequired });
+    /**
+     * **The span gets the keys; the prose stays inside the client boundary.**
+     *
+     * `buildPlanSummary` is `renderInputs(inputs)` newline-joined and then flattened with
+     * ` · `, plus the `deliver:` Slack channel and email address — which is the same finding
+     * that took `summary` off `/api/all/approvals`, arriving one plane over. Worse here,
+     * because **flattening defeats the redactor's key pass**: `redact` walks object keys, so
+     * a denylisted `client_name` loses its whole value; a *string* has no keys, so only the
+     * value regexes run and four of five PII fields survive (`observability-engineer`,
+     * 2026-08-17, with the worked example).
+     *
+     * They closed it at their boundary by applying the key denylist inside strings, and that
+     * is defence in depth rather than the fix: the trace does not need the sentence. It needs
+     * the agent, the tools and the input **keys** — which is also more useful, because a key
+     * list is filterable and a paragraph is not. The human-readable summary keeps going where
+     * it belongs: the SSE `plan` frame and the approval gate, inside the project.
+     */
+    obsTrace?.event('plan', {
+      agent: record.slug,
+      tools: record.allowlist.tools,
+      inputKeys: Object.keys(inputs),
+      approvalRequired: record.approvalRequired,
+    });
 
     if (record.approvalRequired) {
       const gate = store.openGate(state, planSummary);
       services.notifyApproval?.(state, planSummary);
       logger.info({ runId: state.runId, agent: record.slug }, 'run paused at approval gate');
-      obsTrace?.event('approval-requested', { summary: planSummary });
+      // Keys, not the sentence — same reason as the `plan` event above.
+      obsTrace?.event('approval-requested', { agent: record.slug, inputKeys: Object.keys(inputs) });
 
       const decision = await gate.promise;
       if (decision.decision === 'deny') {
@@ -333,7 +356,8 @@ async function execute(
     await slots.acquire();
     try {
       state.status = 'running';
-      scratchDir = await createScratch(config, state.runId);
+      // The **project's** scratch root, not the coordinator's — `<scratchRoot>/<slug>/<runId>`.
+      scratchDir = await createScratch(project, state.runId);
       // Captured as a const so the gate below cannot observe a later reassignment of the
       // outer `scratchDir` (which the `finally` block nulls out on teardown).
       const scratch = scratchDir;
@@ -404,7 +428,9 @@ async function execute(
         return;
       }
 
-      const artifact = await extractArtifact(config, state.runId, scratchDir);
+      // Saved under `<artifactsRoot>/<slug>/<runId>/`. The project is the only source of
+      // that path, so the durable bytes carry the same attribution the ledger row does.
+      const artifact = await extractArtifact(project, state.runId, scratchDir);
       if (artifact) {
         state.artifact = artifact;
         state.stream.emit('artifact', {

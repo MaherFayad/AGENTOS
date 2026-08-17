@@ -42,6 +42,22 @@ export type ApiErrorCode =
   | 'run_not_found'
   | 'run_not_pending_approval'
   | 'approval_already_decided'
+  /**
+   * The bytes this run points at are **not inside the serving project's artifacts
+   * directory**, so they are not served (ADR-015, `project-scoping.md` invariant 8).
+   *
+   * Distinct from `run_not_found`, which is the *cross-project* refusal and is deliberately
+   * opaque — from outside its project a run does not exist. This one is not about a caller
+   * at all: the run is in this project and its artifact is somewhere the project does not
+   * own, which is a fault in the runner's own state. A 500, therefore, and the hint tells
+   * the human where the file actually is, because **nothing is deleted** on this path.
+   *
+   * Its live purpose is the pre-M15 layout: artefacts were written to
+   * `artifactsRoot/<runId>/` with no project segment, and adopting such a directory into
+   * whichever project happens to be mounted would attribute one client's output to another.
+   * Refusing is the same answer `run_unattributed` gives one layer up in the ledger.
+   */
+  | 'artifact_unattributed'
   // scheduling (§3.2)
   | 'invalid_cron'
   | 'git_write_refused'
@@ -100,6 +116,7 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   run_not_found: 404,
   run_not_pending_approval: 409,
   approval_already_decided: 409,
+  artifact_unattributed: 500,
   invalid_cron: 400,
   git_write_refused: 403,
   brain_write_refused: 403,

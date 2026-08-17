@@ -171,7 +171,9 @@ test('a run CAN still write its own artifact — the gate confines, it does not 
   try {
     let relativeOk = false;
     let absoluteInsideOk = false;
+    let cwd = '';
     const session: AgentSessionFactory = async function* (options) {
+      cwd = options.cwd;
       relativeOk = options.isToolAllowed('Write', { file_path: 'output.md', content: '# hi' });
       absoluteInsideOk = options.isToolAllowed('Write', {
         file_path: join(options.cwd, 'notes', 'draft.md'),
@@ -182,13 +184,49 @@ test('a run CAN still write its own artifact — the gate confines, it does not 
 
     const services = createRunnerServices(loadConfig(), { info: () => {}, warn: () => {}, error: () => {} });
     services.session = session;
-    const state = await startRun(services, mountedProject(services.config), { agent: 'sales/workspace-agent', inputs: {} });
+    const project = mountedProject(services.config);
+    const state = await startRun(services, project, { agent: 'sales/workspace-agent', inputs: {} });
     await new Promise<void>((resolve) => state.stream.whenEnded(resolve));
 
     assert.equal(relativeOk, true, 'a relative path is inside the scratch dir');
     assert.equal(absoluteInsideOk, true, 'an absolute path inside the scratch dir is fine');
     assert.equal(state.status, 'ok');
     assert.ok(state.artifact, 'the artifact still reaches disk — otherwise the fix broke every agent');
+
+    // REQ-RUN-07's other two halves, asserted here because the real pipeline has just run
+    // and they are free: the cwd is **this project's** scratch root, and it does not survive
+    // the run. The second one is the reason `workspace` can be a normal connector at all —
+    // an agent's filesystem access is scoped by a directory that stops existing.
+    assert.equal(
+      cwd.startsWith(project.workspaceRoot),
+      true,
+      `the cwd (${cwd}) must be under this project's workspace root (${project.workspaceRoot})`,
+    );
+    assert.ok(
+      state.artifact.absolutePath.startsWith(project.artifactsDir),
+      'and the saved artefact is under this project’s artefacts directory, not the coordinator’s',
+    );
+    // Polled, not asserted immediately, and the reason is worth stating rather than hiding
+    // behind a sleep: `destroyScratch` runs in `execute`'s outer `finally`, which is *after*
+    // the `done` frame is emitted. So the stream ending does not mean the workspace is gone
+    // yet — it means it is about to be. Anything that fixed this by removing the poll would
+    // be asserting a race.
+    const deadline = Date.now() + 2_000;
+    let survives = true;
+    while (survives && Date.now() < deadline) {
+      try {
+        await stat(cwd);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      } catch {
+        survives = false;
+      }
+    }
+    assert.equal(
+      survives,
+      false,
+      `the scratch workspace ${cwd} must be destroyed after the artifact is extracted (§3.2) — ` +
+        'that deletion is why `workspace` can be a normal connector at all',
+    );
   } finally {
     if (previousRoot === undefined) delete process.env.AGNETOS_REPO_ROOT;
     else process.env.AGNETOS_REPO_ROOT = previousRoot;

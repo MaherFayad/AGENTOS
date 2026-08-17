@@ -77,8 +77,21 @@ export interface MountedProject {
   status: ProjectStatus;
   /** Root of the mounted library — the directory holding `agents/`, `panels/`, `company/`. */
   libraryPath: string;
-  /** Per-run scratch workspaces are created under here. */
+  /** Per-run scratch workspaces are created under here: `<scratchRoot>/<slug>/<runId>/`. */
   workspaceRoot: string;
+  /**
+   * Where this project's saved artefacts live: `<artifactsRoot>/<slug>/<runId>/`.
+   *
+   * The durable half of a run, and until 2026-08-17 the one plane with **no project segment
+   * at all** — every project's output landed in `artifactsRoot/<runId>/`, distinguished only
+   * by a run id that nothing on disk relates back to a project. That is the ledger's missing
+   * `project_id` one layer down, and worse in one specific way: a filesystem has no
+   * constraint that can refuse the write, so the only available mechanism is that the
+   * destination is *derived* from the project rather than remembered by the caller.
+   * `artifacts.ts` therefore takes `MountedProject` and cannot name `RunnerConfig`
+   * (PDPL rule 4 · rule 6, `project-scoping.md` invariant 8).
+   */
+  artifactsDir: string;
   /** Resolved `agents/` root for this project's library layer (L1). */
   agentsDir: string;
   /** Resolved `agents/_overrides/` root (L2). */
@@ -121,7 +134,13 @@ export function mountedProject(config: RunnerConfig): MountedProject {
     name: config.projectName,
     status: 'active',
     libraryPath: config.repoRoot,
-    workspaceRoot: config.scratchRoot,
+    // Both roots carry the slug. `<scratchRoot>/<slug>/<runId>` and
+    // `<artifactsRoot>/<slug>/<runId>` — so a directory listing on the host answers "whose
+    // output is this?" without a database, and the answer is the same one `ops.agent_runs`
+    // would give. One mounted project makes the segment redundant today; the segment is what
+    // stops the second mount from being a silent merge.
+    workspaceRoot: join(config.scratchRoot, slug),
+    artifactsDir: join(config.artifactsRoot, slug),
     agentsDir: config.agentsDir,
     overridesDir: join(config.agentsDir, '_overrides'),
     companyDir: config.companyDir,
@@ -237,7 +256,7 @@ export function toProjectSummary(project: MountedProject): ProjectSummary {
     // tailnet. Migration 0005 carries a CHECK that keeps the column NULL until that ADR
     // lands, so this is not a placeholder — it is the only value the database will hold.
     libraryRemote: null,
-    hostAffinity: [],
+    hostAffinity: [] as const,
     hostAffinityEnforced: false,
     budgetMonthlyUsd: null,
     budgetEnforced: false,

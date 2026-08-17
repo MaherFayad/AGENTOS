@@ -26,6 +26,7 @@ import {
 import { sendApiError } from './http.ts';
 import { registerMetricsRoutes } from './register-metrics.ts';
 import { ApiError, badRequest } from '../lib/errors.ts';
+import { assertArtifactInProject } from '../lib/artifacts.ts';
 import { toAgentDetail } from '../lib/agents.ts';
 import { listResolvedAgents, resolveForDispatch } from '../lib/cascade.ts';
 import {
@@ -178,6 +179,7 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
 
   app.get(RUNNER_ROUTES.runArtifact.path, async (request, reply) => {
     try {
+      const project = projectOf(ctx, request);
       const state = runInProject(request);
       if (!state.artifact) {
         throw new ApiError('run_not_found', `Run ${state.runId} has no artifact.`, {
@@ -185,6 +187,11 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
           retryable: false,
         });
       }
+      // Two questions, and the second one is new. `runInProject` answered "is this run this
+      // project's?" from the in-memory store — a cache that dies with the process. This asks
+      // "are these bytes this project's?" of the filesystem, which is where they actually
+      // live. Until artefacts carried a project segment there was no way to ask it.
+      assertArtifactInProject(project, state.artifact.absolutePath);
       const info = await stat(state.artifact.absolutePath);
       const filename = state.artifact.path.split('/').pop() ?? 'artifact';
       reply

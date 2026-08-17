@@ -50,10 +50,22 @@ export type ProjectStatus = 'active' | 'paused' | 'archived';
  * The hazard is the day ADR-015 Q6 lands and `budgetMonthlyUsd` becomes real: this route
  * then returns **every client's monthly budget to any caller**, which is a commercial figure
  * about one client reaching the context of another — the same defect `/api/all/approvals`
- * had, arriving through a field that already exists rather than a route someone adds. It is
- * written here rather than fixed because there is nothing to fix yet and a filter over four
- * nulls would be untestable. **Whoever makes these fields real narrows this row in the same
- * commit**, or says why not.
+ * had, arriving through a field that already exists rather than a route someone adds.
+ *
+ * **That was a comment until 2026-08-17, and it is now the type.** The four declared-but-
+ * unread fields are typed as the *only value they may hold on this route* — `null`,
+ * `readonly []`, `false`. A comment asking the next author to remember is the weakest
+ * instrument this repo has; a literal type puts the compiler in the room. The day someone
+ * reads `ops.project.budget_monthly` and returns it here, `toProjectSummary` stops
+ * compiling **on the line that leaks**, and the choice becomes explicit: narrow this row and
+ * serve the figure from a project-scoped route, or widen the type in a reviewable diff and
+ * say why every caller may see every client's budget. Neither is something you can do by
+ * accident, which was the entire problem.
+ *
+ * A filter would not have worked and is why this shape was chosen instead: filtering four
+ * hardcoded nulls asserts nothing, and `apps/runner/src/routes/__tests__/projects-payload.test.ts`
+ * is the runtime half — it fails the day the route serves a figure, even if a future type
+ * permits one.
  */
 export interface ProjectSummary {
   id: string;
@@ -64,13 +76,16 @@ export interface ProjectSummary {
   libraryPath: string;
   /** Always `null` in M15 — a git remote is an egress decision (ADR-015 Q5), and the column carries a CHECK that keeps it null until that ADR lands. */
   libraryRemote: null;
-  /** Declared, read by nothing. See `hostAffinityEnforced`. */
-  hostAffinity: string[];
+  /** Declared, read by nothing, and **not expressible** on this row. See `hostAffinityEnforced`. */
+  hostAffinity: readonly [];
   hostAffinityEnforced: false;
-  /** Declared, not enforced in M15 (ADR-015 Q6). See `budgetEnforced`. */
-  budgetMonthlyUsd: number | null;
+  /**
+   * Declared, not enforced in M15 (ADR-015 Q6) — and typed `null` so it cannot become real
+   * *here* without the narrowing happening in the same commit. See the note above.
+   */
+  budgetMonthlyUsd: null;
   budgetEnforced: false;
-  defaultAccountId: string | null;
+  defaultAccountId: null;
 }
 
 export interface ProjectsResponse {

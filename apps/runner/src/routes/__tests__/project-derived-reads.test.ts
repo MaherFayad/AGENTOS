@@ -101,6 +101,7 @@ function projectAt(root: string, slug: string): MountedProject {
     status: 'active',
     libraryPath: root,
     workspaceRoot: join(root, 'scratch'),
+    artifactsDir: join(root, 'artifacts'),
     agentsDir: join(root, 'agents'),
     overridesDir: join(root, 'agents', '_overrides'),
     companyDir: join(root, 'company'),

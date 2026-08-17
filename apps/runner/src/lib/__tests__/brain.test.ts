@@ -280,6 +280,7 @@ async function secondProject(root: string) {
     status: 'active' as const,
     libraryPath: dir,
     workspaceRoot: join(dir, 'scratch'),
+    artifactsDir: join(dir, 'artifacts'),
     agentsDir: join(dir, 'agents'),
     overridesDir: join(dir, 'agents', '_overrides'),
     companyDir: join(dir, 'company'),
