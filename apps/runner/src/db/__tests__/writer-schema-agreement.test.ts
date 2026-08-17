@@ -56,6 +56,12 @@ import assert from 'node:assert/strict';
 
 import { createLedger, writeOutput } from '../ledger.ts';
 import { pruneRetention } from '../prune.ts';
+import {
+  appendMessage,
+  createThread,
+  markMessagesDelivered,
+  setThreadState,
+} from '../threads.ts';
 import type { DbClient } from '../../observability/types.ts';
 import { projectIdForSlug } from '../../lib/project.ts';
 
@@ -121,7 +127,22 @@ const NOT_A_COLUMN = new Set([
  * assertion loosened within a week, which is worse than not having it.
  */
 function isRequired(definition: string): boolean {
-  const d = definition.toLowerCase();
+  /**
+   * **String literals are stripped first, and that is not tidiness.**
+   *
+   * Found by `thread-model-engineer` while writing `0008_threads.sql`. `ops.thread.delivery` is
+   * `text NOT NULL CHECK (delivery IN ('direct','dispatch','fan-out','default','session'))` —
+   * a mandatory column whose enum happens to contain the value `'default'`. The `\bdefault\b`
+   * test below matched *inside the string literal*, this function answered `false`, and the
+   * column silently dropped out of the `required` set. Every insert then stopped being checked
+   * for it.
+   *
+   * The failure is in the **permissive** direction, which is the expensive one: it does not
+   * make a correct writer red, it makes a broken writer green — the precise shape of the M15
+   * defect this whole file was built to catch, arriving through the checker instead of through
+   * the writer. Any enum containing `default`, `generated` or `serial` had the same hole.
+   */
+  const d = definition.toLowerCase().replace(/'[^']*'/g, "''");
   if (/\bdefault\b/.test(d) || /\bgenerated\b/.test(d) || /\b(big|small)?serial\b/.test(d)) return false;
   // `PRIMARY KEY` inline implies NOT NULL and is the reason `run_id` is required.
   return /\bnot\s+null\b/.test(d) || /\bprimary\s+key\b/.test(d);
@@ -261,7 +282,17 @@ async function harvestWrites(): Promise<Statement[]> {
   const db: DbClient = {
     async query(sql: string) {
       statements.push({ label, sql });
-      return { rows: [] as never[] };
+      /**
+       * One plausible row back, rather than none.
+       *
+       * `appendMessage` and `setThreadState` treat an empty `RETURNING` as a real refusal —
+       * *"no such thread in this scope"*, *"the thread moved underneath you"* — and throw. A
+       * recorder that always answered `{rows: []}` would make every harvest of those two
+       * statements a thrown error, and the file would then be checking the statements it
+       * happened to reach before the first throw. The shape is deliberately generic: nothing
+       * downstream reads these values except to decide it got *something*.
+       */
+      return { rows: [{ id: 'probe', seq: 1, state: 'open' }] as unknown as never[] };
     },
   };
 
@@ -299,6 +330,52 @@ async function harvestWrites(): Promise<Statement[]> {
 
   label = 'pruneRetention — ops.prune()';
   await pruneRetention(db);
+
+  /**
+   * The thread plane (ADR-023, migration `0008_threads.sql`).
+   *
+   * Extended here rather than in a parallel file, on the reviewer's instruction and for the
+   * reason that makes it right: a second agreement test would have a second parser, and the
+   * two would agree about the schema until they did not. One parser, falsified once, applied
+   * to every writer this repo has.
+   *
+   * `ops.thread` and `ops.message` between them carry **thirteen** NOT NULL columns with no
+   * default, four of which (`delivery`, `thread_kind`, `seq`, `author`) exist only because of a
+   * decision written in the last day. If any of them stops being named, the first thread a
+   * person ever creates is refused by Postgres — which is the M15 failure mode with the words
+   * "run" and "thread" swapped.
+   */
+  label = 'createThread — ops.thread';
+  await createThread(db, {
+    projectId: projectIdForSlug('agentos'),
+    subject: { via: 'address', address: { form: 'direct', department: 'sales', slug: 'probe' } },
+    createdBy: 'human:owner',
+  });
+
+  label = 'appendMessage — ops.message';
+  await appendMessage(db, {
+    threadId: '00000000-0000-4000-8000-000000000000',
+    kind: 'human',
+    interrupt: 'note',
+    author: 'human:owner',
+    body: 'probe',
+  });
+
+  label = 'appendMessage (question) — ops.message with the mandatory expiry';
+  await appendMessage(db, {
+    threadId: '00000000-0000-4000-8000-000000000000',
+    kind: 'question',
+    author: 'agent:sales/probe',
+    body: 'probe?',
+    payload: { options: ['a', 'b'] },
+    expiresAt: now,
+  });
+
+  label = 'markMessagesDelivered — the mailbox drain';
+  await markMessagesDelivered(db, ['00000000-0000-4000-8000-000000000001']);
+
+  label = 'setThreadState — the transition writer';
+  await setThreadState(db, '00000000-0000-4000-8000-000000000000', 'open', 'running');
 
   return statements;
 }
@@ -346,6 +423,11 @@ test('the migration parser reads real columns and refuses commented-out ones', a
 
   assert.equal(functions.has('ops.prune'), true, 'CREATE OR REPLACE FUNCTION is read too');
   assert.equal(functions.has('ops.function_that_does_not_exist'), false);
+
+  // 0008's two tables, so a parser that silently stopped reading at 0007 cannot make the
+  // thread assertions below vacuous.
+  assert.ok(tables.get('ops.thread'), 'ops.thread is in the schema (0008)');
+  assert.ok(tables.get('ops.message'), 'ops.message is in the schema (0008)');
 });
 
 /**
@@ -400,6 +482,59 @@ test('the parser knows which columns are mandatory and which conflict targets ar
     true,
     'a table-level PRIMARY KEY (run_id, seq) is an inferable target too',
   );
+
+  /**
+   * **The `'default'`-inside-an-enum trap, asserted against the live text that contains it.**
+   *
+   * `ops.thread.delivery` is `text NOT NULL CHECK (delivery IN (…,'default',…))`. Until
+   * `isRequired` stripped string literals, `\bdefault\b` matched inside the literal, the column
+   * dropped out of `required`, and `createThread` stopped being checked for it. That is a
+   * permissive failure — a broken writer reads green — which is the exact disease this file
+   * exists to cure, arriving through the checker rather than the writer.
+   *
+   * Kept as a live case rather than a synthetic one: the migration deliberately leaves that
+   * CHECK on the column line and says so, so this assertion is falsifiable by reverting one
+   * `.replace()` and watching it go red.
+   */
+  const thread = tables.get('ops.thread')!;
+  assert.equal(
+    thread.required.has('delivery'),
+    true,
+    "NOT NULL with an enum containing 'default' — required, despite the word appearing in a string literal",
+  );
+  assert.equal(thread.required.has('id'), true, 'PRIMARY KEY with no default');
+  assert.equal(thread.required.has('created_at'), false, 'NOT NULL DEFAULT now()');
+  assert.equal(thread.required.has('due_at'), false, 'nullable: only a task has a due date');
+  assert.equal(thread.required.has('account_id'), false, 'nullable: a preference, not the payer');
+
+  const message = tables.get('ops.message')!;
+  for (const column of ['thread_id', 'project_id', 'thread_kind', 'seq', 'kind', 'author', 'body']) {
+    assert.equal(message.required.has(column), true, `ops.message.${column} is NOT NULL`);
+  }
+  assert.equal(message.required.has('interrupt'), false, 'null on anything a person did not send');
+  assert.equal(message.required.has('expires_at'), false, 'null except on a question — a CHECK, not a NOT NULL');
+  assert.equal(message.required.has('delivered_at'), false, 'null means still in the mailbox');
+
+  /**
+   * **`ops.agent_runs.thread_id` is nullable, and this assertion is the forcing function.**
+   *
+   * `Plan §12` gives the run ledger a `thread_id`. It ships nullable in 0008 because
+   * `recordRun` does not name it yet and its writer is `runner-engineer`'s slice — and a NOT
+   * NULL its only writer cannot satisfy is exactly how M15's first paid run would have gone
+   * unrecorded. Shipping that on purpose, in the same table, would be the defect as policy.
+   *
+   * The day `ALTER COLUMN thread_id SET NOT NULL` lands, this line goes red **and so does the
+   * main assertion below**, which demands every mandatory column be named by the insert. So
+   * the flip cannot be made without the writer moving in the same commit — with no database,
+   * in milliseconds. That is the mechanism the migration's §3 comment points at; this is it.
+   */
+  assert.equal(
+    runs.required.has('thread_id'),
+    false,
+    'nullable today. Making it NOT NULL without teaching recordRun to name it is the M15 defect ' +
+      'repeated on purpose — and the assertion below is what stops it.',
+  );
+  assert.equal(runs.columns.has('thread_id'), true, 'but the column does exist (0008 §3)');
 });
 
 /* -------------------------------------------------------------------------- *

@@ -18,6 +18,9 @@ export * from './graph';
 export * from './api';
 export * from './panels';
 export * from './project';
+// `thread-model-engineer`, ADR-023. Exports nothing that any module above declares — checked
+// rather than assumed, because `export *` does not pick a winner and a collision is TS2308.
+export * from './threads';
 
 // ---------------------------------------------------------------------------
 // Ambiguity resolutions.
