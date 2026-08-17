@@ -376,11 +376,41 @@ export interface PanelFilters {
   default?: string;
 }
 
-/** §2.5.7 — the Mission Control easter egg. `href` points at the approvals queue. */
+/**
+ * §2.5.7 — the Mission Control easter egg: *"This is the actual product."*
+ *
+ * ## The CTA's two states, and why the second one exists
+ *
+ * `href` is an **app-internal view path with no project segment** — `/approvals`, never
+ * `/p/agentos/approvals` and never an absolute URL. The renderer prefixes the project the
+ * reader is currently in. A panel file must not name a project: panels are mounted per
+ * project (`project-scoping.md` §5.1 Q8), so a slug baked into one would be a second copy
+ * of the mount, and the copy is the one that goes stale.
+ *
+ * `href` is **optional**, and omitting it is a supported, honest state rather than a
+ * degenerate one. A CTA whose destination is not built yet must render as text, not as a
+ * link, and must say why — `note` is required in that case and carries the sentence. The
+ * spec asks for `Get this deployed →` to reach the approvals queue; **that view does not
+ * exist in any project today**, and a link to it is not merely a 404: the unscoped-route
+ * resolver re-prefixes any path it does not recognise, so `/approvals` walks
+ * `/p/x/approvals` → `/p/x/p/x/approvals` → … A dead link that grows the URL is worse than
+ * no link, and "the button is here but does nothing" is worse than a label that says so.
+ *
+ * The day §2.5.7's view lands this is a one-line JSON edit — add `href`, drop `note` — with
+ * no renderer change. Dashboards are data.
+ */
 export interface PanelFooter {
   lead: string;
   detail: string;
-  cta?: { label: string; href: string };
+  cta?: PanelFooterCta;
+}
+
+export interface PanelFooterCta {
+  label: string;
+  /** In-app view path, no project segment, no origin. Absent ⇒ renders as text + `note`. */
+  href?: string;
+  /** Why this is not a link. Required exactly when `href` is absent. */
+  note?: string;
 }
 
 export interface Panel {

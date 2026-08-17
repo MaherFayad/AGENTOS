@@ -64,6 +64,31 @@ selection; we own the panel it opens.
    `source_ref` today, so the header opens on an honest "source unknown" rather than
    assuming `global`. The badge primitive refuses a default `state` for the same reason
    (tokens contract §10) and this spec does not work around it.
+10. **No path is typed; every path is built from `RUNNER_ROUTES`.** M15 moved the routes
+   under `/api/p/:project` (ADR-015) and this drawer's five literals kept pointing at the
+   pre-project spelling, so the drawer could not open an agent or start a run for a day
+   with nothing red. A literal is what made that possible. `data/client.ts` and
+   `run/transport.ts` now hold no path string; the one exception is documented in
+   decision 12. The URL builder is `shell-navigation-engineer`'s shared `projectApiUrl`,
+   not a private copy — four copies of one builder is the shape that disagrees quietly a
+   month later.
+11. **`null` project means *do not ask*.** Never *ask the unscoped one*. The pre-project
+   paths are still mounted and refuse by name so the migration stays visible
+   (`LEGACY_UNSCOPED_PATHS`); calling one anyway converts a deliberate 400 into a shrug,
+   and a 400 swallowed by a fallback is exactly how this stayed invisible. Reads and
+   writes raise an `ApiCallError` carrying the shell's `NO_PROJECT_SENTENCE`; `downloadUrl`
+   returns `null` because an `<a>` is a URL and not a call. A run is refused
+   **non-retryably**, because retrying an address that names no project produces the same
+   address behind a spinner. `GET /api/status` is the deliberate exception: it is
+   `scope: 'coordinator'`, it describes the process rather than a project's data, and both
+   `runner-engineer` and `shell-navigation-engineer` have written that down.
+12. **One suffix is still written here, and it is named.** `/metrics/runs` has no export in
+   `@agnetos/contracts` — the metrics surface is `observability-engineer`'s and lives in
+   `apps/runner`, which a web module may not import. So the half that *moved* (the project
+   prefix) comes from `PROJECT_ROUTE_PREFIX` and only the suffix is local, which is exactly
+   the construction their own `METRICS_ROUTES` uses and for the reason stated there. A
+   `decision-request` is open to export that table beside `COST_TICKER_ROUTE`; when it
+   lands the constant is deleted, not corrected.
 
 ## Coverage
 
@@ -82,11 +107,11 @@ selection; we own the panel it opens.
 | REQ-DRW-11 | §2.3 | WHAT IT REPLACES is a quote box on `--card` | `apps/web/src/drawer/sections/Prose.tsx` | `apps/web/src/drawer/data/project.test.ts` |
 | REQ-DRW-12 | §2.3 | THE LADDER is three rows HUMAN-LED / HUMAN-ASSISTED / FULLY AUTONOMOUS; active ivory, others `--ink-3` | `apps/web/src/drawer/sections/Ladder.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` |
 | REQ-DRW-13 | §2.3 | THE HUMAN is the closing paragraph from frontmatter `the_human` | `apps/web/src/drawer/sections/Prose.tsx` | `apps/web/src/drawer/data/project.test.ts` |
-| REQ-DRW-14 | §2.3 | LAST RUNS shows up to 5 rows from `GET /api/runs` (relative time, status dot, cost, duration; click → trace) | `apps/web/src/drawer/sections/LastRuns.tsx` · `apps/web/src/drawer/data/client.ts` | `apps/web/src/drawer/data/project.test.ts` |
+| REQ-DRW-14 | §2.3 | LAST RUNS shows up to 5 rows from `GET /api/p/:project/metrics/runs?agent=&limit=5` — the durable ledger, not the in-memory queue view (relative time, status dot, cost, duration; click → trace) | `apps/web/src/drawer/sections/LastRuns.tsx` · `apps/web/src/drawer/data/client.ts` | `apps/web/src/drawer/data/client.test.ts` · `apps/web/src/drawer/data/project.test.ts` |
 | REQ-DRW-15 | §2.3 | INPUTS form is generated from frontmatter `inputs:` (`type` + `required`); never hand-written per agent | `apps/web/src/drawer/data/inputs.ts` · `apps/web/src/drawer/sections/InputsForm.tsx` | `apps/web/src/drawer/data/inputs.test.ts` · `apps/web/src/drawer/JobDrawer.test.tsx` |
 | REQ-DRW-16 | §2.3 | Live SSE console is monospace 12px on `--screen` and slides up over the drawer | `apps/web/src/drawer/sections/RunConsole.tsx` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/run/console-model.test.ts` |
 | REQ-DRW-17 | §2.3 | Console renders exactly the contract events (`start`, `token`, `tool`, `plan`, `artifact`, `done`, `error`) | `apps/web/src/drawer/run/console-model.ts` | `apps/web/src/drawer/run/console-model.test.ts` |
-| REQ-DRW-18 | §2.3 | Reconnect uses `GET /api/run/:runId/stream` plus `Last-Event-ID` (header and `?lastEventId=`); it does not POST a second run | `apps/web/src/drawer/run/transport.ts` · `apps/web/src/drawer/run/useRunStream.ts` | `apps/web/src/drawer/run/transport.test.ts` |
+| REQ-DRW-18 | §2.3 | Reconnect uses `GET /api/p/:project/run/:runId/stream` plus `Last-Event-ID` (header and `?lastEventId=`); it does not POST a second run | `apps/web/src/drawer/run/transport.ts` · `apps/web/src/drawer/run/useRunStream.ts` | `apps/web/src/drawer/run/transport.test.ts` |
 | REQ-DRW-19 | §2.3 | Console window is bounded (~2k lines in the reducer, 400 painted) | `apps/web/src/drawer/run/console-model.ts` · `apps/web/src/drawer/sections/RunConsole.tsx` | `apps/web/src/drawer/run/console-model.test.ts` |
 | REQ-DRW-20 | §2.3 | `plan` with `awaitingApproval` pauses the run and shows Allow / Deny | `apps/web/src/drawer/run/console-model.ts` · `apps/web/src/drawer/sections/RunConsole.tsx` | `apps/web/src/drawer/run/console-model.test.ts` |
 | REQ-DRW-21 | §2.3 | Missing optional sections collapse — no empty headers, no "N/A" | `apps/web/src/drawer/sections/Section.tsx` · `apps/web/src/drawer/data/project.ts` | `apps/web/src/drawer/data/project.test.ts` |
@@ -100,6 +125,10 @@ selection; we own the panel it opens.
 | REQ-DRW-29 | §2.3 | An unknown input type is reported in the drawer as a schema gap, not coerced into a text box | `apps/web/src/drawer/data/inputs.ts` | `apps/web/src/drawer/data/inputs.test.ts` |
 | REQ-DRW-30 | §2.3 | Both drawer headers show where the agent came from, using the shared `ProvenanceBadge`, projected from the cascade's `source_ref` — the drawer stores no layer of its own (`Plan §23.6`, ADR-014 §2) | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/sections/Header.tsx` · `apps/web/src/drawer/run/console-model.ts` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` |
 | REQ-DRW-31 | §2.3 | Unknown provenance renders as **unknown** and never as `global`; an unreadable `source_ref`, a silent runner, or another agent's run all resolve to the same honest empty state | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` |
+| REQ-DRW-32 | §2.3 | Every drawer fetch carries `/api/p/:project` (M15, ADR-015) and every path is **built from `RUNNER_ROUTES`**, never typed — no path literal remains in `data/client.ts` or `run/transport.ts` | `apps/web/src/drawer/data/client.ts` · `apps/web/src/drawer/run/transport.ts` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/data/client.test.ts` · `apps/web/src/drawer/run/transport.test.ts` |
+| REQ-DRW-33 | §2.3 | No project ⇒ **no request**: a `null` (or non-slug) segment refuses with a sentence and never falls back to an unscoped path, and the tests assert `fetch` was not called at all | `apps/web/src/drawer/data/client.ts` | `apps/web/src/drawer/data/client.test.ts` |
+| REQ-DRW-34 | §2.3 | A run that cannot name its project is refused **before any POST** and **non-retryably**, so no billable run starts and no "reconnecting…" spinner hides a client-side fault | `apps/web/src/drawer/run/transport.ts` · `apps/web/src/drawer/run/useRunStream.ts` | `apps/web/src/drawer/run/transport.test.ts` |
+| REQ-DRW-35 | §2.3 | `GET /api/status` stays **coordinator-scoped on purpose** and is read from the route table, so nobody "fixes" it by pattern-matching the migrated calls | `apps/web/src/drawer/data/client.ts` · `apps/web/src/drawer/run/useRunnerAvailability.ts` | `apps/web/src/drawer/data/client.test.ts` |
 
 ## Interfaces we expose
 
@@ -120,7 +149,9 @@ Everything else under `src/drawer` is private.
 | What | From | Contract |
 |---|---|---|
 | Agent frontmatter + `inputs[]` | `agent-library-curator` | `comms/contracts/frontmatter-schema.md` |
-| `GET /api/agents/:slug`, `GET /api/runs`, `POST /api/run`, `GET /api/run/:runId/stream`, `POST /api/schedule`, `POST /api/approvals/:runId`, `GET /api/status` | `runner-engineer` / `observability-engineer` | `comms/contracts/api-contracts.md` |
+| `RUNNER_ROUTES` (`agent`, `run`, `runStream`, `schedule`, `approvalDecision`, `status`), `PROJECT_ROUTE_PREFIX`, `LEGACY_UNSCOPED_PATHS` | `runner-engineer` | `comms/contracts/api-contracts.md` · `comms/contracts/project-scoping.md` |
+| `GET /api/p/:project/metrics/runs` — the durable LAST RUNS ledger | `observability-engineer` | `comms/specs/observability.md` |
+| `projectApiUrl` + `NO_PROJECT_SENTENCE` (`components/shell/useSearchIndex`), `useProjectSegment` | `shell-navigation-engineer` | `comms/specs/shell-navigation.md` § *Interfaces we expose* |
 | `openDrawer(agentSlug, {side:'right'})`, `OPEN_DRAWER_EVENT` | `chart-matrix-engineer` | `apps/web/src/chart/events.ts` |
 | `shell:flyTo` | `shell-navigation-engineer` | `apps/web/src/lib/shell-bus.ts` |
 | `GlassPanel`, `Pill`, `Eyebrow`, `ProvenanceBadge`, `--dur-drawer` | `design-system-guardian` | `comms/contracts/design-tokens.md` §10 |
@@ -131,8 +162,16 @@ Everything else under `src/drawer` is private.
 
 - **Pure projection** (`data/inputs.test.ts`, `data/project.test.ts`) — two agents produce
   two forms; unknown types become schema gaps; optional sections collapse to `null`.
-- **Transport** (`run/transport.test.ts`, `run/sse.test.ts`) — start is POST `/api/run`;
-  re-attach is GET `/api/run/:runId/stream` with `Last-Event-ID`.
+- **Transport** (`run/transport.test.ts`, `run/sse.test.ts`) — start is POST
+  `/api/p/:project/run`; re-attach is GET `/api/p/:project/run/:runId/stream` with
+  `Last-Event-ID`.
+- **The URL at the wire** (`data/client.test.ts`, `run/transport.test.ts`) — every
+  assertion is on the string `fetch` was called with, compared against `RUNNER_ROUTES`
+  rather than against a copy, plus the negative: the URL is never a member of
+  `LEGACY_UNSCOPED_PATHS`. The no-project cases assert `fetch` was **not called**, which
+  is the property a message-only assertion would miss. This is the direct lesson of the
+  M15 miss: the old suite asserted `'/api/agents/…'` and stayed green for a day after that
+  path started refusing, because it agreed with the literal in the subject.
 - **Console reducer** (`run/console-model.test.ts`) — the seven events, the approval
   pause, unknown events as notices, and `start`'s `agent` + `sourceRef` retained so the
   header can answer at all.
@@ -181,6 +220,14 @@ Everything else under `src/drawer` is private.
 - **Inventing `AgentDetail.sourceRef`.** The field the drawer needs is requested from
   `runner-engineer`, not added speculatively to a contract this agent does not own.
   Until it lands, provenance is known only after a run has reported it.
-- **Project-scoping the drawer's own fetches.** `data/client.ts` and `run/transport.ts`
-  still call the pre-M15 unscoped paths, which now answer `400 project_scope_missing`.
-  Real, mine, and deliberately not fixed inside a provenance dispatch — see the handoff.
+- **Exporting the metrics route table.** `/metrics/runs` is still a local suffix here
+  (decision 12) because it is `observability-engineer`'s to export and not mine to add to
+  `@agnetos/contracts`. Requested, not built around.
+- **Driving the `known` provenance branch from a live cascade.** The fetches are scoped
+  now, so `POST /api/p/:project/run` is addressable — but `runnerConfigured: false` and
+  zero runs have ever executed, so `SseStartData.sourceRef` has still never arrived. The
+  branch remains reachable only through its unit tests. `AgentDetail.sourceRef` is the
+  route that would make it reachable without a run and it is `runner-engineer`'s field.
+- **A per-project `Take it ↓`.** `downloadUrl` now builds
+  `/api/p/:project/agents/:slug/download`, which is still not in the contract; the button
+  stays disabled with the same honest tooltip (`DOWNLOAD_ROUTE_AGREED = false`).

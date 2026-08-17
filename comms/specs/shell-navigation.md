@@ -147,6 +147,42 @@ spec file for the same surface would be a second owner for the same rows.
     design with a correctly-labelled fallback would have had one, and a correct label is a
     weaker guarantee than an impossible state.
 
+### 2026-08-17 — the tablist arrow keys, and the boundary around the fix
+
+17. **Arrow keys follow reading order; the direction is read from the rendered tree.**
+    `SegmentedControl`'s handler mapped `ArrowRight` to `+1` unconditionally. The tablist is
+    an `inline-flex` row, so `dir="rtl"` reverses it and MAP sits at the far *right* — the
+    handler did not reverse with it, so **the shell's primary navigation ran backwards for
+    every Arabic reader**, and had since the control was written. Found from outside, by
+    `chart-matrix-engineer`, who had just fixed the identical three lines in `DepartmentTabs`
+    (`inbox/_all/20260817-1832-…-tablist-arrow-keys-run-backwards-in-rtl.md`).
+
+    Direction comes from `elementDirection(e.currentTarget)` — `closest('[dir]')` — and never
+    from the locale. Two reasons, and the second is the load-bearing one: `useI18n()` throws
+    outside its provider and would take every bare-render suite down, and **§2.5 and §3.1 both
+    put LTR islands inside the RTL page**, so a control must key the direction it is *rendered*
+    in rather than the one the app is set to. A tab bar inside a dashboard's LTR chart island
+    keys LTR, and the nesting case is tested.
+
+    **Mirroring is a per-control decision, not a global one** — the half that is easy to
+    over-apply, so it is written down with the fix rather than after the next bug. `Home` and
+    `End` are **ordinals**, not edges: `Home` means "the first tab", which is MAP in both
+    directions. The search results and the project switcher walk the **block** axis, which
+    `dir` does not touch. `DOES_NOT_MIRROR['chart.phaseColumns']` is the same rule one view
+    over. The test everywhere: **reading order mirrors; ordinals, space and time do not.**
+    Both sides are pinned by tests so the fix cannot later be "completed" into a second bug.
+
+18. **The direction helpers are reused, not re-implemented — and the import points the wrong
+    way on purpose.** `elementDirection` and `inlineStep` live in
+    `apps/web/src/chart/model/direction.ts` (`chart-matrix-engineer`). `SegmentedControl` is a
+    primitive and a primitive should not depend on a view; that import is interim and is
+    labelled as such in the file. The alternative was a second copy of six lines, and **two
+    copies of one rule is precisely what let this bug exist in two components at once**. The
+    promotion target is `i18n/direction.ts`, next to `inlineSign` and the `MIRRORS` table that
+    already governs both call sites — `rtl-arabic-pdpl-specialist`'s file, so it is proposed
+    by `decision-request` rather than performed. The visible odd import is the debt marker;
+    removing it silently by forking would hide the thing worth fixing.
+
 ## Coverage
 
 | ID | Spec § | Requirement | Implemented in | Verified by |
@@ -257,6 +293,8 @@ spec file for the same surface would be a second owner for the same rows.
 | REQ-SHELL-104 | §2.0 | The cost ticker reads `/api/p/:project/cost/today` and has exactly two scopes, `project` and `unscoped`, both readable off the DOM — there is no state in which it shows a real number about another project | `apps/web/src/components/shell/CostTicker.tsx` | `apps/web/src/components/shell/CostTicker.test.tsx` |
 | REQ-SHELL-105 | §2.0 | The search panel says which absence it is when the URL names no project, instead of an empty list | `apps/web/src/components/shell/useSearchIndex.ts` · `apps/web/src/components/shell/SearchPill.tsx` | — |
 | REQ-SHELL-106 | §2.0 | Every endpoint-backed shell control drops the previous target's answer before asking about the new one, so no figure survives a project switch on screen | `apps/web/src/components/shell/useEndpoint.ts` | — |
+| REQ-SHELL-107 | §2.0 | The tab bar's arrow keys follow **reading order**: under `dir="rtl"` ArrowLeft advances and ArrowRight goes back, the wrap runs along the list rather than the screen, and the direction is read from the rendered tree so a control inside an LTR island keys LTR (Decision 17, `MIRRORS['shell.segmentedControl']`) | `apps/web/src/components/primitives/SegmentedControl.tsx` · `apps/web/src/chart/model/direction.ts` | `apps/web/src/components/primitives/SegmentedControl.test.tsx` |
+| REQ-SHELL-108 | §2.0 | Mirroring is per-control: `Home`/`End` on the tab bar and the arrow keys of the search listbox and the project switcher are ordinal or block-axis, and stay direction-blind under `dir="rtl"` (Decision 17) | `apps/web/src/components/primitives/SegmentedControl.tsx` · `apps/web/src/components/shell/SearchPill.tsx` · `apps/web/src/components/shell/ProjectSwitcher.tsx` | `apps/web/src/components/primitives/SegmentedControl.test.tsx` · `apps/web/src/components/shell/SearchPill.test.tsx` · `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
 
 ## Interfaces we expose
 
@@ -337,6 +375,14 @@ message.
   stubbed `fetch`. Every endpoint-backed control is tested in three states: answering,
   404 (not built yet), and network error. "What does this look like when the runner is
   down" is a first-class case here, not an afterthought.
+- **Keyboard, in both directions the product ships in.** Every arrow-key handler in the
+  shell is rendered under `dir="rtl"` as well as `dir="ltr"` — the ones that mirror
+  (REQ-SHELL-107) and, just as deliberately, the ones that must not (REQ-SHELL-108). This is
+  a standing rule, not a one-off: **an LTR-only render is how the same bug stays green**, and
+  it is what kept a backwards tablist on the shell's primary navigation. New RTL cases are
+  run against the *pre-fix* handler and confirmed red before the fix is kept; the four
+  direction-sensitive cases here were, on 2026-08-17. A regression test that has never been
+  red is a description, not a test.
 - **Token discipline** — `node scripts/check-tokens.mjs`. Zero violations in
   `components/shell/**`, `src/lib/**` and `src/app/**` is the standing bar.
 - **Two rows are owed a test and say so with `—`** (which is what makes
@@ -371,9 +417,15 @@ message.
   no confirmation, which contradicts §3.2's approval model.
 - **Recent searches or any client persistence.** Nothing is stored per user because there
   is no user (decision 11).
-- **Keyboard shortcuts for tab switching.** The segmented control is arrow-key navigable
-  where it is focused; global `1`–`4` accelerators are not in §2.0 and would collide with
-  whatever the canvas owners want the number row for. Their call, later.
+- **Keyboard shortcuts for tab switching.** Global `1`–`4` accelerators are not in §2.0 and
+  would collide with whatever the canvas owners want the number row for. Their call, later.
+  The segmented control is arrow-key navigable where it is focused — **which is now
+  REQ-SHELL-107/108 with a test behind it, in both directions, rather than the bare sentence
+  that used to stand here.** That sentence was this spec's only statement about the tab
+  keyboard and nothing checked it; the control had been walking backwards in Arabic the whole
+  time it was on the page. A claim in a *Deliberately not done* bullet is the easiest place
+  in a spec for an untested assertion to hide, because the section is read as a list of
+  absences rather than a list of promises.
 - **Real icon artwork.** The three icons and the badge are generated monochrome
   placeholders, marked as such in `public/icons/README.md`.
 - **A visible install banner.** The affordance sits in the `?` sheet; §2.0 fixes what is

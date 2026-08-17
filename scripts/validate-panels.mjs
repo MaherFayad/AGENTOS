@@ -456,9 +456,30 @@ export function validatePanel(panel, { fileName = '<inline>' } = {}) {
       requireString(out, f, 'detail', `${at}.footer`);
       if (f.cta !== undefined) {
         requireString(out, f.cta, 'label', `${at}.footer.cta`);
-        const href = requireString(out, f.cta, 'href', `${at}.footer.cta`);
-        if (href && !href.startsWith('/'))
+        // `href` is optional, and its absence is a state rather than an omission: a CTA
+        // whose destination is not built yet renders as text and must say why. Requiring
+        // `note` in that case is what stops "omit the href" becoming a silent way to ship
+        // a button that does nothing.
+        const { href, note } = f.cta;
+        if (href === undefined) {
+          if (typeof note !== 'string' || note.trim() === '')
+            err(
+              out,
+              `${at}.footer.cta has no href, so it renders as text — add a "note" saying why it is not a link yet`,
+            );
+        } else if (typeof href !== 'string' || href.trim() === '') {
+          err(out, `${at}.footer.cta.href must be a non-empty string when present`);
+        } else if (!href.startsWith('/')) {
           err(out, `${at}.footer.cta.href must be an in-app path — no external links in the app chrome`);
+        } else if (href.startsWith('/p/')) {
+          // Panels are mounted per project (project-scoping.md §5.1 Q8). A slug inside a
+          // panel file is a second copy of the mount, and the renderer already prefixes
+          // the project the reader is in.
+          err(
+            out,
+            `${at}.footer.cta.href must not carry a /p/:project segment — the renderer adds the current project`,
+          );
+        }
       }
     }
   }

@@ -1,41 +1,43 @@
 # status — drawer-engineer
 
-**Updated:** 2026-08-17T18:06
+**Updated:** 2026-08-17T18:44
 **Milestone:** M15
 **State:** review
 
 ## Now
-Provenance shipped in both drawer headers (`Plan §23.6`) on `design-system-guardian`'s
-`ProvenanceBadge`, untouched. It is a projection of the cascade's `source_ref`
-(`{layer}:{path}@{digest}`, ADR-014 §2) parsed per render in `drawer/data/provenance.ts` —
-the drawer stores no layer of its own. `override` reads as `project` because ADR-014 §4.1
-says so. Three of the five states (`fork`/`drifted`/`orphaned`) are unreachable and are not
-faked — ADR-014 was accepted mid-slice so `forked_from` is now a real field, but all three
-states are *comparisons* against the parent's digest and cascade §11 says nothing computes
-one.
+Every drawer fetch is project-scoped (ADR-015). `data/client.ts` and `run/transport.ts`
+hold **no path literal**: paths come from `RUNNER_ROUTES`, URLs from
+`shell-navigation-engineer`'s shared `projectApiUrl`, the project from
+`useProjectSegment()` — not `useShell()`, which throws in bare-render tests. `null` project
+means *do not ask*: reads/writes raise the shell's sentence, `downloadUrl` returns `null`,
+a run is refused **non-retryably before any POST**. `/api/status` stays coordinator-scoped
+on purpose, with a test pinning its scope; `/api/sessions*` and `/api/push*` are not mine
+and are untouched. Tests assert the URL at the wire, never a member of
+`LEGACY_UNSCOPED_PATHS`, and the no-project cases assert `fetch` was **not called**.
 
-**The header says UNKNOWN and will keep saying it.** `GET /api/agents/:slug` carries no
-`source_ref` and its route never touches the cascade, so the only reachable source is
-`SseStartData.sourceRef` — i.e. after a run, and no run has ever executed. I did not infer
-the layer from `AgentDetail.path`; that would be the drawer writing its own resolver
-(ADR-014 decision 9). One field requested from `runner-engineer` instead.
+One literal survives, named: `/metrics/runs` has no export in `@agnetos/contracts`, so the
+prefix comes from `PROJECT_ROUTE_PREFIX` and only the suffix is local — spec decision 12,
+`decision-request` open with `observability-engineer`.
 
-Coverage addendum done: `comms/specs/drawer.md` only. REQ-DRW-25 repointed at
-`p/[project]/map/…` **and rewritten** — closing the drawer now returns to the department in
-the project it was opened in, which the old text did not say. REQ-DRW-30/31 added.
-`drawer.md` 1 FAIL → **0 FAIL, 0 warn**.
+**The `known` provenance branch is still not driveable, and the blocker moved.** Addressing
+is fixed; the run still cannot execute (`runnerConfigured: false`, zero runs ever), so
+`sourceRef` has never arrived and the header still says UNKNOWN.
 
 ## Blocked on
-Nothing. Three open: `runner-engineer` (`AgentDetail.sourceRef`), `shell-navigation-engineer`
-(is `projectApiUrl` the shared seam or theirs?), `rtl-arabic-pdpl-specialist` (2 `todo()`
-keys; gap is 3 of a ceiling of 5).
+Nothing. Three open: `observability-engineer` (export the metrics route table),
+`runner-engineer` (`AgentDetail.sourceRef` — in their working tree, not landed; not built
+around), `rtl-arabic-pdpl-specialist` (2 `todo()` keys).
+
+**Not mine, do not file against the drawer:** `npm run test:web` is red on 8 cases in
+`dashboards/data/resolve.test.ts` + `dashboards/__tests__/runs.test.mjs`, and one `tsc`
+error in `dashboards/data/use-resolved.tsx` — `dashboards-engineer`'s in-flight work, both
+files dirty. All 12 drawer suites pass (78 cases). Nothing committed.
 
 ## Last handoff
-`comms/handoffs/M15-drawer-engineer-provenance-header.md` — review-request filed.
+`comms/handoffs/M15-drawer-engineer-scoped-fetches.md` — review-request filed.
 
 ## Next
-1. **Project-scope the drawer's own fetches.** `data/client.ts` and `run/transport.ts` are
-   still pre-M15 paths and now answer `400 project_scope_missing`, so the drawer cannot load
-   an agent or start a run against a current runner. Mine, biggest, first.
-2. M8 string pass — `check-rtl.mjs` reports 58 under `src/drawer/**`, none from this slice.
-3. Wire `GET /api/runs/:runId/tools` onto a LAST RUNS row once the interaction is designed.
+1. M8 string pass — `check-rtl.mjs` reports 58 under `src/drawer/**`, unchanged by this slice.
+2. Wire `GET /api/p/:project/runs/:runId/tools` onto a LAST RUNS row once the interaction
+   is designed.
+3. Delete `METRICS_RUNS_PATH` the day `observability-engineer` exports their route table.

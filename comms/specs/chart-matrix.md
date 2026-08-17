@@ -83,6 +83,40 @@ citations live in Decision 9 and in "Interfaces we expose".
     whole axis exists to remove. This is behaviour, not path bookkeeping, which is why it
     is REQ-CHT-43/44 and not a footnote on REQ-CHT-42.
 
+11. **CHART's own fetch is project-scoped, and with no project it asks nothing.** M15 moved
+    every project-shaped route under `/api/p/:project` (ADR-015) and `data/agents.ts` kept
+    `'/api/agents'` as a default parameter. The old path is still mounted and answers
+    **400 `project_scope_missing`** — deliberately, so a stale client gets a named refusal —
+    and this file turned that refusal into *"agent library unavailable"*, blaming the
+    library for the address. Three consequences, all asserted below. (a) The URL is built
+    from `RUNNER_ROUTES.agentsIndex` through `shell-navigation-engineer`'s `projectApiUrl`,
+    so **no path literal exists in the file**. (b) `project` is the first, non-optional
+    parameter of `loadChartAgents`, because the compiler is the only thing that reliably
+    catches an omitted scope. (c) `null` means *do not ask*, never *ask the wide one*: the
+    view prints the shell's no-project sentence. Same rule, same reason and the same helper
+    as `map/data/socket.ts` and `drawer/run/transport.ts`, which is the point — one reading
+    of what an unscoped call means, not four.
+
+12. **Which arrow keys mirror under RTL, and which must not.** Both answers come from
+    `rtl-arabic-pdpl-specialist`'s §1.4 direction contract, and they are opposite on the
+    same screen. The **tab bar mirrors** — `MIRRORS['shell.segmentedControl']`, *"tab order
+    is reading order"* — so `ArrowRight` steps backwards under `dir="rtl"`, which is what it
+    was not doing. The **matrix grid does not** — `DOES_NOT_MIRROR['chart.phaseColumns']`,
+    *"the rollout matrix columns are phases 1→4, i.e. time"* — so `moveGridFocus` stays
+    direction-blind and applying the tab bar's fix to it would be a second bug. The test for
+    an arrow key is the same one that decides whether pixels flip: reading order mirrors,
+    space and time do not. Direction is read from the **rendered tree**
+    (`closest('[dir]')`), not from the locale, because §2.5 and §3.1 both put LTR islands
+    inside the RTL page and `useI18n()` throws outside its provider — the same objection
+    that sent Decision 11 to `useProjectSegment()` rather than `useShell()`.
+
+13. **Dimming is a claim, so it is only made from data we have.** A dimmed tab asserts "no
+    jobs are mapped in this department" (REQ-CHT-05). Derived from a failed load it is seven
+    false assertions, printed on the same screen that is simultaneously saying the library
+    could not be read. `ChartView` therefore withholds `counts` when `error` is set and the
+    bar renders every tab at full weight. Unknown is not zero (Part VII.3, BOARD rule 9) —
+    the same failure shape as the 400 that M15's route move hid, one component along.
+
 ## Coverage
 
 | ID | Spec § | Requirement | Implemented in | Verified by |
@@ -90,8 +124,8 @@ citations live in Decision 9 and in "Interfaces we expose".
 | REQ-CHT-01 | §2.6.1 | Department tab bar renders all seven departments, imported from `packages/contracts` (ADR-001) — no local list exists anywhere under `src/chart` | `apps/web/src/chart/components/DepartmentTabs.tsx` · `apps/web/src/chart/data/contracts.ts` | `apps/web/src/chart/components/ChartView.test.tsx` |
 | REQ-CHT-02 | §2.6.1 | Tabs appear in ADR-001 order, left to right | `apps/web/src/chart/components/ChartView.tsx` | `apps/web/src/chart/components/ChartView.test.tsx` |
 | REQ-CHT-03 | §2.6.1 | Active tab is marked by a 1px ivory underline; inactive tabs are `--ink-2` | `apps/web/src/chart/components/DepartmentTabs.tsx` | `apps/web/src/chart/components/ChartView.test.tsx` |
-| REQ-CHT-04 | §2.6.1 | Tab bar is a real `tablist`: roving tabindex, ← → move between departments | `apps/web/src/chart/components/DepartmentTabs.tsx` | manual — see Test plan |
-| REQ-CHT-05 | §2.6.1 | A department with no agents is dimmed, never hidden — the rollout gap is the information | `apps/web/src/chart/components/DepartmentTabs.tsx` | manual — see Test plan |
+| REQ-CHT-04 | §2.6.1 | Tab bar is a real `tablist`: exactly one tab stop (roving tabindex), ← → move between departments and carry DOM focus with the selection, non-arrow keys bubble so Tab still leaves the bar | `apps/web/src/chart/components/DepartmentTabs.tsx` | `apps/web/src/chart/components/DepartmentTabs.test.tsx` |
+| REQ-CHT-05 | §2.6.1 | A department with no jobs is **dimmed and still rendered, in ADR-001 order** — never filtered out, never reordered, never collapsed away; the rollout gap is the information | `apps/web/src/chart/components/DepartmentTabs.tsx` · `apps/web/src/chart/components/ChartView.tsx` | `apps/web/src/chart/components/DepartmentTabs.test.tsx` |
 | REQ-CHT-06 | §2.6.2 | Title reads `<Department> · the AI rollout` | `apps/web/src/chart/components/TitleBlock.tsx` | `apps/web/src/chart/components/ChartView.test.tsx` |
 | REQ-CHT-07 | §2.6.2 | The accent word "rollout" is Instrument Serif italic (§1.4 brand signature); the rest is Plus Jakarta Sans | `apps/web/src/chart/components/TitleBlock.tsx` | manual — visual, see Test plan |
 | REQ-CHT-08 | §2.6.2 | Stat line is computed from frontmatter `tier` counts — feeding a different agent set changes every numeral | `apps/web/src/chart/model/stats.ts` · `apps/web/src/chart/components/StatLine.tsx` | `apps/web/src/chart/model/stats.test.ts` · `apps/web/src/chart/components/StatLine.test.tsx` |
@@ -131,6 +165,12 @@ citations live in Decision 9 and in "Interfaces we expose".
 | REQ-CHT-42 | §2.6 | `/p/:project/chart` and `/p/:project/chart/:department` render `<ChartPage />` from `src/chart`, not `ViewMount` | `apps/web/src/app/(views)/p/[project]/chart/page.tsx` · `apps/web/src/app/(views)/p/[project]/chart/[department]/page.tsx` · `apps/web/src/app/(views)/p/[project]/chart/ChartRoute.tsx` · `apps/web/src/app/(views)/p/[project]/chart/mount.tsx` · `apps/web/src/chart/ChartPage.tsx` | manual — open `/p/:project/chart` |
 | REQ-CHT-43 | §2.6 | A `:department` that is not in the ADR-001 enum redirects to that same project's chart (`/p/:project/chart`) — the project segment survives the redirect, so no chart route can hand a project choice back to the legacy resolver (Decision 10b) | `apps/web/src/app/(views)/p/[project]/chart/[department]/page.tsx` | manual — see Test plan |
 | REQ-CHT-44 | §2.6 | CHART writes no project prefix of its own: `ChartRoute` takes the project from `useShell()` and every tab destination is built with the shell's `withProject` — no `/p/` literal exists under `src/chart` or in the chart route adapter (Decision 10a) | `apps/web/src/app/(views)/p/[project]/chart/ChartRoute.tsx` | `apps/web/src/components/shell/route.test.ts` (the helper) · manual — see Test plan (our use of it) |
+| REQ-CHT-45 | §2.6 | The agent-list URL is built from `RUNNER_ROUTES.agentsIndex` via `projectApiUrl` and carries the project — no path literal exists in `data/agents.ts`, and the built URL is **never a member of `LEGACY_UNSCOPED_PATHS`** (Decision 11a) | `apps/web/src/chart/data/agents.ts` | `apps/web/src/chart/data/agents.test.ts` |
+| REQ-CHT-46 | §2.6 | With no project — or a segment that is not a project slug — CHART **sends no request at all** and says why, rather than calling the unscoped path the runner refuses with 400 `project_scope_missing`; `project` is `loadChartAgents`' first non-optional parameter so it cannot be omitted (Decision 11b, 11c) | `apps/web/src/chart/data/agents.ts` · `apps/web/src/chart/ChartPage.tsx` | `apps/web/src/chart/data/agents.test.ts` |
+| REQ-CHT-47 | §2.6.1 | Tab-bar arrow keys follow **reading order**: under `dir="rtl"` ArrowLeft advances and ArrowRight goes back, and the direction is read from the rendered tree so an LTR island inside an RTL page keys LTR (Decision 12, `MIRRORS['shell.segmentedControl']`) | `apps/web/src/chart/model/direction.ts` · `apps/web/src/chart/components/DepartmentTabs.tsx` | `apps/web/src/chart/components/DepartmentTabs.test.tsx` · `apps/web/src/chart/model/direction.test.ts` |
+| REQ-CHT-48 | §2.6.1 | The matrix grid's arrow keys stay direction-blind: ArrowRight advances the phase column in both directions, because phases 1→4 are a timeline (`DOES_NOT_MIRROR['chart.phaseColumns']`) | `apps/web/src/chart/model/keyboard.ts` | `apps/web/src/chart/model/direction.test.ts` |
+| REQ-CHT-49 | §2.6.1 | Narrower than its tabs the bar scrolls horizontally; no tab is dropped, truncated or reordered, and roving focus brings the focused tab into view so all seven stay keyboard-reachable at any width. **The scroll affordance is a known gap** — see Deliberately not done | `apps/web/src/chart/components/DepartmentTabs.tsx` | manual — see Test plan |
+| REQ-CHT-50 | §2.6.1 | Tab dimming is withheld when the library could not be read: `counts` is passed only in the absence of `error`, so a failed load never renders as seven empty departments (Decision 13) | `apps/web/src/chart/components/ChartView.tsx` · `apps/web/src/chart/components/DepartmentTabs.tsx` | `apps/web/src/chart/components/DepartmentTabs.test.tsx` |
 
 ## Interfaces we expose
 
@@ -156,28 +196,63 @@ Everything else under `src/chart` is private.
 |---|---|---|
 | `DEPARTMENTS` (ordered), `Tier`, `Phase`, `DepartmentSlug` | `packages/contracts` | `comms/decisions/ADR-001-department-taxonomy.md`, `comms/contracts/frontmatter-schema.md` |
 | Agent frontmatter fields `name, description, department, icon, tier, phase, breaks_into` | `agent-library-curator` | `comms/contracts/frontmatter-schema.md` |
-| `GET /api/agents` (list projection) | `runner-engineer` | `comms/contracts/api-contracts.md` — **requested, not yet in the contract** |
+| `RUNNER_ROUTES.agentsIndex` · `LEGACY_UNSCOPED_PATHS` — `GET /api/p/:project/agents` | `runner-engineer` | `comms/contracts/api-contracts.md` · ADR-015. The path is **read from the route table, never typed** (Decision 11) |
+| `projectApiUrl` · `NO_PROJECT_SENTENCE` — the "no project means do not ask" seam | `shell-navigation-engineer` | `Plan §9` (M15) — the same import `drawer/run/transport.ts` uses |
+| `MIRRORS` / `DOES_NOT_MIRROR` — which surfaces flip under `dir="rtl"`, and the `Direction` type | `rtl-arabic-pdpl-specialist` | `apps/web/src/i18n/direction.ts` (§1.4) — CHART appears in **both** tables and Decision 12 is the reason |
 | `Pill`, `Chip`, `Eyebrow`, `DURATION`, `EASE` | `design-system-guardian` | `comms/contracts/design-tokens.md` |
 | The right drawer | `drawer-engineer` | §2.6.5 — `openDrawer` event; their `<DrawerHost />` is a sibling on the chart routes, not a chart component |
 | `useShell()`, `withProject` — the project segment's shape | `shell-navigation-engineer` | `Plan §9` (M15) — consumed **only** in `(views)/p/[project]/chart/ChartRoute.tsx`, never inside `src/chart` |
+| `useProjectSegment()` — the slug itself, for the one URL CHART builds | `shell-navigation-engineer` | `Plan §9` (M15) — consumed in `src/chart/ChartPage.tsx`; see the amendment below |
 
-The first five couplings are funnelled through two files, `src/chart/data/contracts.ts` and
-`src/chart/ui.ts`, so a rename upstream is a one-file change here. The sixth is deliberately
-outside both: `src/chart` knows nothing about projects, so the project axis touches exactly
-one adapter file and no component.
+The design-system and taxonomy couplings are funnelled through two files,
+`src/chart/data/contracts.ts` and `src/chart/ui.ts`, so a rename upstream is a one-file
+change here.
+
+**Amended 2026-08-17 — the project axis reaches one file inside `src/chart`, deliberately.**
+This section previously said the shell is consumed *only* in the route adapter, and Decision
+10 said `src/chart` knows nothing about projects. That held while CHART's only project-shaped
+act was building a link. It stopped holding the moment CHART made its own `fetch`, because a
+request also has to name a project — and while the adapter was project-aware, the fetch was
+not, which is precisely how `data/agents.ts` went on calling an unscoped route for a whole
+milestone with nothing going red.
+
+The narrower rule survives and is the one that was actually load-bearing: **CHART never
+*spells* the segment.** `useProjectSegment()` reads it through the shell's own `splitProject`,
+so there is still no `/p/` literal anywhere under `src/chart` (REQ-CHT-44) and still one
+definition of the segment's shape. A `project` **prop** was the alternative and was rejected:
+it would have kept the letter of the old boundary while adding one more thing a caller can
+forget, and forgetting it is the failure being repaired. A hook cannot be omitted; a prop can.
+`useShell()` is still not used here — it throws outside its provider and would take four
+bare-render suites down with it.
 
 ## Test plan
 
 - **Pure model** (`model/*.test.ts`) — matrix construction, tier counts, phase progress,
-  stat derivation, keyboard movement. No React, no DOM, no imports outside `src/chart`;
-  these run even while the rest of the app is being scaffolded.
+  stat derivation, keyboard movement. No React and no runtime import outside `src/chart`;
+  these run even while the rest of the app is being scaffolded. Two admitted exceptions,
+  both narrow: `model/direction.ts` takes a **type-only** import of `Direction` from
+  `@/i18n` (it compiles away, and a second local definition of a two-value union is exactly
+  the drift this spec forbids elsewhere), and `model/direction.test.ts` asks for jsdom
+  because half of what it tests is HTML's own `dir` inheritance.
 - **Markup** (`components/*.test.tsx`) — `renderToStaticMarkup`, no jsdom. This is where
   the hatch, the labels, the derived pills and dashes, the roving tabindex and the
   monochrome rule are asserted against real output.
+- **Behavioural** (`components/DepartmentTabs.test.tsx`) — jsdom + `@testing-library/react`,
+  real focus and real `keyDown` dispatch, rendered **under both `dir="ltr"` and
+  `dir="rtl"`**. This is where REQ-CHT-04/05/47/50 are verified.
+- **REQ-CHT-04 was manual until 2026-08-17 and that is why REQ-CHT-47 existed as a bug.**
+  The manual check had only ever been run LTR, so `step()`'s unconditional `ArrowRight →
+  +1` ran the tablist backwards in Arabic, at seven tabs, from the day the bar was written.
+  A check that has never been run in one of the two directions the product ships in is not
+  a check. Its verification is now the automated suite above, and the RTL cases were
+  confirmed to fail against the pre-fix handler before the fix was kept — a regression test
+  that has never been red proves nothing.
 - **Not automatable here, and how it gets checked instead:**
-  - REQ-CHT-04/05 (tab arrow keys, dimmed department) and REQ-CHT-37 (focus not stolen)
-    need real focus and event dispatch — checked in `cc-fidelity-check`'s keyboard pass
-    once the app scaffold lands, and by `fidelity-qa-reviewer`'s a11y sweep.
+  - REQ-CHT-37 (focus not stolen) needs a real pointer as well as a keyboard — checked in
+    `cc-fidelity-check`'s keyboard pass and by `fidelity-qa-reviewer`'s a11y sweep.
+  - REQ-CHT-49 (overflow) needs a viewport: `renderToStaticMarkup` and jsdom have no
+    layout, so nothing here can observe that the bar scrolls rather than truncates. Checked
+    by narrowing the window below the bar's width and arrowing to the last department.
   - REQ-CHT-07 (Instrument Serif italic) and REQ-CHT-28 (500ms reveal, reduced motion)
     are visual — the 1440px side-by-side and a `prefers-reduced-motion` toggle.
   - REQ-CHT-42 — `/p/:project/chart` mounts `<ChartPage />`; confirmed when the matrix (not
@@ -200,10 +275,16 @@ one adapter file and no component.
 - **The §2.6.5 drawer body.** `drawer-engineer` owns it. Building a "temporary" chart
   drawer would have created a second copy of the agent projection — the exact thing
   Part IV forbids — so `More detail →` emits and stops.
-- **`GET /api/agents` list.** Requested of `runner-engineer`; the page currently projects
-  `agents/**/SKILL.md` from disk (`/agents` in Docker, repo-relative in `next dev`) so the
-  matrix is real numbers rather than a 404 empty state. When the list endpoint lands,
-  `loadChartAgents` is the client fallback and the disk read can go.
+- **`GET /api/p/:project/agents` as the primary read.** The route exists in `RUNNER_ROUTES`
+  and `loadChartAgents` now dials it correctly, but the page still projects
+  `agents/**/SKILL.md` from disk (`/agents` in Docker, repo-relative in `next dev`), which
+  supplies `agents` to `<ChartPage />` and therefore **skips the fetch entirely on every
+  normal render**. The fetch is a fallback for the case where the disk read fails. That is
+  worth stating plainly because it is also why the unscoped URL survived a whole milestone
+  without a single visible symptom: **the broken path was the one nobody was on.** Swapping
+  the order — API first, disk second — is not a five-minute change (the disk read is what
+  makes CHART work with no runner at all, the same property `graphArtifactUrl` gives MAP),
+  and it is not done here.
 - **Search/filter inside CHART.** §2.0 puts search in the shell and says result click =
   fly-to-node. CHART will consume that selection when the shell exposes it; it is not
   building a second search box.
@@ -218,6 +299,28 @@ one adapter file and no component.
 - **`lucide-react` tree-shaking.** `JobIcon` resolves icons through the `icons` map, which
   pulls the whole set. Correct and dynamic today; if the bundle budget bites at M8, swap
   to `dynamicIconImports` behind the same component.
-- **RTL.** `rtl-arabic-pdpl-specialist` owns the pass (§1.4, M8). The grid is built with
-  logical flow and no hardcoded left/right offsets so the flip is cheap, but it has not
-  been verified under `dir="rtl"`.
+- **The tab bar's scroll affordance (REQ-CHT-49), and it is filed rather than argued away.**
+  `overflow-x-auto` means that below the bar's width the overflow becomes a horizontal
+  scroll. Nothing is dropped, reordered or truncated and every tab stays keyboard-reachable
+  (`.focus()` scrolls it into view), so REQ-CHT-05's "dimmed, never hidden" — which is about
+  never *filtering out* an empty department — is not contradicted; that requirement has been
+  reworded to say exactly that rather than leaving the stronger reading standing. What is
+  genuinely missing is any **signal that the bar continues**: no fade, no shadow, no arrow.
+  The obvious fix is a `mask-image` gradient, and that is a `design-system-guardian`
+  decision, not a component one — a mask needs a colour stop and BOARD rule 8 puts colour in
+  `tokens.css`. **Owner: `chart-matrix-engineer`. Trigger: whichever comes first of the M8
+  mobile pass or an eighth department**, which is when seven-at-1440px stops being the only
+  case that matters. Not fixed here because M15 is not the milestone for it and a mask token
+  is somebody else's file.
+- **RTL — the keyboard half is done, the visual half is not.** `DepartmentTabs`' arrow keys
+  now follow reading order and are tested under `dir="rtl"` (REQ-CHT-47), and the grid's are
+  deliberately fixed to the phase timeline (REQ-CHT-48). **Everything else about CHART under
+  `dir="rtl"` remains unverified** and `rtl-arabic-pdpl-specialist` owns the pass (§1.4, M8).
+  The specific thing nobody has looked at, named so it is not rediscovered: the matrix is a
+  CSS grid, so under `dir="rtl"` the browser will reverse its **columns** — but
+  `DOES_NOT_MIRROR['chart.phaseColumns']` says phases 1→4 must not reverse, and nothing in
+  `Matrix.tsx` pins them. If that is confirmed, the fix is not a blanket `dir="ltr"` on the
+  grid: the contract says row headers and cell text *do* mirror, so it is a real design
+  question about a container whose axis and whose contents flip differently. It is filed for
+  their pass rather than guessed at here. CHART's 18 catalogue and 18 physical-utility
+  entries in `scripts/rtl-baseline.json` are the same migration and are likewise untouched.

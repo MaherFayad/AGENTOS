@@ -49,17 +49,39 @@ never contain raw SQL.**
 process-local view and is empty after every restart. The mapping lives in
 `apps/web/src/dashboards/data/endpoints.ts`:
 
-| query | endpoint |
+**Every one of these is under `/api/p/:project`** (ADR-015 Q1, `Plan §10`). The prefix is
+written once, as `PROJECT_ROUTE_PREFIX` in `packages/contracts`, and filled by that
+package's `projectPath`; the table below shows the suffix.
+
+| query | endpoint, under `/api/p/:project` |
 |---|---|
-| `shape` absent / `scalar` (+ `compare`) | `GET /api/metrics/query?metric=&range=[&agent=&department=]` — `value`, `previous`, `delta` |
-| `shape: "list"` on an `activity-feed` | `GET /api/metrics/activity?limit=[&department=]` |
-| `shape: "list"`, no `groupBy` | `GET /api/metrics/runs?limit=[&agent=]` |
-| `metric: "runs", shape: "series", groupBy: "day"` | `GET /api/metrics/sql/runs_per_day?days=` |
-| `metric: "cost", shape: "list", groupBy: "agent"` | `GET /api/metrics/sql/cost_by_agent?days=` |
+| `shape` absent / `scalar` (+ `compare`) | `GET /metrics/query?metric=&range=[&agent=&department=]` — `value`, `previous`, `delta` |
+| `shape: "list"` on an `activity-feed` | `GET /metrics/activity?limit=[&department=]` |
+| `shape: "list"`, no `groupBy` | `GET /metrics/runs?limit=[&agent=]` |
+| `metric: "runs", shape: "series", groupBy: "day"` | `GET /metrics/sql/runs_per_day?days=` |
+| `metric: "cost", shape: "list", groupBy: "agent"` | `GET /metrics/sql/cost_by_agent?days=` |
 | `metric: "runs", shape: "list", groupBy: "department"` | one `metrics/query` per ADR-001 department + the ungrouped total |
 
 `range` must be one of the runner's windows — `24h 7d 14d 28d 30d 90d`; `Nw` is mapped to
 days, anything else is refused rather than approximated.
+
+**A query with no project builds no URL.** `planLangfuse` returns `unsupported` and the
+widget prints *"This address does not name a project…"*. There is deliberately no fallback
+to the pre-project spelling: those paths are still mounted and answer **400
+`project_scope_missing`** so a stale client gets a named refusal (`LEGACY_UNSCOPED_PATHS`),
+and calling one on purpose would turn that deliberate 400 into a shrug. There is no default
+project to substitute (ADR-015 Q2).
+
+> **Written after the fact it cost, 2026-08-17.** This table held the unscoped paths, and
+> `endpoints.ts` held them as string literals, for the whole of M15. Every widget on every
+> Command Center was reading from a route that refuses. Nothing went red: `use-resolved.tsx`
+> classified the 400 as "cannot reach the runner", so six dashboards rendered `unavailable`
+> under a sentence blaming the tailnet for a fault that was one line of client code.
+> **No number was faked and no zero was drawn** — the resolver's gate withholds every shape
+> before it reads a body, so BOARD rule 9 held — but the *diagnosis* was wrong, which is its
+> own kind of untrue. The literals are gone (`data/endpoints.test.ts` asserts the built URLs
+> against the contract and against each pre-M15 spelling by name), and a 4xx no longer
+> inherits the offline sentence.
 
 **Not served yet, and therefore `unavailable` rather than derived** (filed with
 `observability-engineer`): a series of any metric except `runs`, a `groupBy: "agent"` of
@@ -148,6 +170,82 @@ Grid: 2 columns, 16px gap. A widget declares `span: 1 | 2`.
    it's the cleverest thing on their site (§2.5.1).
 5. The activity feed is real: agent runs **are** the activity (§2.5 data note). Wire it
    to Langfuse first; business widgets light up later as agents write Postgres rows.
+
+## The Mission Control footer (§2.5.7)
+
+```jsonc
+"footer": {
+  "lead": "This is the actual product.",
+  "detail": "Your delivery ops, running like this · agents doing the work, you approving it.",
+  "cta": { "label": "Get this deployed →", "href": "/approvals" }   // or: "note" instead of "href"
+}
+```
+
+**`href` is an in-app view path with no project segment.** Not an origin, not `/p/<slug>/…`.
+The renderer prefixes the project the reader is currently in (`useProjectHref`), because an
+approvals queue is project-scoped and a link that dropped the segment would offer one
+client's queue under another client's name. A slug inside a panel file would be a second
+copy of the mount, and the copy is the one that goes stale — the validator rejects it.
+
+**`href` is optional, and omitting it is a supported state.** A CTA whose destination is not
+built yet renders as text rather than as a link, and `note` — required in that case — says
+why. The validator enforces the pairing so that "omit the href" cannot become a quiet way to
+ship a button that does nothing.
+
+*Today `mission-control.json` is in exactly that state.* §2.5.7 says the CTA links to the
+runner's approvals queue; **that view does not exist in any project.** A link to it is worse
+than a 404: `app/(views)/[...legacy]` re-prefixes any path it does not recognise, so
+`/approvals` walks `/p/x/approvals` → `/p/x/p/x/approvals` → … Reported to
+`shell-navigation-engineer` as a resolver bug in its own right. When §2.5.7's view lands
+this is a one-line JSON edit — add `href`, drop `note` — and no code changes. Dashboards are
+data.
+
+## Panels and projects — what is true today
+
+`project-scoping.md` §5.1 **Q8** rules that panels are **not cascaded**, and **Q8a** (answered
+2026-08-17, after this contract reported the gap) rules what a project with no `panels/` of
+its own shows:
+
+> **A project with no `panels/` shows an empty carousel. There is no fallthrough to a
+> coordinator-level set, and no coordinator-level set exists to fall through to.**
+
+This contract adopts both. **The runner half is built** — `GET /api/p/:project/panels[/:id]`
+reads `MountedProject.panelsDir`, and `apps/runner/src/lib/panels.ts` cannot import
+`RunnerConfig`, so a project route physically cannot serve another project's dashboards
+(`routes/__tests__/project-derived-reads.test.ts`).
+
+**The web half is not, and it is `dashboards-engineer`'s** — Q8a's own table says so, and the
+sentence that resolves the question this contract had been asking wrongly is: *the resolver is
+a route, not a fourth disk candidate.* `apps/web/src/dashboards/data/load.ts`'s `loadPanels()`
+still walks `PANELS_DIR` → `/panels` → three monorepo-relative paths and takes no project, and
+both dashboard page components destructure only `id`. So the six Command Centers still render
+identically in every project — true of exactly one project today, so **latent, not live**.
+
+Two halves of the web side, because only one of them is a rename:
+
+- **The client read is migrated.** `DashboardsView` fetches `RUNNER_ROUTES.panels.path`
+  through `projectApiUrl`, so the reachable path already honours the mount, and with no
+  project it does not ask.
+- **The server-side disk read is a genuine design question, not a mechanical change.** It
+  exists so the carousel works *with no runner at all*, which is a property this spec's
+  Boundaries section claims on purpose. A disk read cannot name the project it read — that is
+  precisely the ambient default ADR-015 removes — so "pass `project` to `loadPanels()`" would
+  buy a parameter and no guarantee. The options are to drop the fallback in favour of the
+  route, or to keep it and have it declare that it is coordinator-local and unverified. That
+  is one decision and it belongs in the ops-KPI pass, not smuggled into a routing fix.
+
+*Independently converged, which is worth recording rather than tidying away:* this contract
+and `project-scoping.md` Q8a reached the same "nothing, no fallthrough" answer in the same
+session without either seeing the other, and — the part that matters — **both refused to
+inherit ADR-014's reasoning.** ADR-014 ruled against fallthrough for *agents* on a
+capability-ceiling argument that panels have no analogue for, so borrowing its conclusion
+would have been borrowing a result without its reason. Q8a's three reasons are the normative
+ones; this contract's consumer-side reason, kept because it is the one a panel author will
+recognise, is that **a Command Center is a claim about one client's operation** — the
+coordinator's six inside project B are dashboards authored for someone else, filled with B's
+numbers, under titles nobody chose for B. A plausible screen is BOARD rule 9 one level up
+from a number. Note also that `department[]` is validated against ADR-001, not against what a
+project staffs, so a fallen-through panel could not even be checked for relevance.
 
 ## Envelope fields beyond the sketch
 

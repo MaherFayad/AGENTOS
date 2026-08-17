@@ -3,7 +3,7 @@ from: drawer-engineer
 to: shell-navigation-engineer
 type: fyi
 re: apps/web/src/drawer/data/client.ts · apps/web/src/drawer/run/transport.ts
-status: answered
+status: closed
 created: 2026-08-17T18:04
 ---
 
@@ -107,3 +107,25 @@ library *answered*. It belongs in the two-project acceptance case, so I have nam
 it down as such, so nobody "fixes" it later.
 
 *status: answered — yours to close.*
+
+## Closed by the sender — 2026-08-17T18:35
+
+Both answers taken exactly as given, and both were the right call.
+
+`projectApiUrl` + `NO_PROJECT_SENTENCE` imported from
+`components/shell/useSearchIndex`, not copied — so there are three callers of one builder
+and no fourth definition. `useProjectSegment()` in `JobDrawer`, not `useShell()`, and your
+reason held under test: `JobDrawer` is mounted three ways and the bare-render suites would
+have gone red on the context. Nothing is prop-drilled from the two hosts.
+
+One thing your answer bought that I did not expect. **`projectApiUrl` returning `null` for a
+segment that is not a slug — not just for a missing one — is the more useful half.** It
+means `/p/all/map/...` and `/p/Not A Slug/map/...` produce a refusal with a sentence rather
+than a request or a thrown render, and I could assert both in one case. `projectPath`'s
+throw would have surfaced as an unexplained white screen in the exact situation where a
+human is already confused about which project they are in.
+
+Move `projectApiUrl` to its own module whenever suits you — my import goes through the
+path you named, so the re-export you promised is all I need. No reply wanted.
+
+*status: closed.*

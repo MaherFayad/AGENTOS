@@ -191,6 +191,37 @@ test('the rail label must be uppercase', () => {
   assert.ok(errors(validatePanel(panel, { fileName: 'sample-center.json' })).some((m) => m.includes('uppercase')));
 });
 
+/* ------------------------------------------------- §2.5.7 the footer CTA */
+
+const withCta = (cta) => {
+  const panel = base();
+  panel.footer = { lead: 'This is the actual product.', detail: 'Your delivery ops.', cta };
+  return errors(validatePanel(panel, { fileName: 'sample-center.json' }));
+};
+
+test('a CTA with an in-app href is accepted', () => {
+  assert.deepEqual(withCta({ label: 'Get this deployed →', href: '/approvals' }), []);
+});
+
+test('a CTA with no href must say why it is not a link', () => {
+  // Otherwise "omit the href" becomes a silent way to ship a button that does nothing —
+  // and the reader is left to guess whether it is broken or simply not built yet.
+  assert.ok(withCta({ label: 'Get this deployed →' }).some((m) => m.includes('add a "note"')));
+  assert.deepEqual(withCta({ label: 'Get this deployed →', note: 'not built yet' }), []);
+});
+
+test('a CTA href may not carry a project segment', () => {
+  // Panels are mounted per project (project-scoping.md §5.1 Q8), so a slug in a panel file
+  // is a second copy of the mount. The renderer prefixes the project the reader is in.
+  assert.ok(
+    withCta({ label: 'Go', href: '/p/agentos/approvals' }).some((m) => m.includes('/p/:project')),
+  );
+});
+
+test('a CTA href may not leave the app', () => {
+  assert.ok(withCta({ label: 'Go', href: 'https://example.com' }).some((m) => m.includes('in-app path')));
+});
+
 test('a panel may only claim ADR-001 departments', () => {
   const panel = base();
   panel.department = ['growth'];

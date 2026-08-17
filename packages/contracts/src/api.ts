@@ -45,6 +45,17 @@ export type ApiErrorCode =
   // scheduling (§3.2)
   | 'invalid_cron'
   | 'git_write_refused'
+  /**
+   * The Second Brain write-back was refused **before git was reached** (ADR-007,
+   * `COMPANY.md` rule 9) — the target tier is not this project's to write.
+   *
+   * Distinct from `git_write_refused`, which is the path check on `agents/**` and
+   * `company/**`. Both are 403 and a caller could treat them alike; a *person* reading a
+   * log cannot, and the two send you to different files. Requested by
+   * `rtl-arabic-pdpl-specialist`, whose sentence is the reason: it is the wrong noun for a
+   * refusal that happens before git is involved.
+   */
+  | 'brain_write_refused'
   | 'git_failed'
   | 'ofelia_sync_failed'
   // reads
@@ -91,6 +102,7 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   approval_already_decided: 409,
   invalid_cron: 400,
   git_write_refused: 403,
+  brain_write_refused: 403,
   git_failed: 500,
   ofelia_sync_failed: 502,
   graph_not_built: 503,
@@ -408,6 +420,22 @@ export interface AgentDetail {
   slug: string;
   /** Repo-relative path of the SKILL.md this was parsed from. */
   path: string;
+  /**
+   * `{layer}:{path}@sha256:…` — which file **wins the cascade** for this agent in this
+   * project, at what content (ADR-014 §2). The same grammar as `SseStartData.sourceRef`;
+   * `drawer-engineer` renders the layer half as the provenance badge (`⌂` global · `▣`
+   * project) in the drawer header (`Plan §23.6`).
+   *
+   * Required, not optional, and that is the load-bearing part. This route resolves through
+   * the same call dispatch uses, so there is no state in which the runner has an
+   * `AgentDetail` and does not know where it came from. An optional field would have to be
+   * rendered as `unknown` in a state that cannot occur, and "unknown" would then be
+   * indistinguishable from the state that *can*: no run has started yet. The header used to
+   * say SOURCE UNKNOWN ~100% of the time for precisely that reason.
+   *
+   * It is never synthesised from `path`. If the resolver did not produce it, it is not sent.
+   */
+  sourceRef: string;
   /** Frontmatter exactly as parsed. Shape is `frontmatter.ts` (agent-library-curator). */
   frontmatter: Record<string, unknown>;
   /** Everything after the closing `---`: the system prompt body. */

@@ -181,6 +181,9 @@
   "footer": {
     "lead": "This is the actual product.",
     "detail": "Your delivery ops, running like this · agents doing the work, you approving it.",
-    "cta": { "label": "Get this deployed →", "href": "/approvals" }
+    "cta": {
+      "label": "Get this deployed →",
+      "note": "The approvals queue (§2.5.7) is not built in any project yet, so this is not a link. Add \"href\": \"/approvals\" here on the day it is — no code changes."
+    }
   }
 }

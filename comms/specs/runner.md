@@ -24,7 +24,7 @@ the coverage checker does not steal them from the heading above.
 | §3.4 | `agent-library-curator` | scheduling the auditor when its frontmatter has `schedule:` | the agent-auditor SKILL.md itself |
 | §3.5 | `observability-engineer` | calling `obs.startRun` / `finish` so a run writes a ledger row | Langfuse, `GET /api/cost/today`, LIVE, activity feed |
 | §3.6 | `shell-navigation-engineer` | SSE replay for a phone that slept (`Last-Event-ID`) | the PWA, service worker, tailnet-only access model |
-| PART V | `infra-compose-engineer` | ofelia job *contents* generated from frontmatter | compose, Caddy, the ofelia container, `/repo` mounts |
+| PART V | `infra-compose-engineer` | ofelia job *contents* generated from frontmatter; the runner process's own **default** bind address | compose, Caddy, the ofelia container, `/repo` mounts, every published port |
 | PART IV | `agent-library-curator` | `wired_into` → allowlist, `connectors.json` keys | SKILL.md schema, seeding, the validator |
 | §2.1–§2.2 | `map-galaxy-engineer` | overlaying `core.brainCompleteness` on the stored artifact | the layout engine, positions, the canvas |
 | §2.3 | `drawer-engineer` | the SSE event names the console renders | the drawer UI |
@@ -54,6 +54,35 @@ the coverage checker does not steal them from the heading above.
 6. **In-memory run store at this milestone.** The durable record is the observability
    ledger (when Postgres is up) plus the saved artifact. `GET /api/runs` is the live view
    of this process. A restart empties it; that is an honest empty state, not a fake history.
+7. **The safe bind is the default; the wide bind is written down.** `RUNNER_HOST` defaults to
+   `127.0.0.1`, and `infra/compose.yaml` + `infra/runner.Dockerfile` set `0.0.0.0`
+   explicitly, so the container is unchanged. It was the other way round, and a bare
+   `npm start` on the host therefore put an unauthenticated API on the LAN and on a Hyper-V
+   bridge. BOARD constraint 5 is *no public ports, and nothing may be built that is only safe
+   because auth exists* — there is no auth in v1 **by design**, and the other half of that
+   design is that nothing off the tailnet can reach the process. A default that is safe only
+   because the host happens to sit on a trusted network is the same defect shape, and on a
+   tailnet system the exposure is real without any port being published, because a LAN is not
+   a tailnet.
+8. **A route that resolves a project reads that project's library — enforced by a type.**
+   Every library read takes `MountedProject`, never `RunnerConfig`. Five reads used to resolve
+   `:project` and then read `config.agentsDir` / `config.panelsDir` / `config.graphFile`,
+   agreeing with the run path only because one library is mounted — *coincidence between two
+   variables, not derivation from one* (`project-scoping.md` invariant 8). `MountedProject`
+   has no config shape, so a handler that reaches for config fails to compile.
+9. **The agent reads go through the cascade — the drawer shows what would run.**
+   `GET /api/agents` and `GET /api/agents/:slug` resolve through `resolveForDispatch`, the
+   same call `POST /run` uses, so an `agents/_overrides/**` winner is what both render and
+   `AgentDetail.sourceRef` is a real resolver output rather than an inference from a path. The
+   previous single-layer read meant an override could win a run while every view showed the
+   project layer's file: BOARD rule 4 defeated with no wrong line of code, and no error
+   message anywhere. An agent whose resolved capability would be refused at dispatch is a
+   named `skipped[]` exclusion, never a tile whose WIRED INTO list cannot run.
+10. **Panels are mounted per project and there is no fallthrough** (`project-scoping.md` §5.1
+    Q8a). A project with no `panels/` shows an empty carousel, not the coordinator's six. A
+    panel is a query shape naming agents and metrics from the library it was written against,
+    so an inherited one renders another project's frame filled with this project's numbers —
+    and that is indistinguishable on screen from a dashboard someone meant to build.
 
 ## Coverage
 
@@ -77,11 +106,11 @@ the coverage checker does not steal them from the heading above.
 | REQ-RUN-16 | §3.2 | `POST /api/schedule` writes `schedule:` via a git commit confined to `agents/**` | `apps/runner/src/lib/schedule.ts` · `apps/runner/src/lib/git.ts` | — |
 | REQ-RUN-17 | §3.2 | ofelia config is regenerated from frontmatter after that commit | `scripts/sync-ofelia.mjs` | `scripts/__tests__/sync-ofelia.test.mjs` |
 | REQ-RUN-18 | §3.2 | ofelia jobs POST the same `/api/run` the drawer uses | `scripts/sync-ofelia.mjs` | `scripts/__tests__/sync-ofelia.test.mjs` |
-| REQ-RUN-19 | §3.2 | `GET /api/graph` serves the stored artifact and never simulates | `apps/runner/src/lib/graph.ts` | — |
+| REQ-RUN-19 | §3.2 | `GET /api/graph` serves the stored artifact and never simulates | `apps/runner/src/lib/graph.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
 | REQ-RUN-20 | §3.3 | `GET /api/graph` overlays honest `core.brainCompleteness` from `company/` | `apps/runner/src/lib/graph.ts` | — |
 | REQ-RUN-21 | §3.2 | `GET /api/agents/:slug` is a wildcard (`department/agent-slug`) and returns `runnable` | `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/__tests__/api.test.ts` |
 | REQ-RUN-22 | §3.2 | `GET /api/runs` returns live LAST RUNS rows with ISO `startedAt` | `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/__tests__/api.test.ts` |
-| REQ-RUN-23 | §3.2 | `GET /api/panels` / `:id` serve `panels/*.json` without re-validating the schema | `apps/runner/src/lib/panels.ts` | — |
+| REQ-RUN-23 | §3.2 | `GET /api/panels` / `:id` serve `panels/*.json` without re-validating the schema | `apps/runner/src/lib/panels.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
 | REQ-RUN-24 | §3.3 | `GET /api/status.brain` is computed `{value, answered, total, sources, updatedAt, missing[]}` | `apps/runner/src/lib/brain.ts` | `apps/runner/src/routes/__tests__/api.test.ts` |
 | REQ-RUN-25 | PART III | Uniform errors `{error:{code,message,hint?}}` with real HTTP status | `apps/runner/src/lib/errors.ts` | `apps/runner/src/routes/__tests__/api.test.ts` |
 | REQ-RUN-26 | PART V | Monthly cap refuses `POST /api/run` with 402 `monthly_cap_reached` and a phone-written hint | `apps/runner/src/lib/billing.ts` | — |
@@ -91,6 +120,13 @@ the coverage checker does not steal them from the heading above.
 | REQ-RUN-30 | §3.3 | Interview topics are the ~20 questions (offers, ICP, pricing, Arabic/MSA, red lines, PDPL) | `apps/runner/src/lib/brain.ts` | `apps/runner/src/routes/__tests__/api.test.ts` |
 | REQ-RUN-31 | §3.2 | Routes actually mount from `RUNNER_ROUTES` in `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/api.ts` · `apps/runner/src/server.ts` | `apps/runner/src/routes/__tests__/api.test.ts` |
 | REQ-RUN-32 | §3.2 | Git writes outside `agents/**` (and company write-back outside `company/**`) are `git_write_refused` | `apps/runner/src/lib/config.ts` | — |
+| REQ-RUN-33 | PART V | `RUNNER_HOST` defaults to `127.0.0.1`; a wide bind must be declared, and compose + the Dockerfile declare it | `apps/runner/src/lib/bind.ts` · `apps/runner/src/index.ts` | `apps/runner/src/lib/__tests__/bind.test.ts` |
+| REQ-RUN-34 | §3.2 | Every library read behind a project route derives from the resolved project; the coordinator's config is not reachable from `graph.ts` or `panels.ts` | `apps/runner/src/lib/project.ts` · `apps/runner/src/lib/graph.ts` · `apps/runner/src/lib/panels.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
+| REQ-RUN-35 | §3.2 | `GET /api/agents/:slug` resolves through the cascade and carries `sourceRef` = `{layer}:{path}@sha256:…`, never inferred from the path | `apps/runner/src/lib/cascade.ts` · `apps/runner/src/lib/agents.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
+| REQ-RUN-36 | §3.2 | `GET /api/agents` is the resolved set including `agents/_overrides/**`; an agent a run would refuse is named in `skipped[]`, never drawn | `apps/runner/src/lib/cascade.ts` · `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
+| REQ-RUN-37 | §2.5 | Panels are mounted per project with no coordinator fallthrough; no `panels/` is an empty carousel | `apps/runner/src/lib/panels.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
+| REQ-RUN-38 | §3.2 | A project whose library holds no layout artifact gets `graph_not_built` naming it — never another project's graph | `apps/runner/src/lib/graph.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
+| REQ-RUN-39 | §3.3 | A brain write-back aimed at the global tier throws `brain_write_refused` (403), not a silent `null` | `apps/runner/src/lib/brain.ts` | `apps/runner/src/lib/__tests__/brain.test.ts` |
 
 ## Interfaces we expose
 
@@ -146,3 +182,30 @@ the coverage checker does not steal them from the heading above.
   same body the drawer does (one code path). A `trigger` field would be a contract
   change.
 - **Auth.** Tailnet-only, none in v1 (§3.6).
+- **The web app's own panel loader.** `apps/web/src/dashboards/data/load.ts` still walks a
+  fixed candidate list and takes no project, and both dashboard routes discard the `:project`
+  segment. The runner half is done and the resolver they need is a route
+  (`GET /api/p/:project/panels`), not a fourth disk candidate — `dashboards-engineer`'s to
+  switch. Six Command Centers therefore still render identically in every project, which is
+  true of exactly one project today. `project-scoping.md` §5.1 Q8a.
+- **The stored layout artifact does not know which project it is.** Nothing inside
+  `graph.json` names a project; `MountedProject.graphFile` is the only binding. That is why a
+  missing artifact is a refusal rather than a substitution — but it means a *misplaced*
+  artifact could not be detected. Adding a project field is `map-galaxy-engineer`'s
+  (`graph-layout.md`, ADR-003) and is filed, not assumed.
+- **MAP does not yet see `agents/_overrides/**`.** `GET /api/agents` and the drawer read the
+  resolved set now; the map reads the stored artifact, which `scripts/build-graph.mjs` builds
+  by enumerating the project layer and skipping `_`-prefixed folders. So CHART and the drawer
+  would show a winning override that MAP would not. **Latent, not live** —
+  `agents/_overrides/` does not exist in any project — and the remaining half is the layout
+  engine's, filed with `map-galaxy-engineer` and `agent-library-curator`
+  (`agent-cascade.md` §11, "one resolver, N callers").
+- **`POST /api/schedule` still writes through the single-layer loader.** It needs the project
+  layer's *file path*, not the cascade's winner, and ADR-014 §3.2's rule — refuse when the
+  layer written to is not the winner, naming the winning file — is specified and unbuilt. It
+  is now the only shipped caller of `loadAgent`, which `one-door.test.ts` asserts exhaustively
+  so the list cannot grow by accident.
+- **Ceiling enforcement on the reads is per agent, not a pass-2 validator.** A widened
+  override is excluded from `/api/agents` with its reason; the other invariants in
+  `agent-cascade.md` §7.2 (Class A match, `deliver` at L0, `status` from the ledger) are still
+  `agent-library-curator`'s and still unbuilt.
