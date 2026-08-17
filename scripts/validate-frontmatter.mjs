@@ -753,8 +753,18 @@ export async function validateAll() {
       else if (!isCronExpression(fm.schedule)) err(`schedule "${fm.schedule}" is not a valid 5-field cron (ofelia would silently take a 6-field one to mean something else)`);
     }
 
-    if (fm.status === 'live') {
-      warn('status: live is set by observability from real runs (§3.5) — if no run exists, the LIVE counter is lying');
+    // Invariant 6, as amended by ADR-014 (accepted 2026-08-17). This used to warn. It is an
+    // error now because a warning is not strong enough under a cascade: copying a file copies
+    // the claim, so promoting or forking an agent carries `live` in its bytes into a place
+    // that has never run anything — and no error is raised at any point. The resolved value
+    // comes from ops.run_ledger keyed by agent_ref; the file's value is not read.
+    if (fm.status !== undefined && fm.status !== 'draft' && STATUSES.includes(fm.status)) {
+      err(
+        `status: ${fm.status} is not authorable — a file may only ever declare \`draft\`. ` +
+        `\`live\` and \`failing\` are computed from real runs (§3.5, ADR-014 §5, BOARD rule 9): ` +
+        `set by the resolver from the ledger, never typed into a SKILL.md. A hand-set \`live\` ` +
+        `is the LIVE counter lying, and copying this file would copy the lie`,
+      );
     }
     if (!body || body.length < 40) warn('body is nearly empty — the body is the system prompt the runner hands to the agent (§3.2)');
 

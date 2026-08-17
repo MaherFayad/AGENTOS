@@ -114,6 +114,17 @@ interface DispatchResult {
   /** Exactly what the session was constructed with. `null` ⇒ no session was ever created. */
   allowedTools: string[] | null;
   systemPrompt: string | null;
+  /**
+   * The gate closure the session was handed — `AgentSessionOptions.isToolAllowed`.
+   *
+   * Captured rather than re-derived, for the same reason `allowedTools` is: the question is
+   * what the *session* may do, and a gate assembled in a test is a gate nobody shipped. It
+   * takes the tool's **input**, not just its name, because for `workspace` the name was
+   * never the boundary — `Write` is permitted, `Write("/repo/.env")` must not be.
+   */
+  gate: ((toolName: string, input: unknown) => boolean) | null;
+  /** The per-run scratch workspace the session was pointed at. */
+  cwd: string | null;
   /** The `start` frame's `sourceRef` — which file the runner says it ran. */
   sourceRef: string | null;
   /** True when the run paused at an approval gate — i.e. `approval: required` was honoured. */
@@ -144,6 +155,8 @@ async function dispatch(fx: Fixture, options: { withGlobal: boolean }): Promise<
   const result: DispatchResult = {
     allowedTools: null,
     systemPrompt: null,
+    gate: null,
+    cwd: null,
     sourceRef: null,
     gated: false,
     error: null,
@@ -154,6 +167,8 @@ async function dispatch(fx: Fixture, options: { withGlobal: boolean }): Promise<
       // The single most important line in this file: what the session was *handed*.
       result.allowedTools = [...sessionOptions.allowedTools];
       result.systemPrompt = sessionOptions.systemPrompt;
+      result.gate = sessionOptions.isToolAllowed;
+      result.cwd = sessionOptions.cwd;
       yield { type: 'result' as const, costUsd: 0 };
     };
 
@@ -203,6 +218,127 @@ async function dispatch(fx: Fixture, options: { withGlobal: boolean }): Promise<
     restore('ANTHROPIC_API_KEY', saved.key);
   }
 }
+
+/**
+ * BOARD rule 4, asserted where it is actually spent: **the allowlist is exactly
+ * `wired_into`, never a superset — and never a quietly smaller subset either.**
+ *
+ * The superset half is the security property. The subset half is the one that fails
+ * silently: an agent that reaches the session with fewer tools than its author declared
+ * runs, reports `ok`, and delivers nothing — ADR-009's failure, which is why invariant 7
+ * exists. Both directions are one `deepEqual` on what the session was handed.
+ */
+test('the session receives exactly the resolved wired_into — no base set, no dropped connector', async () => {
+  const fx = await fixture({
+    project: skill({ wiredInto: '[web-search, workspace]' }),
+  });
+  try {
+    const run = await dispatch(fx, { withGlobal: false });
+
+    assert.equal(run.error, null);
+    assert.deepEqual(
+      run.allowedTools,
+      ['WebSearch', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
+      'exactly the union of the two declared connectors, in declaration order, and nothing else',
+    );
+    // Named individually because each is a different way the list could have grown: a
+    // "harmless base set", a sibling connector in the same registry, an MCP family.
+    assert.equal(run.allowedTools?.includes('Bash'), false, 'shell is not implied by workspace');
+    assert.equal(run.allowedTools?.includes('WebFetch'), false, 'web-fetch is a different connector');
+    assert.equal(run.allowedTools?.some((t) => t.startsWith('mcp__')), false, 'no MCP family was implied');
+  } finally {
+    await fx.cleanup();
+  }
+});
+
+test('an empty wired_into grants nothing at all — the session is constructed with zero tools', async () => {
+  const fx = await fixture({ project: skill({ wiredInto: '[]' }) });
+  try {
+    const run = await dispatch(fx, { withGlobal: false });
+
+    assert.equal(run.error, null, 'an agent that reasons and writes nothing is legal');
+    assert.deepEqual(run.allowedTools, [], 'deny by default, at the session, not only in the resolver');
+    assert.equal(
+      run.gate?.('Read', { file_path: join(run.cwd ?? '', 'anything.md') }),
+      false,
+      'and the gate refuses even a path inside the scratch dir — there is no tool to permit',
+    );
+  } finally {
+    await fx.cleanup();
+  }
+});
+
+/**
+ * The other way the list could stop matching the file: a `wired_into` name the runner's
+ * registry does not know.
+ *
+ * It must **refuse**, not drop. Dropping it starts the run with fewer permissions than its
+ * author wrote and produces a confusing half-failure deep inside the session — the drawer's
+ * `WIRED INTO` line would say one thing and the session would have another.
+ */
+test('an unknown connector refuses the run rather than handing the session a smaller list', async () => {
+  const fx = await fixture({ project: skill({ wiredInto: '[workspace, telepathy]' }) });
+  try {
+    const run = await dispatch(fx, { withGlobal: false });
+
+    assert.equal(run.error?.code, 'unknown_connector');
+    assert.equal(run.allowedTools, null, 'no session was constructed with the surviving half');
+    assert.match(run.error?.message ?? '', /telepathy/);
+  } finally {
+    await fx.cleanup();
+  }
+});
+
+/**
+ * The gate the session holds reads the tool's **argument**, not just its name — inside a
+ * cascade, on a list a project layer narrowed.
+ *
+ * Two independent gates compose here and both are asserted through one closure:
+ *
+ *   name      → `isToolAllowed(record.allowlist, …)`  — BOARD rule 4, narrowed by the cascade
+ *   argument  → `isPathInsideScratch(scratch, …)`     — the boundary the `workspace` bug proved
+ *                                                        was a comment
+ *
+ * `workspace-confinement.test.ts` proves the second gate against the *filesystem*, which is
+ * the stronger assertion and stays the primary evidence. This case exists because that test
+ * runs a single-layer agent: it would still pass if the cascade path had assembled the gate
+ * from the wrong file's allowlist, or from no allowlist at all.
+ */
+test('the gate the session holds sees the tool’s argument, on a cascade-narrowed allowlist', async () => {
+  const fx = await fixture({
+    global: skill({ wiredInto: '[workspace, shell]' }),
+    project: skill({ wiredInto: '[workspace]', marker: 'The narrowed copy.' }),
+  });
+  try {
+    const run = await dispatch(fx, { withGlobal: true });
+    assert.equal(run.error, null);
+    assert.notEqual(run.gate, null, 'the session was handed a gate, not just a list');
+
+    const gate = run.gate as (name: string, input: unknown) => boolean;
+    const cwd = run.cwd as string;
+
+    // The scratch workspace is per-run and under the configured scratch root — not the
+    // library. A cwd of the repo root would make every "relative path" case meaningless.
+    assert.ok(cwd.startsWith(join(fx.repoRoot, '.runner', 'scratch')), 'cwd is a per-run scratch dir');
+    assert.notEqual(cwd, fx.repoRoot);
+
+    // Name gate: the connector the project layer subtracted is gone from the *closure*, not
+    // merely from the list beside it.
+    assert.equal(gate('Bash', {}), false, 'the removed connector is refused by the gate too');
+
+    // Argument gate: `Write` is permitted by name and still cannot leave the scratch dir.
+    assert.equal(gate('Write', { file_path: join(cwd, 'output.md') }), true, 'its own artifact is fine');
+    assert.equal(gate('Write', { file_path: join(fx.repoRoot, '.env') }), false, 'an absolute escape is refused');
+    assert.equal(gate('Write', { file_path: '../../../etc/passwd' }), false, 'traversal fails closed');
+    assert.equal(gate('Read', { file_path: join(fx.globalRoot, 'agents') }), false, 'so does reading the library');
+
+    // And a call that carries no path at all is not a filesystem access, so the path gate
+    // does not turn into theatre that blocks every MCP call.
+    assert.equal(gate('Grep', { pattern: 'TODO' }), true, 'a search pattern is not a path');
+  } finally {
+    await fx.cleanup();
+  }
+});
 
 /**
  * THE TEST THE MILESTONE TURNS ON.
