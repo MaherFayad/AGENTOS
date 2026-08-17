@@ -75,11 +75,12 @@ export function createLedger(db: DbClient): RunLedger {
            input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
            cost_usd, cost_source, tool_call_count, error_count, redaction_count,
            activity_event, activity_detail, error,
-           project_id, agent_ref, source_ref, account_id, account_source
+           project_id, agent_ref, source_ref, account_id, account_source,
+           thread_id
          ) VALUES (
            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
            $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
-           $27,$28,$29,$30,$31
+           $27,$28,$29,$30,$31,$32
          )
          ON CONFLICT (run_id) DO NOTHING`,
         [
@@ -89,6 +90,25 @@ export function createLedger(db: DbClient): RunLedger {
           run.costUsd, run.costSource, run.toolCallCount, run.errorCount, run.redactionCount,
           run.activityEvent, run.activityDetail, run.error,
           run.projectId, run.agentRef, run.sourceRef, run.accountId, run.accountSource,
+          /**
+           * **`thread_id` — the column `0008` left for this writer** (ADR-023, `Plan §12`).
+           *
+           * `0008_threads.sql` §3 shipped it nullable and said why in full: `recordRun` is
+           * `runner-engineer`'s writer, and a `NOT NULL` its only writer cannot satisfy is
+           * indistinguishable in a schema dump from one that holds — the M15 defect, in the
+           * same table, six weeks later. This line is the other half of that judgement: the
+           * writer now names it, and `startRun` opens a thread for every run, so *"this run
+           * predates threads"* is a state no new row can be in.
+           *
+           * **`SET NOT NULL` is not in this change, and that is stated rather than implied.**
+           * It is now satisfiable — grading the constraint from both sides is what §3 asked
+           * for and both sides now pass. It is held because the trace half of this column is
+           * `observability-engineer`'s and was being edited in the same session;
+           * `threads-observability.test.ts` reads every migration and requires `SpanScope` to
+           * narrow the moment one says `SET NOT NULL`, so landing it here would have gone red
+           * in a file this agent does not own. Filed to them with the three edits it needs.
+           */
+          run.threadId ?? null,
         ],
       );
 

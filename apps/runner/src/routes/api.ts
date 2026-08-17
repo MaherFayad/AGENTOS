@@ -20,9 +20,17 @@ import {
   type ProjectsResponse,
   type RunRequest,
   type AgentsIndex,
+  type CreateThreadRequest,
+  type PostThreadMessageRequest,
   type ScheduleRequest,
   type StatusResponse,
 } from '@agnetos/contracts';
+import {
+  createThreadFromLine,
+  postThreadMessage,
+  readThreadDetail,
+  requireThreadStore,
+} from '../lib/threadService.ts';
 import { sendApiError } from './http.ts';
 import { registerMetricsRoutes } from './register-metrics.ts';
 import { ApiError, badRequest } from '../lib/errors.ts';
@@ -366,6 +374,64 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
 
   // Panels are mounted per project and never cascaded (`project-scoping.md` §5.1 Q8). A
   // project with no `panels/` of its own answers an empty list — not the coordinator's six.
+  /**
+   * Threads (ADR-023, `Plan §12`).
+   *
+   * All three resolve `:project` **first**, from the path, before any row is touched — which
+   * is the reason the route is `/api/p/:project/thread/:id/…` and not the plan's
+   * `/api/thread/:id/…`. A route that looks a thread up in order to learn whose it is has let
+   * a caller-supplied id choose its own scope; see the comment on `RUNNER_ROUTES.threadMessage`.
+   *
+   * `requireThreadStore` is the first line of each, and it refuses rather than degrading:
+   * threads live in Postgres, `--profile dev` deliberately has none, and an in-memory thread
+   * would be a conversation that vanishes on the next deploy while looking exactly like one
+   * that persisted.
+   */
+  const threadIdParam = (request: FastifyRequest): string => {
+    const id = (request.params as { id?: string }).id;
+    if (!id) throw badRequest('A thread id is required.');
+    return id;
+  };
+
+  app.post(RUNNER_ROUTES.threadCreate.path, async (request, reply) => {
+    try {
+      const project = projectOf(ctx, request);
+      const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
+      return await createThreadFromLine(db, config, project, (request.body ?? {}) as CreateThreadRequest);
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
+  app.post(RUNNER_ROUTES.threadMessage.path, async (request, reply) => {
+    try {
+      const project = projectOf(ctx, request);
+      const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
+      return await postThreadMessage(db, project, threadIdParam(request), (request.body ?? {}) as PostThreadMessageRequest);
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
+  /**
+   * The thread and its turns. **Built and tested; no caller yet** — the THREADS view is
+   * `sessions-relay-engineer`'s slice and is held behind `contracts/thread-model.md`.
+   *
+   * Said out loud, and in the runner spec, because M15 shipped a provenance producer whose
+   * consumer never landed and the header read SOURCE UNKNOWN for every agent with nothing
+   * red anywhere. A route with no consumer is not a defect; a route with no consumer that
+   * nobody wrote down is.
+   */
+  app.get(RUNNER_ROUTES.thread.path, async (request, reply) => {
+    try {
+      const project = projectOf(ctx, request);
+      const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
+      return await readThreadDetail(db, project, threadIdParam(request));
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
   app.get(RUNNER_ROUTES.panels.path, async (request, reply) => {
     try {
       return { panels: await listPanels(projectOf(ctx, request)) };

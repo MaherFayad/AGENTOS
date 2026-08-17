@@ -42,6 +42,45 @@ export type ApiErrorCode =
   | 'run_not_found'
   | 'run_not_pending_approval'
   | 'approval_already_decided'
+  /* -- threads, addressing and the mailbox (ADR-023, `Plan §12`) -------------
+   *
+   * Proposed by `thread-model-engineer` in `contracts/thread-model.md` §11 and accepted
+   * here unrenamed, because a code a contract already names is a code its consumers have
+   * already read. `thread_store_unavailable` is the one addition, and it is added because
+   * the specifier could not have known it was needed: they own the schema, and whether a
+   * *database is reachable* is this process's fact. See the block above `RUNNER_ROUTES`.
+   */
+  /** No such thread **in this project's scope** — deliberately opaque, like `run_not_found`. */
+  | 'thread_not_found'
+  /** The thread is `closed`, or it moved underneath the caller between read and write. */
+  | 'thread_not_addressable'
+  /** An illegal state transition (`thread-model.md` §4.5). */
+  | 'thread_transition_refused'
+  /** The addressing grammar refused the line. The parser's own code goes in `hint`. */
+  | 'address_malformed'
+  /** Parsed; no agent or department of that name in this project's resolved roster. */
+  | 'address_unresolved'
+  /** `@slug` matched more than one department. The hint **lists them**; it never picks. */
+  | 'address_ambiguous'
+  /** A `steer` with no run in flight, or one this runner cannot inject. Never a silent note. */
+  | 'interrupt_not_deliverable'
+  /** `@@` would spawn N runs against a cap that has never fired (`thread-model.md` §6.1). */
+  | 'fanout_dispatch_refused'
+  /** Answering a question past its `expires_at`; also the run-failure reason on expiry. */
+  | 'question_unanswered'
+  /**
+   * The thread plane needs Postgres and this runner has none.
+   *
+   * **Not in `thread-model.md` §11, and added rather than improvised at the call site.**
+   * `--profile dev` runs with no database *by design* (`LedgerState: 'absent'` is not a
+   * failure), so every thread route has a legitimate state in which it cannot answer. The
+   * alternatives were both worse: `internal` (500) reads as a bug in the runner and sends
+   * someone to the logs, and `not_found` reads as a route that was never built. 503 says
+   * *this instance cannot do this right now*, which is exactly true, and the hint names the
+   * profile. Announced to `inbox/_all/` in the same act, because adding a code is a
+   * contract change and `drawer-engineer` renders codes.
+   */
+  | 'thread_store_unavailable'
   /**
    * The bytes this run points at are **not inside the serving project's artifacts
    * directory**, so they are not served (ADR-015, `project-scoping.md` invariant 8).
@@ -116,6 +155,19 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   run_not_found: 404,
   run_not_pending_approval: 409,
   approval_already_decided: 409,
+  thread_not_found: 404,
+  thread_not_addressable: 409,
+  thread_transition_refused: 409,
+  address_malformed: 400,
+  address_unresolved: 422,
+  address_ambiguous: 422,
+  interrupt_not_deliverable: 409,
+  // 503 and not 403: the caller did nothing wrong and the refusal is temporary — it lifts
+  // the day the cap proves it can refuse. `thread-model.md` §11 left the status to this
+  // file's owner and it is taken as proposed.
+  fanout_dispatch_refused: 503,
+  question_unanswered: 409,
+  thread_store_unavailable: 503,
   artifact_unattributed: 500,
   invalid_cron: 400,
   git_write_refused: 403,
@@ -148,6 +200,18 @@ export interface RunRequest {
    * `wired_into` list is actually wired.
    */
   dryRun?: boolean;
+  /**
+   * **Continue an existing thread** (ADR-023, `Plan §12`).
+   *
+   * Supplied: this run is the thread's next turn, and its prompt is seeded with the
+   * thread's history. Omitted: the runner creates a fresh `agent` thread for the run, so
+   * *every* run belongs to a thread and `ops.agent_runs.thread_id` can be `NOT NULL`.
+   *
+   * There is deliberately **no resume-the-SDK-session fork**. Continuing is a new run with
+   * the history in front of it — which is what Part One recommended anyway, and what makes
+   * `failed` a non-terminal thread state worth having.
+   */
+  threadId?: string;
 }
 
 /** Terminal + transient states of one run. `denied` is an outcome, not an error. */
@@ -415,6 +479,161 @@ export interface ApprovalDecisionResponse {
   decidedAt: string;
   /** What the run does next: resumes streaming, or aborts cleanly and records why. */
   outcome: 'resumed' | 'aborted';
+}
+
+// ---------------------------------------------------------------------------
+// Threads, addressing and the mailbox   (ADR-023, `Plan §12`)
+// ---------------------------------------------------------------------------
+//
+// The *semantics* of these payloads belong to `comms/contracts/thread-model.md`
+// (`thread-model-engineer`) and are not restated here. What lives here is the wire: the
+// route table, the request bodies and the response rows. Two agents editing one contract is
+// how a shape acquires two readings, so this file transcribes and never re-argues.
+//
+// One thing this file *does* own, and it is the only correction made to the specification:
+// the route spelling. See `RUNNER_ROUTES.threadMessage`.
+
+/**
+ * `POST /api/p/:project/thread` — open a thread from a typed line.
+ *
+ * `line` is what a person typed, address and all (`@sales/x do the thing`,
+ * `@@sales …`, `#sales …`, or no sigil at all for the Chief of Staff). The runner parses
+ * it with `parseThreadAddress`, resolves the address against **this project's** roster,
+ * and creates the thread. Splitting the address out into its own field was rejected: the
+ * composer would then have to parse the line to fill the field, which is the parser living
+ * in two places — and the second copy is the one that guesses.
+ */
+export interface CreateThreadRequest {
+  line: string;
+  /**
+   * Optional first turn's interrupt level. A thread created with a body carries a `human`
+   * message, and every `human` message declares a level (`thread-model.md` §4.2).
+   * Defaults to `note` — which is a declaration, not an absence.
+   */
+  interrupt?: 'note' | 'steer' | 'halt';
+  /** A thread with a due date **is** a task (`Plan §19`). ISO 8601. */
+  dueAt?: string | null;
+}
+
+/**
+ * What a turn would cost, echoed on thread creation so the composer never has to compute it.
+ *
+ * `estimatedUsd` is typed `null` (`TurnCost` in `packages/contracts/src/threads.ts`) — zero
+ * runs have ever completed, so there is nothing to average, and a cost preview is precisely
+ * the surface where a plausible number gets believed (BOARD rule 9).
+ */
+export interface ThreadCostPreview {
+  runs: number;
+  /** `false` ⇒ `runs` is a **lower bound** — `#` delegates, and a delegation is a second run. */
+  runsAreExact: boolean;
+  estimatedUsd: null;
+  estimateBasis: 'no-completed-runs';
+}
+
+/** A thread row as the API serves it. Project-relative, like the column it comes from. */
+export interface ThreadSummary {
+  id: string;
+  kind: 'agent' | 'department' | 'project' | 'session';
+  /** `direct` costs 1 run; `fan-out` costs N. Stored, never inferred — `thread-model.md` §2.4. */
+  delivery: 'direct' | 'dispatch' | 'fan-out' | 'default' | 'session';
+  /** `{department}/{slug}` · `{department}` · `chief-of-staff` · a session id. */
+  addressedTo: string;
+  state: 'open' | 'running' | 'waiting' | 'closed' | 'failed';
+  createdBy: string;
+  dueAt: string | null;
+  createdAt: string;
+  /**
+   * **No `title`.** `thread-model.md` §9.6 answered this: a label is either authored (a
+   * field nobody fills) or derived from the first message (a second copy of the highest-PII
+   * value in the database, in a column that would end up in every list payload). Deriving is
+   * a view concern and belongs with whoever builds the list.
+   */
+}
+
+export interface CreateThreadResponse {
+  thread: ThreadSummary;
+  /** Present when `line` carried a body — the first turn, already appended. */
+  message: ThreadMessageRef | null;
+  cost: ThreadCostPreview;
+  /**
+   * Can this address actually be dispatched today, and if not, why?
+   *
+   * A thread is *always* created — `@@sales` parses, stores, previews and refuses to spend.
+   * The refusal travels with the row rather than only as an error, so a composer can grey
+   * the Run button and say the reason instead of discovering it on click.
+   */
+  dispatchable: { allowed: boolean; reason: string | null; unblockedBy: string | null };
+}
+
+/**
+ * `POST /api/p/:project/thread/:id/message` — the one pipe.
+ *
+ * `interrupt` is declared by the sender and never inferred from context: a `note` is queued
+ * for the next tool boundary, a `steer` changes course now, a `halt` stops and asks. A
+ * `steer` with no run in flight is **refused** (`interrupt_not_deliverable`), never quietly
+ * queued — a human who steered and was silently downgraded believes they changed course,
+ * and nothing did (`thread-model.md` invariant 7).
+ */
+export interface PostThreadMessageRequest {
+  body: string;
+  interrupt: 'note' | 'steer' | 'halt';
+  /**
+   * Structured content — a question's options, a halt's checkpoint reference.
+   *
+   * **An object, never pre-flattened prose**, and that is PDPL rather than style: `redact()`
+   * walks object keys and a string has none, so composing `{client_name, address, dob}` into
+   * a sentence before storage leaks four of five denylisted keys (found three times in one
+   * night during M15). Compose prose at the point of display.
+   */
+  payload?: Record<string, unknown> | null;
+  /** Set to answer a question. Required exactly when the message is an `answer`. */
+  inReplyTo?: string | null;
+}
+
+/** The receipt for an appended turn. Carries no body — the caller already has it. */
+export interface ThreadMessageRef {
+  id: string;
+  /** Monotonic within the thread. `UNIQUE (thread_id, seq)` — a concurrent append fails loudly. */
+  seq: number;
+  kind: 'human' | 'agent' | 'question' | 'answer' | 'system';
+  interrupt: 'note' | 'steer' | 'halt' | null;
+  createdAt: string;
+}
+
+export interface PostThreadMessageResponse {
+  message: ThreadMessageRef;
+  /**
+   * Where the message went, in the caller's terms.
+   *
+   * `queued` — it is in the mailbox and the next tool boundary will drain it.
+   * `delivered-to-run` — a run is in flight and it was handed to that run's drain.
+   *
+   * There is no `injected` value, and that absence is the point: injecting a turn into a
+   * *live* SDK session is not built (see `interrupt_not_deliverable` and the runner spec),
+   * so no response can claim it happened.
+   */
+  disposition: 'queued' | 'delivered-to-run';
+  /** The thread's state after the append — `halt` on a running thread moves it to `waiting`. */
+  threadState: ThreadSummary['state'];
+}
+
+/** `GET /api/p/:project/thread/:id` — the thread and its turns, oldest first. */
+export interface ThreadDetail {
+  thread: ThreadSummary;
+  messages: Array<
+    ThreadMessageRef & {
+      author: string;
+      /** **Free text a person typed.** Served only inside its project, never traced, never pushed. */
+      body: string;
+      payload: Record<string, unknown> | null;
+      inReplyTo: string | null;
+      expiresAt: string | null;
+      /** `null` ⇒ still in the mailbox. Set when a run's drain read it at a tool boundary. */
+      deliveredAt: string | null;
+    }
+  >;
+  /** How many turns are still undelivered. The mailbox is a predicate, not a table. */
+  mailboxDepth: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -727,6 +946,44 @@ export const RUNNER_ROUTES = {
   agentsIndex: { method: 'GET', path: '/api/p/:project/agents', scope: 'project' },
   agent: { method: 'GET', path: '/api/p/:project/agents/*', scope: 'project' },
   runs: { method: 'GET', path: '/api/p/:project/runs', scope: 'project' },
+
+  /**
+   * Threads (ADR-023, `Plan §12`). Singular `thread` for one thread's sub-resources, which
+   * is the same shape `run/:runId/stream` already uses; the plural collection route is
+   * deliberately absent — see the runner spec's *Deliberately not done*.
+   */
+  threadCreate: { method: 'POST', path: '/api/p/:project/thread', scope: 'project' },
+  thread: { method: 'GET', path: '/api/p/:project/thread/:id', scope: 'project' },
+  /**
+   * **`Plan §12` spells this `POST /api/thread/:id/message`, and that route cannot be
+   * implemented — the correction is a consequence of an accepted decision, not a style
+   * preference.** `thread-model-engineer` proposed the spelling below; it is confirmed here,
+   * with one part of their reasoning corrected rather than inherited.
+   *
+   * *Their argument, which holds and is the load-bearing one:* ADR-015 Q1 makes the project
+   * a path segment on **every** route that reads or writes one project's data, with no
+   * default, no header and no session state. A thread is one project's data — `ops.thread`
+   * carries `project_id NOT NULL` with an RLS policy from its first migration. So the
+   * segment is not optional and the plan's path is missing a required part of itself.
+   *
+   * *Their second argument, corrected:* they add that deriving the project *from the thread
+   * row* is impossible because an unscoped read of `ops.thread` **raises** by design (0005
+   * §5). That is true of the schema and **inert on this stack today** — compose's Postgres
+   * user is a superuser, RLS is bypassed, and `GET /api/status` reports exactly that as
+   * `projects.scopeEnforcement: 'bypassed'`. So the unscoped read would currently *succeed*.
+   * Resting the correction on it would be resting it on a guarantee this repo can only make
+   * structurally (`project-scoping.md` §6), and the first person to check would find the
+   * reason didn't hold. The route is right; the first reason is why.
+   *
+   * And a third reason neither of us wrote down, which survives without any database at all:
+   * **a lookup-then-scope route is a route whose authorisation depends on its own payload.**
+   * `:id` is caller-supplied, so "find the thread, then decide whose it is" makes the caller
+   * choose the scope. Every other route here resolves the project *first*, from the path,
+   * and only then touches a row — which is why `run_not_found` can be opaque across projects
+   * rather than merely quiet.
+   */
+  threadMessage: { method: 'POST', path: '/api/p/:project/thread/:id/message', scope: 'project' },
+
   panels: { method: 'GET', path: '/api/p/:project/panels', scope: 'project' },
   panel: { method: 'GET', path: '/api/p/:project/panels/:id', scope: 'project' },
   graphSocket: { method: 'WS', path: '/ws/p/:project/graph', scope: 'project' },
