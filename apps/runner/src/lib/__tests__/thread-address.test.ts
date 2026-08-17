@@ -183,14 +183,35 @@ test('a fan-out preview prints a real count and refuses to invent a price', () =
 });
 
 test('`#sales says 1 run` is a lower bound, and the type says so', () => {
-  const dispatch = addressCost({ form: 'dispatch', department: 'sales' });
+  const dispatch = addressCost({ form: 'dispatch', department: 'sales' }, 0);
   assert.equal(dispatch.runs, 1);
   // The lead answers *or delegates*, and a delegation is a second run. Printing a flat "1 run"
   // beside a mechanism that routinely costs two is a plausible number one decimal place up.
   assert.equal(dispatch.runsAreExact, false);
 
-  assert.equal(addressCost({ form: 'direct', department: 'sales', slug: 'x' }).runsAreExact, true);
-  assert.equal(addressCost({ form: 'default' }).runsAreExact, false);
+  assert.equal(addressCost({ form: 'direct', department: 'sales', slug: 'x' }, 0).runsAreExact, true);
+  assert.equal(addressCost({ form: 'default' }, 0).runsAreExact, false);
+});
+
+test('a fan-out cost cannot be obtained without naming a count', () => {
+  // The defect this replaced: `memberCount` defaulted to `0`, so a caller that forgot the
+  // argument got `{ runs: 0, runsAreExact: true }` — an *exact zero* manufactured out of an
+  // omission, on the one figure `Plan §23.8` requires to be real. Raised by
+  // `design-system-guardian` while building `AddressBadge`; fixed in the signature rather than
+  // in the badge, because a default is available to every caller and a badge protects one.
+  //
+  // Never invoked — the assertion is that it does not *compile*. A missing argument is not a
+  // runtime error in JavaScript; it would quietly produce `runs: undefined`, which is why this
+  // has to be caught by `tsc` and not by `assert.throws`.
+  // @ts-expect-error — the count is required. If this line ever compiles, the default is back and `addressCost(@@sales)` can claim "exactly 0 runs" again.
+  const withoutACount = () => addressCost({ form: 'fan-out', department: 'sales' });
+  assert.equal(typeof withoutACount, 'function', 'declared to be type-checked, deliberately not called');
+
+  // A *measured* zero is still legal and still exact — a department that resolved and has no
+  // members. The two states are now distinguishable at the call site, which was the point.
+  const empty = addressCost({ form: 'fan-out', department: 'sales' }, 0);
+  assert.equal(empty.runs, 0);
+  assert.equal(empty.runsAreExact, true);
 });
 
 test('fan-out dispatch is refused, and the refusal names the cap that has never fired', () => {
@@ -425,4 +446,63 @@ test('no migration contains a block-comment token that could blind a corpus-wide
 
   // Falsification: the scan is a substring test over real lines, and it does find things.
   assert.ok(files.some((f) => f.startsWith('0008')), 'the directory being scanned is the real one');
+});
+
+/* -------------------------------------------------------------------------- *
+ * 9. thread-model.md §9.5 is a *self-expiring* OPEN, not an indefinite one
+ * -------------------------------------------------------------------------- */
+
+/**
+ * **Does a fan-out parent thread hold its own transcript?** — `thread-model.md` §9.5, owned by
+ * `thread-model-engineer`, deferred rather than guessed.
+ *
+ * Reviewed 2026-08-18 with the composer about to be built, because "deferred" is a claim that
+ * decays and this is the moment it would have started costing something. **It still holds, and
+ * the reason is mechanical rather than a preference:** `assertFanOutDispatchable` returns
+ * `never`, so no code path in this repo can create a fan-out parent thread or a single child. A
+ * question about what rows a parent holds cannot be answered wrongly by a caller that cannot
+ * make a parent, and cannot be answered *rightly* by designing a mirror against a renderer that
+ * does not exist — that produces a plausible spec, which is this board's most-repeated defect
+ * wearing a schema.
+ *
+ * The composer specifically does **not** depend on it. It parses, previews the count, and hits
+ * the refusal; §6.1 ships grammar, parser, composer and preview, and holds only the spending.
+ * Both shapes still fit `0008` unchanged, so nothing in §5 is waiting either.
+ *
+ * What makes this a decision rather than a deferral is that it **expires by itself**, below.
+ */
+test('§9.5 may stay OPEN only while fan-out cannot dispatch', async () => {
+  // @ts-expect-error — `FAN_OUT_DISPATCH.allowed` is typed `false`, so this assignment does not
+  // compile today and the suppression is load-bearing. The day fan-out is allowed to spend, the
+  // assignment starts compiling, this suppression becomes unused, and `tsc` fails *here* — in
+  // the same diff that flips the flag, pointing at the question that diff has to answer:
+  // **thread-model.md §9.5, does the parent hold its own transcript.** That is the forcing
+  // function; the paragraph above is only the reasoning.
+  const fanOutWouldDispatch: true = FAN_OUT_DISPATCH.allowed;
+  assert.equal(
+    fanOutWouldDispatch,
+    false,
+    'fan-out dispatch is refused in M16 (thread-model.md §6.1), which is what licenses §9.5 to stay open',
+  );
+
+  // And the refusal is a `never`, not a flag someone reads: there is no reachable path that
+  // creates a fan-out parent, so no consumer can have guessed an answer to §9.5 by now.
+  assert.throws(
+    () => assertFanOutDispatchable(4),
+    (error: unknown) => (error as { code?: string }).code === 'fanout_dispatch_refused',
+    'if this stops throwing, §9.5 is on the critical path and must be answered before the parent is written',
+  );
+
+  // The linkage is greppable from the contract too, so the flag and the question find each
+  // other from either end rather than only from this file.
+  const contract = await readFile(join(HERE, '..', '..', '..', '..', '..', 'comms', 'contracts', 'thread-model.md'), 'utf8');
+  const section = contract.split('### 9.5')[1]?.split('### 9.6')[0] ?? '';
+  assert.ok(section.length > 200, '§9.5 was not found in thread-model.md — this assertion would pass vacuously');
+  assert.match(
+    section,
+    /FAN_OUT_DISPATCH/,
+    '§9.5 must name FAN_OUT_DISPATCH as the condition that ends its deferral. An OPEN question ' +
+      'with no expiry condition is an indefinite one, and the next reader cannot tell the ' +
+      'difference between deferred and forgotten.',
+  );
 });

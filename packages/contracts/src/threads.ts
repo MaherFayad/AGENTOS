@@ -519,8 +519,20 @@ export interface TurnCost {
  * @param memberCount the **resolved** member count of the addressed department. Only read for
  *   `fan-out`; pass `0` for any other form. A caller that guesses this number has invented the
  *   one figure in the preview that was supposed to be real.
+ *
+ * **The parameter has no default, and that is the whole point of it.** It used to default to
+ * `0`, which meant `addressCost(fanOutAddress)` returned `{ runs: 0, runsAreExact: true }` — an
+ * *exactly zero* claim assembled out of a caller forgetting an argument. Two different states
+ * collapsed into one number: a department that resolved and has no members, and a caller that
+ * has not resolved a roster at all. That is this repo's house defect (a declared value read as
+ * an observed one) sitting on the one figure in the composer that `Plan §23.8` requires to be
+ * real. Raised by `design-system-guardian` while building `AddressBadge`, and fixed here rather
+ * than in the badge, because a default is available to every caller and a badge protects one.
+ *
+ * Callers with nothing measured must not call this: the absence of a figure is the signal, and
+ * `AddressBadge`'s `cost` prop takes `TurnCost | 'unresolved'` for exactly that.
  */
-export function addressCost(address: ResolvedThreadAddress, memberCount = 0): TurnCost {
+export function addressCost(address: ResolvedThreadAddress, memberCount: number): TurnCost {
   const base = { estimatedUsd: null, estimateBasis: 'no-completed-runs' } as const;
   switch (address.form) {
     case 'direct':

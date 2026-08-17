@@ -62,8 +62,10 @@ A design that violates one of these is a bug, not a difference of opinion.
    designed something else.
 
 2. **Threads are project-scoped from the first migration.** Not added later. `0008` creates
-   `ops.thread.project_id` and `ops.message.project_id` as `NOT NULL` with foreign keys and
-   row-level-security policies in the same file that creates the tables (`Plan §10`).
+   `ops.thread.project_id` and `ops.message.project_id` as `NOT NULL`, with foreign keys, in the
+   same file that creates the tables (`Plan §10`). Those two fire for every role. It also adds
+   **row-level-security policies, which are inert on this stack** (§8b), so the scoping that
+   actually holds today is the `WHERE` clause in every reader.
 
 3. **`#` and `@@` must be different characters and must *look* different**, because one costs
    one run and the other costs N (`Plan §12`). This is a UI requirement *and* a schema one —
@@ -163,13 +165,39 @@ which is `agent-cascade.md`'s. This contract specifies only the two refusals res
 **`POST /api/p/:project/thread/:id/message`.**
 
 **This differs from `Plan §12`'s `POST /api/thread/:id/message`, and the difference is
-load-bearing rather than cosmetic.** ADR-015 Q1 makes the project a path segment on every route
-that reads or writes one project's data, with no default, no header and no session state. A
-thread is project data. Deriving the project *from the thread row* would require reading
-`ops.thread` with no project in scope — which, by migration 0005 §5, **raises**
-`project_scope_missing` by design. So the plan's route cannot be implemented under ADR-015 at
-all; it is not a style choice. `runner-engineer` transcribes the final spelling into
-`api-contracts.md`, which is theirs.
+load-bearing rather than cosmetic.** Two reasons, and **both hold on the stack that exists
+today** — one of them once did not, which is the note at the end of this section.
+
+1. **ADR-015 Q1 puts the project in the path** of every route that reads or writes one project's
+   data, with no default, no header and no session state. A thread is project data —
+   `ops.thread.project_id` is `NOT NULL` from the migration that creates it — so the plan's route
+   is missing a required part of itself. It cannot be implemented under ADR-015 at all; it is not
+   a style choice. This reason never depended on a database being configured a particular way.
+
+2. **A lookup-then-scope route lets a caller-supplied `:id` choose its own scope.** Deriving the
+   project *from the thread row* hands the least trustworthy value in the request the job of
+   deciding which project the request is in. Every other route here fixes the scope **first**,
+   from the path, and that ordering is what lets `thread_not_found` be *opaque* across projects
+   rather than merely quiet (§11): a handler whose scope is already fixed answers 404 to a real
+   id in another project without ever executing a branch that knows the row exists. Argument due
+   to `runner-engineer`. It is true on a laptop with no Postgres, true under a superuser, and
+   still true after the auth ADR lands.
+
+`runner-engineer` transcribes the final spelling into `api-contracts.md`, which is theirs.
+
+> **Corrected 2026-08-18 — reason 2 used to be an RLS argument, and RLS is inert here.** This
+> section previously said that deriving the project from the thread row was impossible because an
+> unscoped read of `ops.thread` **raises** — `project_scope_missing`, **inert**, by migration
+> 0005 §5. True of the schema; dead on the only stack that exists, where compose's Postgres user
+> is a superuser, every policy is bypassed, and `GET /api/status` reports it — so that read would
+> have *succeeded*. `0008_threads.sql:453` and `db/thread-reads.ts:23` both already said so; this
+> contract was the one artifact of the three that read as though a policy enforced something.
+> **A contract argument resting on a mechanism that does not run on the only stack that exists is
+> a declared value read as an observed one**, and it is worse in a contract than in a checker,
+> because a contract is what the next six agents read instead of the code. The conclusion never
+> moved and nothing built against §4.1 changes. Found by `runner-engineer`, routed by
+> `commandcenter-orchestrator`. The repair is held by
+> `contract-arguments-from-inert-mechanisms.test.ts`, not by this paragraph — §8b.
 
 ### 4.2 The three levels
 
@@ -178,8 +206,20 @@ Declared by the sender, on the message, never inferred from context.
 | Level | Behaviour | Refusal |
 |---|---|---|
 | `note` | Queued. Read at the next tool boundary. Cheap, non-disruptive. | none — always deliverable |
-| `steer` | Injected into the in-flight session now. Changes course mid-task. | `interrupt_not_deliverable` when no run is in flight (invariant 7) |
+| `steer` | Injected into the in-flight session now. Changes course mid-task. **Not built in M16 — see below.** | `interrupt_not_deliverable` — **always, in this build**: `MID_RUN_STEER.supported` is `false` (`apps/runner/src/lib/mailbox.ts`), so the refusal does **not** depend on a run being in flight. Invariant 7's no-run-in-flight case is the *level's* rule and outlives this build's; both are the same 409. |
 | `halt` | Stop, checkpoint the work so far, ask before continuing. | none — a halt on an idle thread is a no-op that is still recorded |
+
+**`steer` is refused in M16, not merely unbuilt.** `runner-engineer` found, while building the
+route, that a steer sent to a *running* thread is undeliverable here too: `createSdkSession`
+drives the Agent SDK with a **string** prompt, and injecting another user turn needs its
+streaming-input mode, which has never been exercised in this repo because zero runs have
+executed. Writing that plumbing would have put unverifiable code on the one path no test can
+reach, and the first thing to exercise it would be a paid run. So the refusal is honest rather
+than a queue: `interrupt_not_deliverable`, with two different hints depending on whether a run
+is in flight. `MID_RUN_STEER.supported` is typed `false` — the same instrument as
+`FAN_OUT_DISPATCH.allowed`, so restoring it is a reviewable type-level act. **`note` and `halt`
+are fully built**, and a note's text reaches the agent on the thread's next run through history
+seeding, which is real delivery — just not mid-turn, and the runner says which.
 
 **Interrupt level is present exactly when a person sent the message.** `human` and `answer`
 messages carry one; `agent`, `question` and `system` messages carry none. That is an equality,
@@ -198,6 +238,13 @@ argument that deleted `ops.question`.
   `AND delivered_at IS NULL`, so a second drain does not rewrite the timestamp and make *"when
   did the agent first see this"* unanswerable.
 - A drain that finds a `halt` stops at that message and does not consume the ones behind it.
+- **A drain that finds a `steer` stops *before* it and consumes nothing further, leaving it
+  undelivered.** The route refuses steers (§4.2), so one in the mailbox means something bypassed
+  the route — and consuming a steer without acting on it is the silent downgrade invariant 7
+  forbids. A wedged mailbox is visible in `mailboxDepth`; a downgraded steer is visible nowhere.
+  Wording proposed by `runner-engineer`, who found the silence while building the drain, and
+  adopted unchanged. Note the asymmetry with `halt`, which is deliberate: a halt is *consumed* by
+  the run it stops, a steer is not consumed by anything, so they cannot share a stopping rule.
 - `seq` is monotonic per thread with `UNIQUE (thread_id, seq)`. Two concurrent appends collide
   loudly rather than producing two message #4s in one conversation.
 
@@ -246,7 +293,7 @@ Types, keys, nullability and constraint names are fixed by `0008_threads.sql`. *
 | Column | Meaning | What enforces the claim |
 |---|---|---|
 | `id` | uuid, generated by the writer before the insert so a failure message can name the thread | `PRIMARY KEY`, no default — the writer must name it |
-| `project_id` | the axis | `NOT NULL`, FK `ON DELETE RESTRICT`, RLS policy |
+| `project_id` | the axis | `NOT NULL` + FK `ON DELETE RESTRICT` — both fire for every role. Plus an RLS policy that is **inert** on this stack (§8b), so the enforcement that holds today is the reader's `WHERE`. |
 | `kind` | `agent · department · project · session` | `thread_kind_known` |
 | `delivery` | `direct · dispatch · fan-out · default · session` | `thread_delivery_known` + `thread_delivery_matches_kind` |
 | `addressed_to` | **project-relative** — `{department}/{slug}` · `{department}` · `chief-of-staff` · session id | `thread_addressed_to_shape`, one branch per kind |
@@ -267,13 +314,40 @@ Thirteen columns; the ones with a decision behind them:
 
 | Column | Note |
 |---|---|
-| `project_id`, `thread_kind` | Denormalised from the thread and **pinned by a composite FK** to `ops.thread (id, project_id, kind)`. A message claiming the wrong project or the wrong kind fails to insert. This buys a *direct* RLS predicate on the one table in the database where a leak is free text a person typed. |
+| `project_id`, `thread_kind` | Denormalised from the thread and **pinned by a composite FK** to `ops.thread (id, project_id, kind)`. A message claiming the wrong project or the wrong kind fails to insert — an FK fires for every role, including compose's superuser, so this half is live the moment the migration runs. It also makes a *direct* RLS predicate possible on the one table where a leak is free text a person typed; that half is **declared, not enforced here** (§8b), and is why every reader scopes its own `WHERE`. |
 | `seq` | Derived in SQL from the thread's own rows; `UNIQUE (thread_id, seq)`. |
 | `body` | **Free text a person typed. The highest-PII value in this repo.** §7. |
 | `payload` | An object. Never prose. §7.2. |
 | `expires_at` | `(kind = 'question') = (expires_at IS NOT NULL)` — an equality, both directions. |
-| `in_reply_to` | `(kind = 'answer') = (in_reply_to IS NOT NULL)`. An answer that names no question is a label, and the question it settles becomes a guess made from timestamps. |
+| `in_reply_to` | `(kind = 'answer') = (in_reply_to IS NOT NULL)`. An answer that names no question is a label, and the question it settles becomes a guess made from timestamps. **Project-pinned by `message_reply_project_fk` → `ops.message (id, project_id)`, and it was not always** — see below. |
 | `delivered_at` | `NULL` ⇒ still in the mailbox. |
+
+**`in_reply_to` was the one reference in `0008` that was not project-pinned, and it is fixed.**
+Found by `fidelity-qa-reviewer` in the M16 foundation verdict. `FOREIGN KEY (in_reply_to)
+REFERENCES ops.message(id)` accepts **any** message id in the table, including one in another
+project, and `inReplyTo` is caller-supplied on the route with `message_answer_replies` making it
+mandatory on every answer — so the unchecked path was the only path an answer could take. What
+crossed was a *reference*, not a body (`readMessages` is project-scoped, so the pointer rendered
+unresolvable rather than as another client's text), which is why it was one finding rather than
+a Part VII incident.
+
+**It is §4.1's family one level down: a comment asserting an invariant the constraint beneath it
+does not enforce.** §8b grades a mechanism by whether this stack's role bypasses it; this FK
+passed that test and failed a different one — it was simply *narrower than the claim written
+above it*. And it is BRIEF's *grade a constraint from both sides* pointed the other way: M15's
+defect was a `NOT NULL` nobody could satisfy; this was a constraint satisfiable by rows that
+should not exist.
+
+| | Decision |
+|---|---|
+| The pin | `FOREIGN KEY (in_reply_to, project_id) REFERENCES ops.message (id, project_id)`, with `UNIQUE (id, project_id)` added to `ops.message` as the target the composite FK needs |
+| Nullability | **unchanged and deliberately so.** A first message replies to nothing. The FK stays at the default `MATCH SIMPLE`, under which a NULL in a referencing column satisfies the constraint. **`MATCH FULL` would be the trap** — `project_id` is `NOT NULL`, so it would reject every message that is *not* a reply, which is M15's ledger defect reached by a different route |
+| Project, not thread | pinning the thread would be stronger and every legitimate answer today replies within its own thread — but it would settle §9.5 by making a mirroring fan-out parent unwritable, and §9.5's own text promises both shapes fit this schema unchanged. **A schema change is not the place to close an open question by accident.** The *writer* scopes to the thread, which is one reviewable line to loosen |
+| The caller | `appendMessage` constrains a caller-supplied `inReplyTo` to this thread **inside the INSERT statement**, not in a read-then-write before it. It refuses with a sentence rather than letting the FK surface a raw `23503` as a 500 |
+
+Held by `threads-schema-pinning.test.ts`, which asserts the **rule** rather than the line: every
+FK into a project-scoped table names `project_id` on both sides. A test for the one constraint
+would not have caught it before it was written, nor catch the next one.
 
 ### 5.3 `ops.agent_runs.thread_id` — nullable, and why that is a decision
 
@@ -357,7 +431,18 @@ constrain.
 ### 7.1 The body is stored verbatim, and never instrumented
 
 Storing it is the point — a redacted record is not a record. What is forbidden is letting it
-*leave* the process:
+leave **through the observability and notification planes** — and that qualifier is a correction,
+not a hedge. This section used to say *"what is forbidden is letting it leave the process"*, which
+is false in the one direction that matters most: **`lib/prompt.ts` renders every prior turn's
+`body` into the user prompt, so a message body leaves the tailnet the moment a thread takes a
+second turn.** That is correct product behaviour — continuing a thread means seeding a new run
+with the thread's history (`Plan §12`) — and it is not being changed. It is written here because
+the sentence above it was doing rhetorical work it could not support, and *"traces stay local"*
+answers for the observability plane rather than for the plane that actually carries the words.
+Cross-border transfer under PDPL Arts. 29–31 is `rtl-arabic-pdpl-specialist`'s data-egress ADR
+and it needs the human; this contract's job is to stop the claim being read as broader than it is.
+
+With that said, the three mechanisms below are real and unchanged:
 
 - **It never becomes a span attribute.** `messageSpanAttributes()` is a type with **no `body`
   field to add back**. That is the mechanism; a comment asking the next author to omit it is
@@ -422,6 +507,34 @@ distinction verbatim and it is not a formality here.
 (§23.11 rule 6) and must state which kind of isolation claim it is making — **structural** or
 **empirical**. In M16 it can only be the first.
 
+### 8b. Which database mechanisms this contract may argue *from*
+
+Added 2026-08-18, after §4.1 was found arguing from one that does not run. **A contract may cite
+a dormant mechanism; it may not rest a conclusion on one.** The distinction is not "has the
+migration run" — that is §8's row and it applies to everything — it is **whether the mechanism is
+bypassed by the role this stack actually connects as.**
+
+| Mechanism in `0008` | Fires for compose's superuser? | May a conclusion rest on it? |
+|---|---|---|
+| `NOT NULL`, `CHECK`, `UNIQUE` | **Yes.** Not role-dependent. | Yes — `message_never_holds_session_content`, `message_interrupt_matches_kind` and the shape checks are real defences. |
+| `FOREIGN KEY`, composite FKs | **Yes.** | Yes — the `(id, project_id, kind)` pin is live. |
+| `ENABLE`/`FORCE ROW LEVEL SECURITY`, `CREATE POLICY`, `ops.project_visible()` | **No.** A superuser bypasses RLS unconditionally; `FORCE` binds the table *owner*, not a superuser. `GET /api/status` reports `projects.scopeEnforcement: "bypassed"`. | **No.** Cite it as future work; do not conclude from it. |
+
+**What holds the isolation today is the `WHERE` clause**, in `db/threads.ts` and
+`db/thread-reads.ts` — two mechanisms for one property, of which exactly one is currently
+running. That is why every read function takes a `projectId` and why §4.1's second reason is an
+*ordering* argument rather than a database one.
+
+**The rule is gated, not merely written.**
+`apps/runner/src/lib/__tests__/contract-arguments-from-inert-mechanisms.test.ts` fails if any line
+of this contract names a bypassed mechanism — RLS, a policy, `ops.project_visible`,
+`project_scope_missing` — without saying, **on that same line**, that it is inert, bypassed,
+declared or structural. One line and not a paragraph, because a reader who greps is handed one
+line and has to be able to believe it; if a reflow turns the gate red, move the marker onto the
+line rather than widening the window. **What the gate cannot see:** it reads this file only —
+other contracts are their owners' — and it matches words, so it cannot tell a hedge that is true
+from one that is merely present.
+
 ---
 
 ## 9. OPEN — questions that must be answered before code depends on them
@@ -429,6 +542,21 @@ distinction verbatim and it is not a formality here.
 Each names the one agent who owns the answer and what it costs to specify loosely. **A section
 still marked OPEN is a question, and a consumer who guesses an answer to it has invented a
 contract.**
+
+**State as of 2026-08-18**, because ten M16 slices now read this section and *"five open
+questions"* is itself a claim that decays:
+
+| | Owner | State |
+|---|---|---|
+| 9.1 session mailboxes | `sessions-relay-engineer` | **OPEN** — `decision-request` filed 2026-08-18 |
+| 9.2 how a department lead is identified | `agent-library-curator` | **OPEN** — filed; `#department` dispatch has no target until it is answered |
+| 9.3 erasure over `ops.message` | `rtl-arabic-pdpl-specialist` (ruling) · `observability-engineer` (table) | **CLOSED** — project-level erasure only in v1, stated not gapped |
+| 9.4 retention horizon | `observability-engineer` | **answered: no horizon**, and the reasoning is adopted; the ADR that would set one is filed |
+| 9.5 fan-out parent transcript | `thread-model-engineer` | **deferred, with an expiry gate** |
+| 9.6 thread title | `thread-model-engineer` | **CLOSED: no** |
+
+Assumptions this contract makes meanwhile are stated in each subsection, so a slice that cannot
+wait knows exactly which sentence it is standing on.
 
 ### 9.1 Do session threads get a mailbox? — owner: `sessions-relay-engineer`
 
@@ -442,6 +570,10 @@ rows from an allowlist rather than filtering them, and its own comment demands t
 arrive by deliberate ADR. **Whoever answers this must be `sessions-relay-engineer`.** The
 conservative direction is built: dropping a CHECK later is reviewable; un-leaking a body is not.
 
+*Assumed meanwhile:* the CHECK stays and a session thread holds no turns. Any surface that lists
+threads must render a session thread with **no mailbox depth at all** rather than a depth of 0 —
+a measured zero and an unreachable one are different claims, and only the first is true here.
+
 ### 9.2 Does `#department` resolve to a *lead*, and how is a lead identified? — owner: `agent-library-curator`
 
 `Plan §12`: dispatch *"goes to the department lead, which answers itself or delegates."*
@@ -453,17 +585,68 @@ question.
 contract, and ADR-014 §3 classifies frontmatter fields for exactly this reason. Until it is
 answered, `#department` parses, stores and previews, and **dispatch has no target**.
 
-### 9.3 Right-to-erasure over `ops.message` — owners: `rtl-arabic-pdpl-specialist` (the ruling) · `observability-engineer` (the erasure table)
+*Assumed meanwhile:* `addressed_to = '{department}'` names no agent, and dispatch of a `#` whose
+department has no identified lead fails with `address_unresolved` at dispatch time, hinting at
+`agent-library-curator` — `runner-engineer` has built exactly that. The composer may therefore
+offer `#` freely; it costs nothing and refuses honestly.
+
+### 9.3 Right-to-erasure over `ops.message` — **CLOSED 2026-08-18.** Ruling: `rtl-arabic-pdpl-specialist` · table: `observability-engineer`
+
+**v1 ships project-level erasure only, with a stated position rather than a gap** — and the
+ruling corrects the framing this contract had. *Deletion presupposes selection*, and erasure here
+has three tiers, of which a delete verb reaches two:
+
+| Tier | Unit | Selectable? | Does a delete verb fix it? |
+|---|---|---|---|
+| 1 | a project | yes | **yes** |
+| 2 | an author's own words — `author`, `thread_id`, `message.id` | yes | **yes** |
+| 3 | a third party named *inside* a body | **no, at any price** | **no** |
+
+Tier 3 is the ruling. *"Chase Fatima Al-Harbi about the Olaya lease"* is a data subject who never
+touched this system, stored in full, with nothing to select on; full-text search is a guess with
+false negatives nobody can count, and an erasure that cannot be proven complete is not one. **So
+the honest sentence is not "we cannot execute erasure yet" — it is that for text a human typed,
+deletion is not the mechanism that discharges the obligation. Not accumulating it is.**
+
+**That makes several decisions in this contract load-bearing rather than tidy, and they may not
+be relaxed for convenience:** §9.6 (no thread title — it would have put a truncated body in every
+list payload), §5.2 (`payload` is an object, never prose), contentless push, and
+`messageSpanAttributes` having no `body` field. Each was argued on other grounds and each is now
+doing PDPL work.
+
+`bodyChars` is **not** content and stays. §7.3 above is corrected in the one place the ruling
+found it overclaiming.
 
 See §7.3. *Loose costs:* this is the first table whose contents cannot be defended by
 minimisation. Answering it late means answering it with rows in the table.
 
-### 9.4 Retention horizon for threads and messages — owner: `observability-engineer`
+**Half of this is answered.** `observability-engineer` accepted the finding in full and rewrote
+the erasure table as a *weakening* rather than a caveat, and demonstrated it instead of restating
+it: `redact('Chase Fatima Al-Harbi about the Olaya lease…')` returns the string **verbatim with
+`hits: []`** — no denylisted key, because free text has none — while the same content as
+`{client_name: …}` redacts. At `ops.message` the M15 arithmetic reaches its floor: five of five
+leak, and the redactor is not a fallback at all. **The PDPL ruling itself is
+`rtl-arabic-pdpl-specialist`'s and is still open.**
+
+*Assumed meanwhile:* the defence is structural, not procedural — `messageSpanAttributes` is a
+type with no `body` field, contentless push, and no delete verb written in either direction.
+`REQ-OBS-35` stays filed as declared-and-unbuilt so `validate:coverage` counts it missing.
+
+### 9.4 Retention horizon for threads and messages — owner: `observability-engineer`. **ANSWERED 2026-08-18: no horizon**
 
 Unbounded today, deliberately. *Loose costs:* an age-based prune copied from `ops.agent_runs`
 would silently delete conversations, which is the opposite of what a thread is for.
 
-### 9.5 Does a fan-out parent thread hold its own transcript? — owner: `thread-model-engineer` (me), **deferred on purpose**
+`observability-engineer` has answered and `ops.prune` is **not** extended to `ops.thread` or
+`ops.message`. The addition that keeps it from being a deferral: *any figure picked today is a
+plausible number on a surface with no data to derive it from* — zero threads, zero messages, zero
+runs. That is the rule that types `TurnCost.estimatedUsd` as `null`, applied to a duration
+instead of a currency. **The horizon needs the human and an ADR, and it goes in the same ADR as
+the delete verb** (§7.3), because erasure and retention are this product's first two destructive
+operations and they arrive together or not at all. Growth remains a real operational question and
+is bounded meanwhile only by there being no rows.
+
+### 9.5 Does a fan-out parent thread hold its own transcript? — owner: `thread-model-engineer` (me), **deferred, and the deferral expires by itself**
 
 Built: `@@sales` creates a parent `department` thread and N child `agent` threads via
 `parent_thread_id`. Not decided: whether the parent's own `ops.message` rows mirror the
@@ -474,13 +657,33 @@ view, "you see N answers side by side" — does not exist yet. Designing a mirro
 renderer produces a plausible spec. Nothing in §5 depends on the answer; both shapes fit the
 schema unchanged.
 
-### 9.6 Does a thread carry a title? — owner: `thread-model-engineer` (me), **answered: no, not in M16**
+**Re-reviewed 2026-08-18, with the composer about to be built, and the deferral holds.** The
+composer does not depend on the answer: §6.1 ships grammar, parser, composer and preview and
+holds only the spending, so a `@@` in the composer parses, prints its count and hits the
+refusal. There is no reachable path that creates a fan-out parent —
+`assertFanOutDispatchable(n)` returns `never` — so no consumer can have guessed an answer, and
+the question cannot be answered wrongly by a caller that cannot make a parent.
+
+**What ends the deferral:** `FAN_OUT_DISPATCH.allowed` widening from `false`. That is a gate,
+not an intention — `thread-address.test.ts` §9 carries a `@ts-expect-error` on
+`const fanOutWouldDispatch: true = FAN_OUT_DISPATCH.allowed`, so the diff that flips the flag is
+the diff where `tsc` fails, pointing at this section. **An OPEN question with no expiry
+condition is an indefinite one**, and the next reader cannot tell deferred from forgotten.
+
+### 9.6 Does a thread carry a title? — owner: `thread-model-engineer` (me). **CLOSED 2026-08-18: no, not in M16**
 
 A list needs a label; a label is either authored (a field nobody fills) or derived (the first
 message, truncated). Deriving is a **view** concern and belongs with whoever builds the list.
 Adding a column later is additive; adding one now guarantees it is either empty or a duplicate
 of a message body — a second copy of the highest-PII value in the database, in a column that
 would end up in every list payload.
+
+**Closed rather than left standing, because it has already done work in another plane.**
+`observability-engineer` reports that *"no title in M16"* is why `groupBy: thread` is **refused**
+rather than deferred on the metrics endpoints: a thread breakdown could only render uuids, which
+is a widget that looks like data and answers nothing. Whoever builds the THREADS view derives
+its label at the view and adds no column; if that turns out to be wrong, it is a
+`decision-request` to this agent and an additive migration, not a re-opening.
 
 ---
 
@@ -495,7 +698,7 @@ slice, it says so, so nothing looks delivered that is not.
 | The grammar, refusals, `canonicalAddressedTo` | `runner-engineer` (route), `sessions-relay-engineer` (composer) | **built and tested;** no caller yet |
 | `addressCost`, `FAN_OUT_DISPATCH`, `assertFanOutDispatchable` | `sessions-relay-engineer` (preview), `drawer-engineer` (composer), `runner-engineer` (the refusal branch) | **built and tested;** no caller yet |
 | `messageSpanAttributes` | `observability-engineer` | **built and tested;** no caller yet. It is the instrumentation point for `ops.message` and nothing else may be. |
-| `ops.agent_runs.thread_id` | `observability-engineer` — 34 metrics endpoints, LAST RUNS | **column exists, written by nothing.** §5.3. |
+| `ops.agent_runs.thread_id` | `observability-engineer` — 34 metrics endpoints, LAST RUNS | **written by the ledger, never yet by a run.** `ledger.ts` names the column and binds the value; `ops.agent_runs` is empty and zero runs have executed, so it has never held one. §5.3. |
 | `ThreadState`, `THREAD_TRANSITIONS`, `INTERRUPT_LEVELS` | `design-system-guardian` — the monochrome register for `#` vs `@@` and `note`/`steer`/`halt` | **built;** the register is theirs to design |
 | `MessageKind`, `ThreadKind` | `dashboards-engineer` — the `thread-feed` widget, ADR-028 | **built;** ADR-028 is theirs |
 
@@ -534,6 +737,7 @@ Not added to `api-contracts.md` or `packages/contracts/src/api.ts` by this agent
 | `interrupt_not_deliverable` | 409 | A `steer` with no run in flight. Never a silent downgrade to `note`. |
 | `fanout_dispatch_refused` | 503 | §6.1. Temporary and not the caller's fault, hence 503 rather than 403 — `runner-engineer`'s call. |
 | `question_unanswered` | 409 | Answering an expired question. Also the **run failure reason** when a question expires with a run waiting on it. |
+| `message_not_found` | 404 | **Proposed 2026-08-18.** A caller-supplied `inReplyTo` names no message in this thread. Deliberately opaque across projects and across threads, like `thread_not_found` and `run_not_found`. **Not yet declared**, so `appendMessage` currently throws `bad_request` and carries the specificity in the sentence — an undeclared code is mapped to 500 `internal` by `toApiError`, which would report a caller's mistake as a server bug. |
 
 ---
 

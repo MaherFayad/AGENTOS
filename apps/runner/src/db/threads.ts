@@ -148,6 +148,28 @@ export interface AppendMessageInput {
  * `seq` is derived the same way. `UNIQUE (thread_id, seq)` turns a concurrent append into a
  * loud unique violation, which is the correct direction — two message #4s in a conversation is
  * a defect nobody notices until they read it back.
+ *
+ * ## `in_reply_to` is caller-supplied and is not trusted
+ *
+ * `PostThreadMessageRequest.inReplyTo` comes off the wire, and `message_answer_replies` makes
+ * the column *mandatory* on an answer — so the caller-supplied path is the **only** path an
+ * answer can take. It used to be passed straight through to a single-column foreign key, which
+ * accepted any message id in the table including one in another project
+ * (`fidelity-qa-reviewer`, M16 foundation verdict).
+ *
+ * Two mechanisms now, at different widths, and the difference is deliberate:
+ *
+ *   - **The schema pins the project.** `message_reply_project_fk` references
+ *     `ops.message (id, project_id)`. That is the enforcer, and it fires for a superuser, which
+ *     the RLS policies beside it do not (`thread-model.md` §8b).
+ *   - **This statement pins the thread**, which is tighter: a question travels back along the
+ *     thread it was asked in, so an answer naming one in a different conversation is a
+ *     mis-attribution the project pin cannot see. It is *in* the statement rather than before
+ *     it, for the same reason the steer predicate is — a read-then-write leaves a window, and
+ *     here the window is a reply target that moves between the check and the insert.
+ *
+ * The thread half is the loosening point if `thread-model.md` §9.5 chooses a mirroring fan-out
+ * parent: one reviewable line here, rather than a schema that closed §9.5 by accident.
  */
 export async function appendMessage(
   db: DbClient,
@@ -172,6 +194,14 @@ export async function appendMessage(
        FROM ops.thread t
       WHERE t.id = $2
         AND ($10::boolean IS NOT TRUE OR t.state = 'running')
+        -- in_reply_to is caller-supplied and is NOT trusted. See the prose above this function;
+        -- deliberately no backticks in here, because this comment lives inside a template
+        -- literal and one backtick ends the SQL string. That is how this predicate first
+        -- shipped: tsc reported five phantom "',' expected" errors and sixteen unrelated suites
+        -- went red, because a broken module fails every importer and none of them mention it.
+        AND ($8::uuid IS NULL OR EXISTS (
+              SELECT 1 FROM ops.message r
+               WHERE r.id = $8::uuid AND r.thread_id = t.id))
      RETURNING id, seq`,
     [
       id,
@@ -196,19 +226,20 @@ export async function appendMessage(
   );
 
   const row = rows[0];
-  if (!row) return explainAppendFailure(db, input.threadId, requiresRunning);
+  if (!row) return explainAppendFailure(db, input.threadId, requiresRunning, input.inReplyTo ?? null);
   return { id, seq: row.seq };
 }
 
 /**
- * Zero rows returned has two causes, and answering with one sentence covering both would make
- * "wrong thread" and "wrong moment" the same bug report. One extra query, on the error path
- * only, buys a message that names which it was.
+ * Zero rows returned has **three** causes, and answering with one sentence covering them all
+ * would make "wrong thread", "wrong reply target" and "wrong moment" the same bug report. One
+ * extra query, on the error path only, buys a message that names which it was.
  */
 async function explainAppendFailure(
   db: DbClient,
   threadId: string,
   requiresRunning: boolean,
+  inReplyTo: string | null,
 ): Promise<never> {
   const { rows } = await db.query<{ state: ThreadState }>(
     'SELECT state FROM ops.thread WHERE id = $1',
@@ -223,6 +254,32 @@ async function explainAppendFailure(
       ),
       { code: 'thread_not_found' },
     );
+  }
+  // Checked before the steer case because it is deterministic and the caller can fix it: a bad
+  // reply target is wrong on every retry, whereas "no run in flight" is a moment.
+  if (inReplyTo != null) {
+    const reply = await db.query<{ id: string }>(
+      'SELECT id FROM ops.message WHERE id = $1 AND thread_id = $2',
+      [inReplyTo, threadId],
+    );
+    if (reply.rows.length === 0) {
+      throw Object.assign(
+        new Error(
+          `No message ${inReplyTo} in thread ${threadId}. An answer names the question it ` +
+            'settles, and the question has to be in the same conversation — from outside its ' +
+            'project or its thread, a message does not exist, which is the same deliberately ' +
+            'opaque refusal a thread and a run both give.',
+        ),
+        {
+          // `bad_request` because `message_not_found` is not a declared `ApiErrorCode` and
+          // `api.ts` is `runner-engineer`'s — proposed to them rather than invented here, since
+          // an undeclared code is mapped to 500 `internal` by `toApiError` and would report a
+          // caller's mistake as a server bug. The sentence carries the specificity meanwhile.
+          code: 'bad_request',
+          hint: 'inReplyTo must name a message in this same thread. Omit it on anything that is not an answer.',
+        },
+      );
+    }
   }
   if (requiresRunning) {
     throw Object.assign(

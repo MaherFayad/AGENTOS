@@ -336,7 +336,16 @@ CREATE TABLE IF NOT EXISTS ops.message (
   CONSTRAINT message_author_shape
     CHECK (author ~ '^(human|agent|system):.+'),
 
-  UNIQUE (thread_id, seq)
+  UNIQUE (thread_id, seq),
+
+  -- **The FK target that makes `in_reply_to` project-pinned.** Same device as `ops.thread`'s
+  -- `UNIQUE (id, project_id)` above and for the same reason: a composite foreign key needs a
+  -- unique constraint covering exactly the columns it references, so this line is not a
+  -- uniqueness requirement anyone asked for — `id` is already the primary key — it is the
+  -- handle a project-pinned self-reference has to grab. Without it the constraint below is a
+  -- migration that fails to apply, which on a stack where no migration has ever been applied
+  -- is a failure nothing observes. `threads-schema-pinning.test.ts` asserts both halves.
+  UNIQUE (id, project_id)
 );
 
 DO $$
@@ -350,10 +359,57 @@ BEGIN
       REFERENCES ops.thread (id, project_id, kind) ON DELETE RESTRICT;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'message_reply_fk') THEN
+  -- **`in_reply_to` is project-pinned, and it was not always.**
+  --
+  -- This was the one reference in this migration that named a single column, in the file whose
+  -- whole subject is that a row cannot cross a project. `FOREIGN KEY (in_reply_to) REFERENCES
+  -- ops.message(id)` accepts **any** message id in the table, including one in another project,
+  -- and `in_reply_to` is reachable end to end from a caller-supplied `inReplyTo` on the route.
+  -- So a message in project A could be declared a reply to a message in project B, nine lines
+  -- under a comment claiming "a message cannot be attributed to another client's thread".
+  --
+  -- What crossed was a *reference*, not a body — `readMessages` is project-scoped, so the
+  -- pointer rendered unresolvable rather than as another client's text. That is why this was one
+  -- finding rather than a Part VII incident. It was still a `project_id`-crossing row in the
+  -- table this milestone exists to make un-crossable. Found by `fidelity-qa-reviewer`, M16
+  -- foundation verdict.
+  --
+  -- It is the same family as `thread-model.md` §4.1's inert-RLS argument, one level down: **a
+  -- comment asserting an invariant that the constraint beneath it does not enforce.** And it is
+  -- BRIEF's *grade a constraint from both sides* pointed the other way — M15's defect was a
+  -- `NOT NULL` nobody could satisfy; this was a constraint satisfiable by rows that should not
+  -- exist. Both are invisible in a schema dump.
+  --
+  -- **Two things this deliberately does not do.**
+  --
+  -- 1. **No `NOT NULL` on `in_reply_to`.** A first message replies to nothing, and the column is
+  --    legitimately null for every kind but `answer` (`message_answer_replies` already makes
+  --    that an equality). The FK is left at the default `MATCH SIMPLE`, under which a row with a
+  --    NULL in any referencing column satisfies the constraint — so nullability survives the
+  --    pinning. `MATCH FULL` would be the trap: `project_id` is `NOT NULL`, so MATCH FULL would
+  --    reject **every message that is not a reply**. That is M15's ledger defect wearing a
+  --    different hat, and it is written here because the difference is one keyword.
+  -- 2. **It pins the project, not the thread**, though a thread-pinned FK would be strictly
+  --    stronger and every legitimate answer today replies within its own thread. Pinning the
+  --    thread would decide `thread-model.md` §9.5 — whether a fan-out parent mirrors its
+  --    children's answers — by making the mirror shape unwritable. §9.5 is deferred on the
+  --    record and its contract says both shapes fit this schema unchanged. A schema change is
+  --    not the place to settle an open question by accident. The *writer* scopes to the thread
+  --    (`db/threads.ts appendMessage`), which is one line to loosen and reviewable when §9.5 is
+  --    answered.
+  --
+  -- Renamed rather than redefined under the old name, so a database that somehow already holds
+  -- the single-column version is corrected rather than skipped by the `IF NOT EXISTS` guard.
+  -- No such database is known to exist; this migration has never been applied to a Postgres.
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'message_reply_fk') THEN
+    ALTER TABLE ops.message DROP CONSTRAINT message_reply_fk;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'message_reply_project_fk') THEN
     ALTER TABLE ops.message
-      ADD CONSTRAINT message_reply_fk
-      FOREIGN KEY (in_reply_to) REFERENCES ops.message(id) ON DELETE RESTRICT;
+      ADD CONSTRAINT message_reply_project_fk
+      FOREIGN KEY (in_reply_to, project_id)
+      REFERENCES ops.message (id, project_id) ON DELETE RESTRICT;
   END IF;
 END $$;
 
