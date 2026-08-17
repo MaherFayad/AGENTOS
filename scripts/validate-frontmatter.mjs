@@ -33,6 +33,8 @@ const AGENTS_DIR = join(ROOT, 'agents');
 const REGISTRY = join(ROOT, 'agents', '_registry', 'clusters.json');
 const CONNECTORS = join(ROOT, 'agents', '_registry', 'connectors.json');
 const CONTRACT_TS = join(ROOT, 'packages', 'contracts', 'src', 'frontmatter.ts');
+/** ADR-001/ADR-035 — the department enum's one declaration site. */
+const DEPARTMENTS_TS = join(ROOT, 'packages', 'contracts', 'src', 'departments.ts');
 
 /* ------------------------------------------------------------------ *
  * The schema, mirrored from packages/contracts/src/frontmatter.ts.
@@ -545,16 +547,42 @@ async function checkContractDrift(err) {
     return; // packages/contracts not created yet — infra-compose-engineer owns the package
   }
   const text = await readFile(CONTRACT_TS, 'utf8');
-  const pull = (name) => {
-    const m = new RegExp(`export const ${name} = \\[([^\\]]*)\\] as const`, 's').exec(text);
+  const deptText = (await exists(DEPARTMENTS_TS)) ? await readFile(DEPARTMENTS_TS, 'utf8') : '';
+  const pull = (src, name) => {
+    const m = new RegExp(`export const ${name} = \\[([^\\]]*)\\] as const`, 's').exec(src);
     return m ? [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]) : null;
   };
-  for (const [name, ours] of [['DEPARTMENTS', DEPARTMENTS], ['TIERS', TIERS], ['PHASES', PHASES], ['STATUSES', STATUSES], ['APPROVALS', APPROVALS], ['INPUT_TYPES', INPUT_TYPES], ['PRODUCES', PRODUCES]]) {
-    const theirs = pull(name);
-    if (!theirs) { err(null, `packages/contracts/src/frontmatter.ts does not export ${name} — the validator and the types have diverged`); continue; }
+
+  /**
+   * Each enum, with the file that is allowed to declare it. `DEPARTMENT_SLUGS` lives in
+   * `departments.ts` and not in `frontmatter.ts` because ADR-001 says so and because
+   * ADR-035 says a second declaration of it is not a style question — two star-exported
+   * modules exporting one runtime name make Next's barrel optimizer discard the whole
+   * `@agnetos/contracts` barrel, and every view white-screens while `tsc` and `next build`
+   * both stay green.
+   */
+  const ENUM_SOURCES = [
+    ['DEPARTMENT_SLUGS', DEPARTMENTS, deptText, 'packages/contracts/src/departments.ts'],
+    ['TIERS', TIERS, text, 'packages/contracts/src/frontmatter.ts'],
+    ['PHASES', PHASES, text, 'packages/contracts/src/frontmatter.ts'],
+    ['STATUSES', STATUSES, text, 'packages/contracts/src/frontmatter.ts'],
+    ['APPROVALS', APPROVALS, text, 'packages/contracts/src/frontmatter.ts'],
+    ['INPUT_TYPES', INPUT_TYPES, text, 'packages/contracts/src/frontmatter.ts'],
+    ['PRODUCES', PRODUCES, text, 'packages/contracts/src/frontmatter.ts'],
+  ];
+  for (const [name, ours, src, where] of ENUM_SOURCES) {
+    const theirs = pull(src, name);
+    if (!theirs) { err(null, `${where} does not export ${name} — the validator and the types have diverged`); continue; }
     if (theirs.join('|') !== ours.join('|')) {
-      err(null, `contract drift: ${name} is [${theirs.join(', ')}] in packages/contracts/src/frontmatter.ts but [${ours.join(', ')}] in this validator`);
+      err(null, `contract drift: ${name} is [${theirs.join(', ')}] in ${where} but [${ours.join(', ')}] in this validator`);
     }
+  }
+
+  // ADR-035, the specific regression that caused the 2026-08-17 outage. Narrow on purpose:
+  // the general rule is `scripts/check-barrel-exports.mjs`, and this is the one instance
+  // that has already cost a day, asserted where a curator will actually see it.
+  if (/^export const (?:DEPARTMENTS|DEPARTMENT_SLUGS|DEPARTMENT_LABELS)\b/m.test(text)) {
+    err(null, 'packages/contracts/src/frontmatter.ts re-declares a DEPARTMENT* value — ADR-001 gives that to departments.ts, and ADR-035 records that the duplicate breaks every client import from @agnetos/contracts');
   }
 }
 

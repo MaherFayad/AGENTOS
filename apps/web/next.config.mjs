@@ -57,8 +57,12 @@ const PHASE_DEVELOPMENT_SERVER = 'phase-development-server';
  * `next start` sees `phase-production-server` and therefore reads `.next-build`, which is
  * what `next build` just wrote — the pair stays consistent without a flag.
  *
- * `NEXT_DIST_DIR` overrides the build dir, so a second concurrent build (CI matrix, a
- * `--distDir`-style one-off verification build) can have its own directory too.
+ * `NEXT_DIST_DIR` overrides **either** directory, so a second concurrent build (CI matrix,
+ * a `--distDir`-style one-off verification build) or a second concurrent *dev server* can
+ * have its own. `scripts/smoke-routes.mjs` sets it: that gate boots a real `next dev` to
+ * watch the compile log, and without an override it would write the developer's `.next`
+ * out from under them — the same failure this comment block was written about, arriving
+ * from the other direction.
  */
 const BUILD_DIST_DIR = process.env.NEXT_DIST_DIR ?? '.next-build';
 
@@ -168,6 +172,7 @@ const nextConfig = {
 export default function config(phase) {
   return {
     ...nextConfig,
-    distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next' : BUILD_DIST_DIR,
+    distDir:
+      process.env.NEXT_DIST_DIR ?? (phase === PHASE_DEVELOPMENT_SERVER ? '.next' : BUILD_DIST_DIR),
   };
 }

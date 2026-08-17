@@ -2,6 +2,9 @@ node_modules/
 .next/
 # `next build` output — separate from the dev server's .next on purpose (apps/web/next.config.mjs)
 .next-build/
+# `scripts/smoke-routes.mjs` boots its own dev server (ADR-035) and must not write the
+# developer's `.next` out from under a running one.
+.next-smoke/
 dist/
 build/
 out/

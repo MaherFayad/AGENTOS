@@ -24,10 +24,13 @@
     "validate:metrics": "node scripts/check-metrics.mjs",
     "validate:rtl": "node scripts/check-rtl.mjs",
     "validate:rtl:gate": "node scripts/check-rtl.mjs --gate",
+    "validate:barrel": "node scripts/check-barrel-exports.mjs",
+    "smoke": "node scripts/smoke-routes.mjs",
     "graph:build": "node scripts/build-graph.mjs",
     "test": "node --test scripts/__tests__/*.test.mjs",
     "test:runner": "npm run test --workspace=@agnetos/runner --if-present",
     "test:web": "npm run test --workspace=apps/web",
-    "verify": "npm run validate:frontmatter && npm run validate:panels && npm run validate:tokens && npm run validate:rtl:gate && npm run validate:comms && npm run validate:coverage && npm run test && npm run test:runner && npm run test:web"
+    "verify": "npm run validate:frontmatter && npm run validate:panels && npm run validate:tokens && npm run validate:barrel && npm run validate:rtl:gate && npm run validate:comms && npm run validate:coverage && npm run test && npm run test:runner && npm run test:web",
+    "verify:runtime": "npm run verify && npm run smoke"
   }
 }
