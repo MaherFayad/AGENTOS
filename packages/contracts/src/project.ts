@@ -38,6 +38,22 @@ export type ProjectStatus = 'active' | 'paused' | 'archived';
  * Every field that is **declared but read by nothing** carries a sibling boolean saying so.
  * A cap rendered next to no enforcement is a UI telling a lie it was handed; the flag is
  * what stops that being an accident rather than a decision.
+ *
+ * **Audited 2026-08-17 alongside `/api/all/approvals`, and it is clean — today, for a
+ * reason that expires.** This is `scope: 'coordinator'`, but it is the other route that
+ * returns one row per client, so the same question was asked of it field by field.
+ * `toProjectSummary` hardcodes `budgetMonthlyUsd`, `defaultAccountId`, `hostAffinity` and
+ * `libraryRemote` to their empty values — nothing is read from the database row — and
+ * `apps/web/src/components/shell/useProjects.ts` says in a comment that it does not read
+ * them. So no client data crosses here.
+ *
+ * The hazard is the day ADR-015 Q6 lands and `budgetMonthlyUsd` becomes real: this route
+ * then returns **every client's monthly budget to any caller**, which is a commercial figure
+ * about one client reaching the context of another — the same defect `/api/all/approvals`
+ * had, arriving through a field that already exists rather than a route someone adds. It is
+ * written here rather than fixed because there is nothing to fix yet and a filter over four
+ * nulls would be untestable. **Whoever makes these fields real narrows this row in the same
+ * commit**, or says why not.
  */
 export interface ProjectSummary {
   id: string;

@@ -8,7 +8,14 @@
  * `GET /api/runs` says so honestly rather than implying a history it does not have.
  */
 import { randomUUID } from 'node:crypto';
-import type { ArtifactKind, PendingApproval, RunInputValue, RunStatus, RunSummary } from '@agnetos/contracts';
+import type {
+  ArtifactKind,
+  PendingApproval,
+  PendingApprovalRef,
+  RunInputValue,
+  RunStatus,
+  RunSummary,
+} from '@agnetos/contracts';
 import { ApiError } from './errors';
 import { RunStream } from './sse';
 
@@ -192,22 +199,66 @@ export class RunStore {
     return state;
   }
 
-  /** `project: '*'` is the deliberate cross-project read behind `GET /api/all/approvals`. */
-  pendingApprovals(project: string): PendingApproval[] {
-    const out: PendingApproval[] = [];
+  /**
+   * Every run parked at an open gate. `project` omitted means every project — and it is a
+   * **private** iterator over `RunState`, not a public read, because the fat row is what a
+   * cross-project caller must not be able to ask for.
+   *
+   * There used to be one public `pendingApprovals(project)` taking `'*'` for "all". That
+   * sentinel is what let `/api/all/approvals` serve every project's `inputs` for the whole
+   * of M15: a single argument decided both *which* rows came back and — invisibly — *whose
+   * boundary they were about to cross*. Two callers, two questions, two methods.
+   */
+  private *pendingGates(project?: string): Generator<{ state: RunState; gate: ApprovalGate }> {
     for (const runId of this.order) {
       const state = this.runs.get(runId);
       if (!state?.gate || state.gate.decided || state.status !== 'awaiting-approval') continue;
-      if (project !== '*' && state.project !== project) continue;
+      if (project !== undefined && state.project !== project) continue;
+      yield { state, gate: state.gate };
+    }
+  }
+
+  /**
+   * `GET /api/p/:project/approvals` — one project's queue, with the payload a human needs to
+   * decide: the plan summary and the inputs they typed. Both stay inside this client.
+   */
+  pendingApprovals(project: string): PendingApproval[] {
+    const out: PendingApproval[] = [];
+    for (const { state, gate } of this.pendingGates(project)) {
       out.push({
         runId: state.runId,
         project: state.project,
         agent: state.agent,
         agentName: state.agentName,
         department: state.department,
-        summary: state.gate.summary,
-        requestedAt: state.gate.requestedAt,
+        requestedAt: gate.requestedAt,
+        inputCount: Object.keys(state.inputs).length,
+        summary: gate.summary,
         inputs: state.inputs,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * `GET /api/all/approvals` — the deliberate cross-project read (§2.5.7).
+   *
+   * It **constructs** each `PendingApprovalRef` field by field rather than taking a
+   * `PendingApproval` and deleting two fields. A subtraction is something the next field
+   * added to a run can silently escape; a construction is not. Nothing here is client data:
+   * ids, frontmatter, a timestamp, and how many inputs there were — never which, never what.
+   */
+  pendingApprovalRefs(): PendingApprovalRef[] {
+    const out: PendingApprovalRef[] = [];
+    for (const { state, gate } of this.pendingGates()) {
+      out.push({
+        runId: state.runId,
+        project: state.project,
+        agent: state.agent,
+        agentName: state.agentName,
+        department: state.department,
+        requestedAt: gate.requestedAt,
+        inputCount: Object.keys(state.inputs).length,
       });
     }
     return out;
@@ -219,7 +270,9 @@ export class RunStore {
    * cross-project leak rendered as a UI state.
    */
   agentsAwaitingApproval(project: string): string[] {
-    return [...new Set(this.pendingApprovals(project).map((a) => a.agent))];
+    const agents = new Set<string>();
+    for (const { state } of this.pendingGates(project)) agents.add(state.agent);
+    return [...agents];
   }
 
   counts(): { active: number; queued: number; pendingApprovals: number } {
@@ -230,8 +283,12 @@ export class RunStore {
       if (state.status === 'queued') queued += 1;
     }
     // `/api/status` is coordinator-scoped by design (ADR-015): it describes this process,
-    // not a project's data, so its counts span every mounted project.
-    return { active, queued, pendingApprovals: this.pendingApprovals('*').length };
+    // not a project's data, so its counts span every mounted project. A count is the one
+    // cross-project figure that carries nothing — it is the shape `/api/all/approvals` was
+    // asked to move towards.
+    let pendingApprovals = 0;
+    for (const _ of this.pendingGates()) pendingApprovals += 1;
+    return { active, queued, pendingApprovals };
   }
 
   /** Drop streams past their replay window. Called on a timer by the server. */

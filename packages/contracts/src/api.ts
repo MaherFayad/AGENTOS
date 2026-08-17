@@ -304,28 +304,84 @@ export interface ScheduleResponse {
 // Approvals   (§3.2)
 // ---------------------------------------------------------------------------
 
-export interface PendingApproval {
+/**
+ * A row in the **cross-project** approvals queue — `GET /api/all/approvals`, the one route
+ * on this surface declared `scope: 'cross-project'` (§2.5.7).
+ *
+ * Every field below is either an opaque identifier or library metadata read out of
+ * frontmatter. Nothing a human typed, and nothing derived from what a human typed.
+ *
+ * **Why this is a separate type rather than a comment.** PDPL rule 4 — *client data does not
+ * cross clients* — is assumed everywhere else on this API, because everywhere else is scoped
+ * to one project and the scope does the arguing. A cross-project route is the one place the
+ * rule has to be argued **field by field**, and this interface is where that argument lives.
+ * A field reaches the cross-project queue only by being written here on purpose.
+ */
+export interface PendingApprovalRef {
   runId: string;
   /**
    * Project slug. Present on **every** row, including on the project-scoped route where it
-   * is redundant — so that `/api/all/approvals` and `/api/p/:project/approvals` return the
-   * same shape and a client cannot render a cross-project queue that fails to say which
-   * client each item belongs to.
+   * is redundant — so a client cannot render a cross-project queue that fails to say which
+   * client each item belongs to. Labelling a row with its project is not isolation; an
+   * unlabelled row is not even triage.
    */
   project: string;
   agent: string;
-  /** Frontmatter `name`, so the queue reads like the map. */
+  /** Frontmatter `name`, so the queue reads like the map. Library metadata, not client data. */
   agentName: string;
   department: string;
-  /** The `plan` event's summary — what is being approved. */
-  summary: string;
-  /** ISO 8601. */
+  /** ISO 8601. What the queue sorts on, and what "waiting 40 minutes" is computed from. */
   requestedAt: string;
+  /**
+   * **How many** inputs the human filled in — never which, and never what.
+   *
+   * The count is what a queue legitimately needs: it separates "approve this scheduled run,
+   * which nobody typed anything into" from "approve this one, which somebody typed six
+   * fields into". The values are `PendingApproval.inputs` and they do not leave their
+   * project.
+   */
+  inputCount: number;
+}
+
+/**
+ * A row in a **project-scoped** approvals queue — `GET /api/p/:project/approvals`.
+ *
+ * The ref, plus the two fields that stay inside one client's boundary. Both are payload:
+ *
+ * - `inputs` is the form data a human typed to start the run. It is the highest-PII surface
+ *   the runner serves.
+ * - `summary` **contains `inputs`**. `buildPlanSummary` renders them into an `Inputs: …`
+ *   line, and appends the `deliver:` Slack channel and email address. It reads like a label
+ *   and it is not one — which is why dropping `inputs` from the cross-project row while
+ *   keeping `summary` would have moved the payload out of an object and into a string and
+ *   changed nothing at all.
+ *
+ * The two routes therefore no longer return the same shape, and that is the point: the
+ * property worth keeping is that a cross-project row always names its project, not that a
+ * cross-project row is interchangeable with a project-scoped one.
+ */
+export interface PendingApproval extends PendingApprovalRef {
+  /** The `plan` event's summary — what is being approved. See above: it embeds the inputs. */
+  summary: string;
   inputs: Record<string, RunInputValue>;
 }
 
 export interface ApprovalsResponse {
   approvals: PendingApproval[];
+}
+
+/**
+ * `GET /api/all/approvals`.
+ *
+ * A consumer that needs to show *what* is being approved does a project-scoped fetch —
+ * `GET /api/p/:project/approvals` — which is not an extra hop it would have avoided: the
+ * decision route is `POST /api/p/:project/approvals/:runId`, so acting on a row already
+ * means entering its project. The cross-project queue's job is to say *that* something is
+ * waiting and *where*; deciding is project work, and one click is the right price for
+ * crossing a client boundary.
+ */
+export interface AllApprovalsResponse {
+  approvals: PendingApprovalRef[];
 }
 
 export interface ApprovalDecisionRequest {
@@ -620,9 +676,17 @@ export interface StatusResponse {
  * **Every route that reads or writes a project's data carries `/api/p/:project`** (ADR-015
  * Q1). Routes that describe the coordinator itself do not, and are marked
  * `scope: 'coordinator'`. A route that deliberately spans projects lives under `/api/all/`
- * and is marked `scope: 'cross-project'`; there are currently exactly two, which is the
+ * and is marked `scope: 'cross-project'`; there is currently exactly **one**, which is the
  * number a reviewer can hold in their head, and that is the point of giving them a
- * namespace instead of letting them look like ordinary routes.
+ * namespace instead of letting them look like ordinary routes. (This said "two" until
+ * 2026-08-17 and there was only ever one — a count in a comment nothing checks. The
+ * checkable version is `RUNNER_ROUTES` itself: filter on `scope`.)
+ *
+ * **The scope marker is a claim about the route, not about the row it returns.** Marking a
+ * route `cross-project` says a caller may see every project's rows; it says nothing about
+ * what a row contains, and the two were run together here once already — see `allApprovals`.
+ * Adding a route to this namespace means arguing PDPL rule 4 **field by field**, because the
+ * scope is no longer available to do the arguing for you.
  *
  * The unscoped forms (`/api/run`, `/api/agents`, …) still exist on the server, and answer
  * **400 `project_scope_missing`** naming the scoped path. Not a redirect and not a default:
@@ -660,6 +724,12 @@ export const RUNNER_ROUTES = {
    * wants to know that *something* is waiting, wherever it is. Every row carries `project`,
    * and the badge is a sum of per-project figures — the same rule ADR-014 §2.1 puts on the
    * LIVE counter, for the same reason.
+   *
+   * **`scope: 'cross-project'` is a claim about the route, not about its payload**, and the
+   * two were confused here once already: this route served every project's run `inputs` for
+   * the whole of M15 because the scope was argued and the fields were not. It returns
+   * `AllApprovalsResponse` — `PendingApprovalRef`, no `inputs` and no `summary`. Adding a
+   * field to this row is a PDPL rule 4 decision; make it there, with a sentence.
    */
   allApprovals: { method: 'GET', path: '/api/all/approvals', scope: 'cross-project' },
 } as const;

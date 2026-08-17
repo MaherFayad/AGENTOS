@@ -29,12 +29,33 @@ import { resolveAllowlist } from '../allowlist.ts';
 import { buildPrompt } from '../prompt.ts';
 import { readCompanyBrain, INTERVIEW_AGENT_SLUG } from '../brain.ts';
 import { createRunnerServices, startRun } from '../runService.ts';
+import type { RunState } from '../runStore.ts';
 import type { AgentSessionFactory } from '../agentSession.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 
 function silent() {
   return { info: () => {}, warn: () => {}, error: () => {} };
+}
+
+/**
+ * Wait for the run to actually reach its gate, rather than sleeping a number that used to
+ * be long enough.
+ *
+ * This was `setTimeout(25)`, and 25ms is plenty on an idle box and not always plenty under
+ * the parallel suite — so `store.decide(...)` would occasionally arrive before `openGate`
+ * and throw `run_not_pending_approval`. A test that fails when the machine is busy teaches
+ * people to re-run rather than to read, which is how a real intermittent bug gets ignored.
+ * Poll the condition; fail with a sentence if it never happens.
+ */
+async function untilAwaitingApproval(state: RunState, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (state.status !== 'awaiting-approval') {
+    if (Date.now() > deadline) {
+      throw new Error(`run never reached its approval gate — status stuck at "${state.status}"`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 async function withRealRepo<T>(fn: () => Promise<T>): Promise<T> {
@@ -143,8 +164,7 @@ test('company-interview: approval: required stops the run at the plan and a deni
       dryRun: true,
     });
 
-    // Let the pipeline reach its gate.
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await untilAwaitingApproval(state);
 
     assert.equal(state.status, 'awaiting-approval', 'the run parks at the gate, it does not proceed');
     assert.ok(notified, 'a human is told there is something to decide (§3.2 push)');
@@ -183,7 +203,7 @@ test('company-interview: an approval resumes the run, and the frontmatter on dis
       inputs: { mode: 'review-gaps' },
       dryRun: true,
     });
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await untilAwaitingApproval(state);
     services.store.decide(state.runId, 'approve');
     await new Promise<void>((resolve) => state.stream.whenEnded(resolve));
 

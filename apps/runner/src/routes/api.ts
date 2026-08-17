@@ -12,7 +12,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   LEGACY_UNSCOPED_PATHS,
   RUNNER_ROUTES,
+  type AllApprovalsResponse,
   type ApprovalDecisionRequest,
+  type ApprovalsResponse,
   type ArtifactKind,
   type GraphSocketMessage,
   type ProjectsResponse,
@@ -208,9 +210,19 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
     }
   });
 
+  /**
+   * One project's queue. This is where `summary` and `inputs` live — inside the client
+   * boundary that makes them safe to serve — and it is the "project-scoped detail fetch" the
+   * cross-project route above deliberately sends a consumer to. It is not an extra hop a
+   * consumer would otherwise have avoided: deciding is `POST /api/p/:project/approvals/:runId`,
+   * so acting on a row already means entering its project.
+   */
   app.get(RUNNER_ROUTES.approvals.path, async (request, reply) => {
     try {
-      return { approvals: store.pendingApprovals(projectOf(ctx, request).slug) };
+      const approvals: ApprovalsResponse = {
+        approvals: store.pendingApprovals(projectOf(ctx, request).slug),
+      };
+      return approvals;
     } catch (err) {
       return sendApiError(reply, err);
     }
@@ -220,9 +232,20 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
    * The footer badge (§2.5.7) is genuinely cross-project — a human wants to know something
    * is waiting, wherever it is. Every row carries `project`, so the queue can never render
    * an item without saying whose it is.
+   *
+   * **What it carries is a separate question from whether it is allowed to span projects,
+   * and only the second one had been answered.** For the whole of M15 this route served
+   * `PendingApproval` — including `inputs`, the form data a human typed, and `summary`,
+   * which `buildPlanSummary` builds *out of* those inputs plus the `deliver:` Slack channel
+   * and email address. The cross-project scope is right; the payload was not, and PDPL rule
+   * 4 (client data does not cross clients) has to be argued field by field exactly here.
+   *
+   * `pendingApprovalRefs()` and not a projection of `pendingApprovals('*')`: the fat row is
+   * no longer expressible cross-project at all, so this cannot regress by someone adding a
+   * field to a run. Asserted at the wire in `approvals-payload.test.ts`.
    */
-  app.get(RUNNER_ROUTES.allApprovals.path, async () => ({
-    approvals: store.pendingApprovals('*'),
+  app.get(RUNNER_ROUTES.allApprovals.path, async (): Promise<AllApprovalsResponse> => ({
+    approvals: store.pendingApprovalRefs(),
   }));
 
   app.post(RUNNER_ROUTES.approvalDecision.path, async (request, reply) => {
