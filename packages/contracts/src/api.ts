@@ -52,13 +52,27 @@ export type ApiErrorCode =
    */
   /** No such thread **in this project's scope** — deliberately opaque, like `run_not_found`. */
   | 'thread_not_found'
-  /** The thread is `closed`, or it moved underneath the caller between read and write. */
+  /**
+   * The thread is `closed`, it moved underneath the caller between read and write, **or the
+   * address resolved and this build cannot run it** (`#department` — nothing marks a lead;
+   * the bare address — M22's router is not built).
+   *
+   * That last clause is deliberately here and not on `address_unresolved`: *"you typed a
+   * department that does not exist"* and *"dispatch is not built yet"* are different facts
+   * with different owners, and a client branching on `code` has to be able to tell them
+   * apart. The `reason` and the `hint` differ; before this they were the only thing that did.
+   */
   | 'thread_not_addressable'
   /** An illegal state transition (`thread-model.md` §4.5). */
   | 'thread_transition_refused'
   /** The addressing grammar refused the line. The parser's own code goes in `hint`. */
   | 'address_malformed'
-  /** Parsed; no agent or department of that name in this project's resolved roster. */
+  /**
+   * Parsed; **no agent or department of that name** in this project's resolved roster.
+   *
+   * Only that. An address that resolved and cannot be run today is `thread_not_addressable`
+   * — naming a condition that did not happen sends the next debugger to the parser.
+   */
   | 'address_unresolved'
   /** `@slug` matched more than one department. The hint **lists them**; it never picks. */
   | 'address_ambiguous'
@@ -613,7 +627,18 @@ export interface PostThreadMessageResponse {
    * so no response can claim it happened.
    */
   disposition: 'queued' | 'delivered-to-run';
-  /** The thread's state after the append — `halt` on a running thread moves it to `waiting`. */
+  /**
+   * The thread's state **as at the append** — read before the message was written, and
+   * returned unchanged by it.
+   *
+   * A `halt` does not move it here. The run's next drain reads the halt, aborts the session
+   * and moves the thread; until that happens the thread really is still `running`, so that
+   * is what this says. A composer that renders "stopping" off this field is rendering a
+   * state the runner has not reached — poll `GET /api/p/:project/thread/:id` for the move.
+   *
+   * Pinned by `apps/runner/src/lib/__tests__/thread-refusals.test.ts`, which reads *this
+   * comment* and the value the service actually returns, and fails when they disagree.
+   */
   threadState: ThreadSummary['state'];
 }
 

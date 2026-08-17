@@ -273,6 +273,21 @@ because there is no stale client to inform: these routes were born scoped.
 // → { message, disposition: "queued" | "delivered-to-run", threadState }
 ```
 
+**`threadState` is the state *as at the append*, not after it.** A `halt` on a running thread
+answers `running`: this route appends the message, and the **run's next drain** is what reads
+the halt, aborts the session and moves the thread to `waiting`. Until that happens the thread
+really is still running, so a composer that renders "stopping" off this field is rendering a
+state the runner has not reached — poll `GET /api/p/:project/thread/:id` for the move. The
+field's own doc comment said the opposite until 2026-08-18 and the code was the correct half;
+`apps/runner/src/lib/__tests__/thread-refusals.test.ts` now reads the comment and the returned
+value together, so the two cannot drift apart quietly again.
+
+**Every refusal on `POST /thread` happens before the first write.** The interrupt is validated
+ahead of `createThread`, so a refused `steer` leaves no row — which matters more than it looks:
+`ops.thread` has no delete verb in any plane (`thread-model.md` §7.3), every `steer` is refused
+in this build, and validating after the insert made that the one path guaranteed to grow the
+table forever. Asserted on the boundary (no `INSERT` was issued), not on the intent.
+
 ### The three interrupt levels — what each one actually does in M16
 
 Declared by the sender, never inferred. An absent level is a **refusal**, not a defaulted
@@ -341,9 +356,17 @@ question rather than an omission:
 | address | runs | refusal | unblocked by |
 |---|---|---|---|
 | `@department/agent` | 1, exactly | — | — |
-| `#department` | ≥1 | `address_unresolved` (422) | nothing marks an agent as a lead (`thread-model.md` §9.2, `agent-library-curator`) |
+| `#department` | ≥1 | `thread_not_addressable` (409) | nothing marks an agent as a lead (`thread-model.md` §9.2, `agent-library-curator`) |
 | `@@department` | N, exactly | `fanout_dispatch_refused` (503) | `RUNNER_ANTHROPIC_API_KEY` **plus one proven cap refusal** |
-| *(bare)* | ≥1 | `address_unresolved` (422) | M22 — the Chief of Staff router (`Plan §17`) |
+| *(bare)* | ≥1 | `thread_not_addressable` (409) | M22 — the Chief of Staff router (`Plan §17`) |
+
+**Not `address_unresolved`, and the distinction is a client's to branch on.** These two
+addresses *resolved* — `resolveAddress` found the department and counted its members, which is
+how the run path knows the count. What is missing is a lead, or M22's router. `#not-a-real-
+department` still gets `address_unresolved` (422), so *"you typed a department that does not
+exist"* and *"dispatch is not built yet"* stay distinguishable by `code` and by status, rather
+than only by the sentence in the hint. They have different owners and different fixes, and a
+code that names a condition which did not happen sends the next debugger to the parser.
 
 **The `@@` refusal is not caution, it is an unproven control.** `ops.project.budget_monthly`
 is declared and unenforced; Part V's workspace cap is the only enforced ceiling and **it has
@@ -633,10 +656,10 @@ a stack trace. Codes and their statuses (`ApiErrorCode` / `API_ERROR_STATUS` in
 | `run_not_pending_approval` | 409 | decided a run that isn't at its gate |
 | `approval_already_decided` | 409 | second decision on the same run |
 | `thread_not_found` | 404 | no such thread **in this project's scope**. Deliberately opaque across projects, like `run_not_found` |
-| `thread_not_addressable` | 409 | the thread is `closed`, already has a run in flight, is addressed to a different agent, or moved underneath the caller |
+| `thread_not_addressable` | 409 | the thread is `closed`, already has a run in flight, is addressed to a different agent, moved underneath the caller — **or its address resolved and this build cannot run it** (`#department` has no lead; the bare address needs M22's router) |
 | `thread_transition_refused` | 409 | an illegal thread state transition (`thread-model.md` §4.5) |
 | `address_malformed` | 400 | the addressing grammar refused the line. The parser's own code and its sentence go in `hint`, because this is the one refusal a human reads while typing |
-| `address_unresolved` | 422 | parsed, but no agent or department of that name in **this project's resolved roster** — or an address form that cannot be dispatched yet (`#`, bare). The hint names what would unblock it |
+| `address_unresolved` | 422 | parsed, but **no agent or department of that name** in this project's resolved roster. Only that: an address that resolved and cannot be run today is `thread_not_addressable`, because the two facts have different owners and a client has to be able to branch on which one it hit |
 | `address_ambiguous` | 422 | `@slug` matched more than one department. The hint **lists the matches**; resolution never picks, because picking runs an agent the human did not mean, which is `Plan §21.9`'s bug class with no error message |
 | `interrupt_not_deliverable` | 409 | a `steer` — with no run in flight, or with one this runner cannot inject into. **Never a silent downgrade to a note** |
 | `fanout_dispatch_refused` | 503 | `@@` would spawn N runs against a cap that has never fired. 503, not 403: the caller did nothing wrong and the refusal lifts the day the cap proves it can refuse |

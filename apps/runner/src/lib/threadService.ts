@@ -238,6 +238,14 @@ export function dispatchabilityOf(address: ResolvedThreadAddress, memberCount: n
  * `thread-model-engineer`'s and throws `fanout_dispatch_refused` naming the count that would
  * have been spent. Its unproven status is not softened here: `FAN_OUT_DISPATCH.enforcementProven`
  * is `false` and **the cap has never refused anything, because no run has ever executed.**
+ *
+ * The other two branches throw `thread_not_addressable` (409), **not** `address_unresolved`.
+ * The address *resolved* — `resolveAddress` found the department and counted its members,
+ * which is how `memberCount` reached this call. What is missing is a lead, or M22's router.
+ * `resolveAddress` throws `address_unresolved` for the genuinely-absent department, so the
+ * two facts stay distinguishable by `code` and not only by the sentence in the hint; a client
+ * cannot branch on prose, and a code that names a condition that did not happen sends the
+ * next debugger to the parser. `thread-refusals.test.ts` holds both sides.
  */
 export function assertRunnable(thread: Pick<ThreadRow, 'kind' | 'delivery' | 'addressedTo'>, memberCount: number): void {
   if (thread.delivery === 'direct') return;
@@ -250,7 +258,7 @@ export function assertRunnable(thread: Pick<ThreadRow, 'kind' | 'delivery' | 'ad
       : { form: 'default' },
     memberCount,
   );
-  throw new ApiError('address_unresolved', reason ?? 'This address cannot be run.', {
+  throw new ApiError('thread_not_addressable', reason ?? 'This address cannot be run.', {
     hint: `Address one agent with @department/agent, which costs one run. Unblocked by: ${unblockedBy}.`,
     retryable: false,
   });
@@ -293,6 +301,25 @@ export async function createThreadFromLine(
   }
 
   const { address, memberCount } = await resolveAddress(config, project, parsed.address);
+
+  /**
+   * **Every refusal on this route happens before the first write.**
+   *
+   * This check used to sit beside the append, forty lines below the row it would have
+   * orphaned: a `steer` created a thread and *then* 409'd, so the caller saw a refusal and
+   * reasonably believed nothing had happened — the exact promise `requireThreadStore`'s hint
+   * makes above. `ops.thread` has no delete verb in any plane (`thread-model.md` §7.3), so
+   * each orphan was permanent, in the one table nothing prunes. And it was on the path that
+   * is *always* taken: every `steer` is refused in this build.
+   *
+   * Checked unconditionally rather than only when there is a body, because the property is
+   * "a refused request writes nothing", and a check that runs on some requests is not that
+   * property. A brand-new thread opens `open` (`OPENING_STATE`), so a `steer` here always
+   * takes the no-run-in-flight refusal, which is the true one.
+   */
+  const interrupt = request.interrupt ?? 'note';
+  assertInterruptDeliverable(interrupt, 'open');
+
   const { id } = await createThread(db, {
     projectId: project.id,
     subject: { via: 'address', address },
@@ -302,8 +329,6 @@ export async function createThreadFromLine(
 
   let message: ThreadMessageRef | null = null;
   if (parsed.body.length > 0) {
-    const interrupt = request.interrupt ?? 'note';
-    assertInterruptDeliverable(interrupt, 'open');
     const appended = await appendMessage(db, {
       threadId: id,
       kind: 'human',
@@ -424,6 +449,10 @@ export async function postThreadMessage(
     // *is* the fact that a run is in flight, and two places recording it is how the two
     // disagree. A halt does not move the state here — the run moves it when its drain reads
     // the halt, so this response says `running`, which is true until it stops.
+    //
+    // `PostThreadMessageResponse.threadState`'s doc comment said the opposite until
+    // 2026-08-18, and the composer's author has only that comment. `thread-refusals.test.ts`
+    // now reads the comment and this value together, so the two cannot drift again silently.
     disposition: row.state === 'running' ? 'delivered-to-run' : 'queued',
     threadState: row.state,
   };
