@@ -69,12 +69,39 @@ out of that heading.
    vote. The runner's capped API-key workspace is a different pot of money and
    the list header says so.
 
+9. **`account_id` does not join the envelope allowlist.** `Plan §11` wants the
+   list grouped by billing account and Part One offered the route in — *"add an
+   `account_id` to the envelope key list via ADR"*. **Refused.** The list is
+   already decrypted and sorted in the browser (decision 3), so grouping is a
+   client-side operation on an object we hold in the clear; the account belongs
+   *inside* `encryptedMetadata`, not beside it. In plaintext it would hand the
+   relay a stable partition of the user's sessions — work vs personal, client A
+   vs client B — a correlation key the server does not have today and needs for
+   nothing. The reusable test, for the next field somebody wants here: **name
+   the operation the server must perform on it.** There is none. Binding since
+   2026-08-16, pinned by two tests and a comment in `relay/envelope.ts`;
+   transcribed as **ADR-032**. ADR-016 covers `Plan §11`'s three tables and
+   deliberately defers this one back to §3.1 — do not read it expecting a
+   ruling. Q19 in `project-scoping.md` §5.3 is the same question.
+
+10. **M15's project segment is navigational here, and stops at the URL.**
+    Every view URL now carries `/p/:project` (`Plan §9`, `Plan §23.12`), and the
+    two session routes moved with the rest. Inside §3.1 the segment buys
+    *navigation* — an address that can be pasted to a phone and still mean one
+    thing — and nothing else. It cannot become a filter: the relay holds
+    ciphertext, `SessionMeta` is opened in the browser, and a server-side
+    project filter is a decryption step on the server by another name. So
+    `/api/sessions*` and `/api/push*` are the only routes ADR-015 left unscoped,
+    on purpose, and `sessions/[id]/page.tsx` takes `params.id` alone. Nothing in
+    M15 moved a decryption step server-side, and this is the entry that says
+    which pressure was refused to keep that true.
+
 ## Coverage
 
 | ID | Spec § | Requirement | Implemented in | Verified by |
 |---|---|---|---|---|
-| REQ-SES-01 | §3.1 | `/sessions` is the fourth tab and mounts `SessionsTab`, not a `ViewMount` placeholder | `apps/web/src/app/(views)/sessions/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
-| REQ-SES-02 | §3.1 | A session is addressable at `/sessions/:id` and renders from the id alone — the server has nothing readable to look up | `apps/web/src/app/(views)/sessions/[id]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SES-01 | §3.1 | `/p/:project/sessions` is the fourth tab and mounts `SessionsTab`, not a `ViewMount` placeholder | `apps/web/src/app/(views)/p/[project]/sessions/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SES-02 | §3.1 | A session is addressable at `/p/:project/sessions/:id` and renders from the id alone — the server has nothing readable to look up | `apps/web/src/app/(views)/p/[project]/sessions/[id]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
 | REQ-SES-03 | §3.1 | The list shows name, repo, model, state, elapsed and cost for each session | `apps/web/src/sessions/components/SessionsTab.tsx` | `apps/web/src/sessions/__tests__/list.test.mjs` |
 | REQ-SES-04 | §3.1 | State is exactly `working` \| `waiting-permission` \| `idle` | `apps/web/src/sessions/types.ts` | `apps/web/src/sessions/__tests__/list.test.mjs` |
 | REQ-SES-05 | §3.1 | The list is sorted waiting-permission first, then working, then idle; within a group, most recently updated first | `apps/web/src/sessions/lib/sort.ts` | `apps/web/src/sessions/__tests__/list.test.mjs` |
@@ -120,18 +147,30 @@ out of that heading.
 | REQ-SES-45 | §3.1 | `POST /api/push/subscribe` stores the endpoint on a local volume; `POST /api/push/notify` accepts `{kind, id}` only | `apps/web/src/app/api/push/subscribe/route.ts` · `apps/web/src/app/api/push/notify/route.ts` | `apps/web/src/sessions/__tests__/push.test.mjs` |
 | REQ-SES-46 | §3.1 | Interactive taps in this tab are ≥44px; safe-area insets are honoured; no hover-only affordance | `apps/web/src/sessions/sessions.module.css` | manual — phone checklist |
 | REQ-SES-47 | §3.1 | Copper appears only on the permission card, the waiting-permission row/dot, and the Allow/Send pills — chrome is otherwise monochrome | `apps/web/src/sessions/sessions.module.css` | `scripts/check-tokens.mjs` |
-| REQ-SES-48 | §3.1 | `+ New session` (`?new=1`) does not spawn from the browser — it says a paired machine running Claude Code does | `apps/web/src/app/(views)/sessions/page.tsx` · `apps/web/src/sessions/components/SessionsTab.tsx` | manual — visual |
+| REQ-SES-48 | §3.1 | `+ New session` (`/p/:project/sessions?new=1`) does not spawn from the browser — it says a paired machine running Claude Code does | `apps/web/src/app/(views)/p/[project]/sessions/page.tsx` · `apps/web/src/sessions/components/SessionsTab.tsx` | manual — visual |
 | REQ-SES-49 | §3.1 | Server logs from this feature are an id and a byte count, never ciphertext or plaintext | `apps/web/src/sessions/relay/envelope.ts` | `apps/web/src/sessions/__tests__/no-plaintext-boundary.test.mjs` |
 | REQ-SES-50 | §3.1 | Byte-compatible NaCl secretbox against live happy-server | — | — |
 | REQ-SES-51 | §3.1 | RFC 8291 Web Push delivery via a `web-push` sender (the seam exists; delivery is pending the dependency) | — | — |
 | REQ-SES-52 | §3.1 | Happy `/v1/auth` public-key challenge pairing (token paste is the stand-in until the container is live) | — | — |
+| REQ-SES-53 | §3.1 | Opening a row and going Back keep the project segment — every in-app session href is built with `useProjectHref`, never by concatenating `/p/` | `apps/web/src/sessions/components/SessionsTab.tsx` · `apps/web/src/sessions/components/SessionView.tsx` | manual — see Test plan |
+| REQ-SES-54 | §3.1 | **Project scoping stops at the URL.** The session route reads `id` and never `project`, and `/api/sessions*` `/api/push*` gained no project segment when every runner route did (ADR-015) — filtering a session list by project would mean reading `encryptedMetadata` on the server | `apps/web/src/app/(views)/p/[project]/sessions/[id]/page.tsx` · `apps/web/src/app/api/sessions/route.ts` · `apps/web/src/sessions/relay/proxy.ts` | `apps/web/src/sessions/__tests__/no-plaintext-boundary.test.mjs` |
+| REQ-SES-55 | §3.1 | The push deep link stays unscoped — `deepLinkFor` emits `/sessions/:id` with no project, because a project slug is a plaintext partition of the user's sessions and a push payload is read by FCM and by a lock screen | `apps/web/src/sessions/push/payload.ts` · `apps/web/public/sw-push.js` | `apps/web/src/sessions/__tests__/push.test.mjs` |
+| REQ-SES-56 | §3.1 | `account_id` is refused a place in the session envelope (`Plan §11` Q19 · ADR-032) — the allowlist is exactly five keys, and an upstream row that volunteers an account id loses it | `apps/web/src/sessions/relay/envelope.ts` | `apps/web/src/sessions/__tests__/no-plaintext-boundary.test.mjs` |
 
 ## Interfaces we expose
 
 From `apps/web/src/sessions/index.ts`:
 
-- `<SessionsTab spawnRequested?>` — the fourth tab. Already mounted at `/sessions`.
-- `<SessionView sessionId>` — full-screen transcript. Already mounted at `/sessions/:id`.
+- `<SessionsTab spawnRequested?>` — the fourth tab. Mounted at `/p/:project/sessions`.
+- `<SessionView sessionId>` — full-screen transcript. Mounted at
+  `/p/:project/sessions/:id`, and it takes the id alone: the project segment is
+  in the address, never in the lookup (decision 10). A pre-M15 `/sessions/:id`
+  link — including every push deep link — lands on `shell-navigation-engineer`'s
+  `(views)/[...legacy]` resolver, which asks the coordinator which project it
+  mounts and rewrites the URL. **That costs a frame, and when the coordinator
+  cannot be reached the tap stops there instead of opening the session.** The
+  fix is not a project field in the payload (decision 9's argument applies
+  unchanged); see *Deliberately not done*.
 - `PushKind`, `PushPayload`, `PUSH_KINDS`, `deepLinkFor` — the agreed push shape.
   `runner-engineer` posts `{kind, id}` to `POST /api/push/notify`; we drop everything
   else.
@@ -173,6 +212,10 @@ several front doors is not a boundary.
 - **List / stream / push.** The other three files in `__tests__/`: sort, format,
   replay, windowing, adapter, SSE parse, copy-drift vs `sw-push.js`.
 - **Tokens.** `node scripts/check-tokens.mjs` — zero hex in `src/sessions/**`.
+- **The project segment (M15), by hand.** REQ-SES-53: from `/p/agentos/sessions`,
+  open a row → the URL is `/p/agentos/sessions/:id`; Back → `/p/agentos/sessions`.
+  No component test renders these two files, so this is a source read plus a
+  click, and it is recorded as manual rather than dressed as covered.
 - **Not automatable here.** (a) A real permission card on a phone in sunlight —
   thumb targets, safe-area, no hover. (b) A real Web Push while the app is
   closed, which needs VAPID keys and the `web-push` dependency (REQ-SES-51).
@@ -199,6 +242,21 @@ several front doors is not a boundary.
 - **Server-side search, previews, or "just the session titles".** The server
   cannot read them. If a future feature needs that, it decrypts in the browser
   or it does not ship.
+- **A project field anywhere the server can read it** — not in the envelope, not
+  in the push payload, not as a query parameter on `/api/sessions`. Each is the
+  same trade decision 9 refused for `account_id`: a plaintext partition of the
+  user's sessions, bought for an operation no server performs. A push payload is
+  the worst of the three, because it is composed on our server, handed to FCM or
+  Mozilla autopush, and rendered on a lock screen. **The consequence is real and
+  is not being hidden:** a notification tap resolves through `[...legacy]`, so it
+  costs a frame and fails to open the session when the coordinator is
+  unreachable — on a phone, which is the case §3.6 exists for.
+- **A project on a session at all.** `SessionMeta` has no project field, so even
+  the browser cannot say which project a session belongs to. When one is wanted
+  it goes **inside** `encryptedMetadata`, and the session view rewrites its own
+  URL after decryption — the only design that puts the project in the address
+  without putting it on a server. Not built: it needs the field to exist
+  upstream first, and REQ-SES-50 (byte-compat with a live Happy) is still open.
 - **Omnara.** ADR-005 rejected it. Swapping relays later is `happy-adapter.ts`
   plus compose.
 - **PWA install, `sw.js`, manifest, offline page.** Shell. We own `sw-push.js`.

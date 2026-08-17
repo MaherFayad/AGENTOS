@@ -16,8 +16,10 @@
 Owned by others, cited here only so a reader knows where the seams are. **Do not read
 section numbers in this heading as claims** — the coverage checker does not scan it.
 
-- The app shell, `/dashboards` route skeleton, and `← ALL DASHBOARDS` breadcrumb are
-  `shell-navigation-engineer`. This spec owns what those routes *mount*.
+- The app shell, the `/p/:project/dashboards` route skeleton, the project segment itself
+  (`useProjectHref`, `splitProject`, `withProject`, the legacy resolver) and the
+  `← ALL DASHBOARDS` breadcrumb are `shell-navigation-engineer`. This spec owns what those
+  routes *mount*, and consumes the segment — it does not define it.
 - `GET /api/runs` and `GET /api/cost/today` are `observability-engineer`. We consume the
   runs list; we do not invent a second metrics plane.
 - `GET /api/panels` is served by `runner-engineer` from the same `panels/*.json` files.
@@ -49,9 +51,16 @@ section numbers in this heading as claims** — the coverage checker does not sc
    grouped lists from `GET /api/runs`. When `observability-engineer` lands an aggregate
    route, `resolve.ts` prefers it; the truncation guard stays until then.
 
-6. **`/dashboards` mounts the view.** `shell-navigation-engineer` owns the route files'
-   location; this agent replaces `ViewMount` because the resume wave named that as the gap
-   and a carousel that is not on the page is not a carousel.
+6. **`/p/:project/dashboards` mounts the view.** `shell-navigation-engineer` owns the route
+   files' location; this agent replaces `ViewMount` because the resume wave named that as
+   the gap and a carousel that is not on the page is not a carousel.
+
+7. **The project is in the URL, and it is a link-building fact, not a data fact (M15).**
+   Every dashboard URL these views emit goes through `useProjectHref`, so entering a card
+   and stepping the prev/next rail keep you in the project you were looking at. What has
+   **not** changed is the data: `loadPanels()` still takes no project and reads one
+   directory. Both halves are stated because only one of them is finished — see
+   *Deliberately not done*.
 
 ## Coverage
 
@@ -67,7 +76,7 @@ section numbers in this heading as claims** — the coverage checker does not sc
 | REQ-DSH-08 | §2.4 | Caption under the front card: wide-tracked serif caps title + one-liner + provider glyph | `apps/web/src/dashboards/components/Carousel.tsx` · `apps/web/src/dashboards/lib/icons.tsx` | manual — see Test plan |
 | REQ-DSH-09 | §2.4 | Six Command Centers, mapped to our stack, each a `panels/*.json` file — no hardcoded dashboard component per center | `panels/` · `comms/decisions/ADR-004-command-centers.md` · `apps/web/src/dashboards/data/load.ts` | `scripts/__tests__/validate-panels.test.mjs` |
 | REQ-DSH-10 | §2.4 | Adding a center is adding a JSON file; the carousel sorts by `order` and never names a panel | `apps/web/src/dashboards/data/normalize.ts` · `apps/web/src/dashboards/components/Carousel.tsx` | `apps/web/src/dashboards/__tests__/widgets.test.mjs` |
-| REQ-DSH-11 | §2.4 | `/dashboards` mounts the carousel, not `ViewMount` | `apps/web/src/app/(views)/dashboards/page.tsx` | `apps/web/src/dashboards/__tests__/carousel.test.mjs` |
+| REQ-DSH-11 | §2.4 | `/p/:project/dashboards` mounts the carousel, not `ViewMount` | `apps/web/src/app/(views)/p/[project]/dashboards/page.tsx` | `apps/web/src/dashboards/__tests__/carousel.test.mjs` |
 | REQ-DSH-12 | §2.5.1 | Detail breadcrumb `← ALL DASHBOARDS` is the shell's drill-in label (consumed, not reimplemented) | `apps/web/src/components/shell/route.ts` | `apps/web/src/components/shell/route.test.ts` |
 | REQ-DSH-13 | §2.5.1 | Title row is 26px/700 + provider glyph + `⌨ Build guide + one-shot prompt` ghost button | `apps/web/src/dashboards/components/DashboardDetail.tsx` · `apps/web/src/dashboards/lib/prompt.ts` | manual — see Test plan |
 | REQ-DSH-14 | §2.5.1 | The ghost button copies a Claude Code one-shot that rebuilds `panels/<id>.json` | `apps/web/src/dashboards/lib/prompt.ts` | `apps/web/src/dashboards/__tests__/widgets.test.mjs` |
@@ -93,8 +102,9 @@ section numbers in this heading as claims** — the coverage checker does not sc
 | REQ-DSH-34 | §2.5 | `sql` queries resolve to `unavailable` in phase 1; the widget prints `emptyState` | `apps/web/src/dashboards/data/resolve.ts` | `apps/web/src/dashboards/__tests__/widgets.test.mjs` |
 | REQ-DSH-35 | §2.5 | A capped `/api/runs` list that does not cover the window is `unavailable`, not an undercount | `apps/web/src/dashboards/lib/runs.ts` | `apps/web/src/dashboards/__tests__/runs.test.mjs` |
 | REQ-DSH-36 | §2.5 | Panel files contain no raw SQL | `scripts/validate-panels.mjs` | `scripts/__tests__/validate-panels.test.mjs` |
-| REQ-DSH-37 | §2.5 | `/dashboards/:id` mounts the detail view for that panel JSON | `apps/web/src/app/(views)/dashboards/[id]/page.tsx` | `apps/web/src/dashboards/__tests__/widgets.test.mjs` |
+| REQ-DSH-37 | §2.5 | `/p/:project/dashboards/:id` mounts the detail view for that panel JSON | `apps/web/src/app/(views)/p/[project]/dashboards/[id]/page.tsx` | `apps/web/src/dashboards/__tests__/widgets.test.mjs` |
 | REQ-DSH-38 | §2.4 | `prefers-reduced-motion` snaps the carousel and skips momentum; the centred card remains | `apps/web/src/dashboards/components/Carousel.tsx` | manual — see Test plan |
+| REQ-DSH-39 | §2.4 | Entering a card from the carousel, and the prev/next rail, build their URL through `useProjectHref` — you stay in the project you were looking at, and neither view hardcodes `/dashboards/…` (M15, `Plan §9`) | `apps/web/src/dashboards/components/Carousel.tsx` · `apps/web/src/dashboards/components/DashboardDetail.tsx` | manual — owed, see Test plan |
 
 ## Interfaces we expose
 
@@ -119,10 +129,28 @@ section numbers in this heading as claims** — the coverage checker does not sc
 - **Contract:** `node scripts/validate-panels.mjs` — 6 panels, 7 of 7 widget types, no raw SQL, no fabricated signal numbers.
 - **Coverage:** `npm run validate:coverage` — this file claims §2.4 and §2.5 only.
 - **Tokens:** `npm run validate:tokens` — no hex outside `tokens.css`.
+- **Owed, and automatable — REQ-DSH-39 has no test.** It is asserted by reading two files today. The pattern to close it already exists: `apps/web/src/map/MapView.test.tsx` renders a view with a mocked `usePathname` and asserts the drill-in href carries `/p/:project`. The same two cases are owed for `Carousel` (click the front card) and `DashboardDetail` (rail prev/next). Not written in this pass because the dispatch that corrected these paths was scoped to this file only.
 - **Not automatable here:** 1440px side-by-side of the carousel (perspective, elliptical floor, caption tracking), the 44px serif title, drag-to-spin *feel*, reduced-motion snap. Those are `fidelity-qa-reviewer`'s gate (Part VI) once M6 is unblocked.
 
 ## Deliberately not done
 
+- **The per-project panel mount — a gap, not a decision, and it is the one thing on this
+  list somebody else has already ruled on.** `project-scoping.md` §5.1 **Q8** answers
+  *"Are `panels/*.json` cascaded like agents?"* with *"**No — not in M15.** Panels are
+  mounted **per project**, not resolved through layers"*, and §3 lists `library_path` as
+  *"the repo holding `agents/`, `panels/`, `company/`"*. **Neither half of that mount
+  exists.** `loadPanels()` takes no project and walks a fixed candidate list
+  (`PANELS_DIR`, `/panels`, then monorepo-relative); both route files destructure `id` and
+  never `project`. So the six Command Centers render identically in every project, and two
+  projects on one coordinator cannot have different dashboards.
+  **Not fixed here, on purpose.** It is a `loadPanels()` signature change with four
+  callers, it needs `ops.project.library_path` read from somewhere (which is
+  `runner-engineer`'s resolver, not a disk walk in the web app), and it needs a stated
+  answer for what a project with no `panels/` of its own shows — nothing, or the
+  coordinator's. That last question is a cascade question and Q8 explicitly declined to
+  answer it *"with one project to test against"*. Filed as a finding to
+  `runner-engineer`; it is bigger than a path correction and it should not be smuggled
+  into one.
 - **Live Langfuse aggregates.** M6 is blocked on M3 on the BOARD. The detail view is a
   real renderer over empty metrics until `GET /api/runs` (and later a windowed aggregate)
   is served. Mission Control's widgets are wired; they will read as empty states, not as

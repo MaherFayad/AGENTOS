@@ -18,7 +18,7 @@ covered** as an ownership claim, so nothing else is named there. Neighbours:
 
 | Section | Owner | What is mine | What is theirs |
 |---|---|---|---|
-| §2.0 | `shell-navigation-engineer` | consume `shell:flyTo` / `shell:zoom` / `shell:yourTree`; publish `shell:zoomChanged` / `shell:liveCount` | the overlay chrome, search, LIVE counter, YOUR TREE toggle |
+| §2.0 | `shell-navigation-engineer` | consume `shell:flyTo` / `shell:zoom` / `shell:yourTree`; publish `shell:zoomChanged` / `shell:liveCount`; build every drill-in URL through `useProjectHref` | the overlay chrome, search, LIVE counter, YOUR TREE toggle, the `/p/:project` segment, the switcher and the legacy-URL resolver (M15 / ADR-015) |
 | §2.3 | `drawer-engineer` | emit `openDrawer({ slug, view: 'map' })` on job/leaf activation | the left drawer panel |
 | §3.2 | `runner-engineer` | render clock badge / amber pulse from payload fields | schedule writes, approval gates, `/ws/graph` `approvalPending` overlay |
 | §3.3 | `runner-engineer` | scale particle count/brightness from `core.brainCompleteness`; **measure it** in `scripts/lib/brain-completeness.mjs` from COMPANY.md's `<!-- UNANSWERED: Qn -->` markers, and render the 0/20 empty state | the interview agent, the write-back, `/api/status`, `company/.brain.json` |
@@ -33,9 +33,11 @@ covered** as an ownership claim, so nothing else is named there. Neighbours:
 
 3. **Canvas never hits; SVG never paints the sky.** One `<canvas aria-hidden>` for starfield, dotted grid, galaxy particles, core dot, vignette. SVG for nodes, edges, labels, watermarks, hit-testing.
 
-4. **The layout lives in `map/layout.tsx`.** `/map`, `/map/:department` and `/map/:department/:agent` share one canvas instance so the 700ms camera move actually plays. Page files are empty slots.
+4. **The layout lives in `app/(views)/p/[project]/map/layout.tsx`.** `/p/:project/map`, `/p/:project/map/:department` and `/p/:project/map/:department/:agent` share one canvas instance so the 700ms camera move actually plays. Page files are empty slots. M15 moved these four files under `p/[project]/` unchanged — the segment is read by `useProjectHref` off the pathname, not by a `params.project` prop, so the galaxy never took a server prop and none of them became async.
 
-5. **Honest empty if the payload is missing.** `GET /api/graph`, then `/graph.json` (the ADR-003 artifact Next can serve without the runner). Neither a skeleton of 150 nodes nor a fake LIVE count. Completeness 0 ⇒ zero particles, one core dot.
+5. **Honest empty if the payload is missing.** `GET /api/p/:project/graph`, then `/graph.json` (the ADR-003 artifact Next can serve without the runner). Neither a skeleton of 150 nodes nor a fake LIVE count. Completeness 0 ⇒ zero particles, one core dot.
+
+8. **No path literals in the client, and `null` means do not ask (REQ-MAP-39/40).** Both URLs are built from `RUNNER_ROUTES` through `projectPath`. M15 moved the endpoints and this client held them as literals, so the fetch took a 400 the fallback swallowed and the socket dialled a route that no longer exists — the galaxy kept drawing from the artifact and live drops stopped for a milestone with nothing red. The fallback chain is the mechanism that made a hard failure look like a soft one, so the rule is now that a request which cannot name its project is not sent at all.
 
 6. **Frontmatter is projected, not copied.** The map holds no agent records of its own. Everything on a node is a field from the graph payload, which the layout engine projected from `agents/**/SKILL.md`.
 
@@ -69,19 +71,22 @@ covered** as an ownership claim, so nothing else is named there. Neighbours:
 | REQ-MAP-22 | §2.1 | Node drag is springy and returns to stored coordinates (~600ms relax) | `apps/web/src/map/lib/relax.ts` | `apps/web/src/map/lib/relax.test.ts` |
 | REQ-MAP-23 | §2.1 | Hover fades the name label in beneath the node | `apps/web/src/map/svg/Nodes.tsx` | `apps/web/src/map/MapView.test.tsx` |
 | REQ-MAP-24 | §2.1 | Click node drills to the department centered on it; click department label opens department view | `apps/web/src/map/MapView.tsx` · `apps/web/src/map/svg/BranchLabels.tsx` | `apps/web/src/map/lib/slugs.test.ts` |
-| REQ-MAP-25 | §2.1 | `/map` mounts the galaxy (canvas + SVG), not a `ViewMount` placeholder | `apps/web/src/app/(views)/map/layout.tsx` · `apps/web/src/app/(views)/map/page.tsx` · `apps/web/src/map/MapPage.tsx` | `apps/web/src/map/MapView.test.tsx` |
+| REQ-MAP-25 | §2.1 | `/p/:project/map` mounts the galaxy (canvas + SVG), not a `ViewMount` placeholder; the canvas is in the layout and the page file is an empty slot | `apps/web/src/app/(views)/p/[project]/map/layout.tsx` · `apps/web/src/app/(views)/p/[project]/map/page.tsx` · `apps/web/src/map/MapPage.tsx` | `apps/web/src/map/MapView.test.tsx` |
 | REQ-MAP-26 | §2.1 | Missing graph payload shows an honest empty state with no fabricated node counts | `apps/web/src/map/chrome/EmptyState.tsx` · `apps/web/src/map/data/useGraph.ts` | `apps/web/src/map/MapView.test.tsx` · `apps/web/src/map/data/parse.test.ts` |
-| REQ-MAP-27 | §2.1 | `/ws/graph` deltas freeze existing positions and fade in added nodes | `apps/web/src/map/data/delta.ts` · `apps/web/src/map/data/useGraph.ts` | `apps/web/src/map/data/delta.test.ts` |
+| REQ-MAP-27 | §2.1 | `WS /ws/p/:project/graph` deltas freeze existing positions and fade in added nodes (which URL the socket dials is REQ-MAP-39) | `apps/web/src/map/data/delta.ts` · `apps/web/src/map/data/useGraph.ts` | `apps/web/src/map/data/delta.test.ts` · `apps/web/src/map/data/useGraph.test.tsx` |
 | REQ-MAP-28 | §2.2 | Department view is a 700ms ease-in-out camera transform over the same payload | `apps/web/src/map/lib/animate.ts` · `apps/web/src/map/lib/camera.ts` · `apps/web/src/map/MapView.tsx` | `apps/web/src/map/lib/camera.test.ts` |
 | REQ-MAP-29 | §2.2 | Giant Instrument Serif watermark ~160px at `--ivory` 5% | `apps/web/src/map/svg/Watermark.tsx` · `apps/web/src/map/lib/map-type.ts` | `apps/web/src/map/MapView.test.tsx` |
 | REQ-MAP-30 | §2.2 | Sub-cluster labels float in 11px `--ink-2` +0.35em around node groups | `apps/web/src/map/svg/ClusterLabels.tsx` · `apps/web/src/map/lib/branches.ts` | `apps/web/src/map/lib/slugs.test.ts` |
 | REQ-MAP-31 | §2.2 | Adjacent departments are rail labels with ‹ ›; neighbours come from ADR-001, never a local list | `apps/web/src/map/chrome/DepartmentRails.tsx` | `apps/web/src/map/lib/slugs.test.ts` |
 | REQ-MAP-32 | §2.2 | `YOUR TREE` filters to live jobs (anchors survive); live counts are published on the shell bus, never invented | `apps/web/src/map/lib/geometry.ts` · `apps/web/src/map/lib/branches.ts` · `apps/web/src/map/MapView.tsx` | `apps/web/src/map/lib/geometry.test.ts` |
-| REQ-MAP-33 | §2.2 | `/map/:department` is a real route sharing the layout canvas | `apps/web/src/app/(views)/map/[department]/page.tsx` · `apps/web/src/app/(views)/map/layout.tsx` | `apps/web/src/map/MapView.test.tsx` |
+| REQ-MAP-33 | §2.2 | `/p/:project/map/:department` is a real route sharing the layout canvas | `apps/web/src/app/(views)/p/[project]/map/[department]/page.tsx` · `apps/web/src/app/(views)/p/[project]/map/layout.tsx` | `apps/web/src/map/MapView.test.tsx` |
 | REQ-MAP-34 | §2.1 | Payload is parsed defensively — garbage is `null`, not a half-built map | `apps/web/src/map/data/parse.ts` | `apps/web/src/map/data/parse.test.ts` |
 | REQ-MAP-35 | §2.1 | `brainCompleteness` is an engine input (0…1, default 0), not a constant inside the solver | `scripts/lib/layout.mjs` · `comms/decisions/ADR-003-layout-precompute.md` | `scripts/lib/layout.test.mjs` |
 | REQ-MAP-36 | §3.3 | Completeness counts **answered questions** — COMPANY.md's `<!-- UNANSWERED: Qn -->` markers — never headings, prose length or `sources/`; the payload carries `brainAnswered`/`brainTotal` so the fraction is auditable, and a `.brain.json` snapshot may never claim more than the markers admit | `scripts/lib/brain-completeness.mjs` · `scripts/build-graph.mjs` | `scripts/__tests__/brain-completeness.test.mjs` |
 | REQ-MAP-37 | §3.3 | A 0/20 brain renders as a stated empty state — no particles, a dashed disc where the swirl belongs, and the count in words with an `aria-label` — never a dim swirl and never a bare canvas | `apps/web/src/map/svg/BrainEmptyState.tsx` · `apps/web/src/map/canvas/GalaxyCanvas.tsx` | `apps/web/src/map/svg/BrainEmptyState.test.tsx` |
+| REQ-MAP-38 | §2.1 | Drill-in stays inside the project the URL names: anchor and job activation push `/p/:project/map/:department[/:agent]` built through `useProjectHref`, never the pre-M15 shape that would land on the legacy resolver | `apps/web/src/map/MapView.tsx` · `apps/web/src/components/shell/useProjectHref.ts` | `apps/web/src/map/MapView.test.tsx` (asserts the pushed URL, not the mounted one) |
+| REQ-MAP-39 | §2.1 | The graph fetch and the delta socket name the project the URL names — `GET /api/p/:project/graph`, `WS /ws/p/:project/graph` — and both URLs are built from `RUNNER_ROUTES` via `projectPath`, so no path literal exists in the client to go stale again | `apps/web/src/map/data/socket.ts` · `apps/web/src/map/data/useGraph.ts` · `apps/web/src/map/MapView.tsx` | `apps/web/src/map/data/socket.test.ts` · `apps/web/src/map/data/useGraph.test.tsx` |
+| REQ-MAP-40 | §2.1 | No project in the URL ⇒ **no request at all**: not the unscoped route (400, and a swallowed 400 is what hid REQ-MAP-39), not the `/graph.json` artifact (it names no project). The resource stays `loading`, because "not yet" is what is true | `apps/web/src/map/data/socket.ts` · `apps/web/src/map/data/useGraph.ts` | `apps/web/src/map/data/useGraph.test.tsx` |
 
 ## Interfaces we expose
 
@@ -100,7 +105,8 @@ Node click publishes `openDrawer({ slug, view: 'map' })` (`drawer/events.ts`, ow
 
 | What | From | Contract |
 |---|---|---|
-| `GET /api/graph`, `WS /ws/graph` | `runner-engineer` | `comms/contracts/api-contracts.md` |
+| `GET /api/p/:project/graph`, `WS /ws/p/:project/graph` (M15; the unscoped pair is a 400, not a default) | `runner-engineer` | `comms/contracts/api-contracts.md` · `packages/contracts/src/api.ts` `RUNNER_ROUTES` |
+| `useProjectHref` — the `/p/:project` prefix for every URL the map builds | `shell-navigation-engineer` | `apps/web/src/components/shell/route.ts` |
 | Graph payload shape | this agent | `comms/contracts/graph-layout.md` |
 | Seven departments + rail neighbours | `agent-library-curator` / ADR-001 | `packages/contracts/src/departments.ts` |
 | `shell:flyTo`, `shell:zoom`, `shell:yourTree` | `shell-navigation-engineer` | `apps/web/src/lib/shell-bus.ts` |
@@ -113,10 +119,12 @@ Node click publishes `openDrawer({ slug, view: 'map' })` (`drawer/events.ts`, ow
 - **Pure client** (`src/map/lib/*.test.ts`, `src/map/data/*.test.ts`) — camera clamp, particle budget, delta freeze, parse-or-null.
 - **Markup** (`MapView.test.tsx`) — canvas + SVG mount from a stored fixture; empty state prints no fabricated counts. `renderToStaticMarkup`, no jsdom required for that file's assertions.
 - **Not automatable here:** 1440px side-by-side vs their video frame (Part VI) — `fidelity-qa-reviewer`. Reduced-motion (galaxy freeze, pulse kill). Pinch on a real trackpad.
+- **At the boundary, because that is where this broke** (`data/socket.test.ts`, `data/useGraph.test.tsx`, the `<MapView> drill-in` block). `delta.test.ts` passed all the way through the milestone in which the socket stopped connecting, because it tested the code below the wire. The new assertions are on the strings handed to `fetch` and `new WebSocket` — including the negative, that neither is ever a path `LEGACY_UNSCOPED_PATHS` lists as refused.
 
 ## Deliberately not done
 
-- **The §2.3 drawer body.** We emit `openDrawer` and push `/map/:department/:agent`. The agent page is an empty slot for `drawer-engineer`.
+- **Teaching `/graph.json` which project it describes.** The artifact carries no project and `GraphPayload` has no field for one, so the ADR-003 fallback is sound only while exactly one library is mounted — which is the M15 state. A second mounted project turns it into one project's map under another project's name. The fix (a `project` field written by `scripts/build-graph.mjs` and checked against the URL before the fallback is accepted, or no fallback) is specified in `graph-layout.md` §Artifact and belongs to whoever mounts the second project. Not pre-built, and not silent.
+- **The §2.3 drawer body.** We emit `openDrawer` and push `/p/:project/map/:department/:agent`. The agent page is an empty slot for `drawer-engineer`.
 - **d3-force / d3-zoom on the client.** ADR-006 plus `lib/relax.ts`: a full client simulation would rearrange a map whose selling point is stability. Camera maths are ours; they match d3-zoom's transform convention.
 - **A second copy of agent data.** No `src/map/agents.json`. The fixture under `__fixtures__/` is test-only.
 - **Department-specific precomputed layouts.** ADR-003 left this open; drill-in is a camera transform over the same coordinates.

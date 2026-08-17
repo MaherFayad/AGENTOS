@@ -56,6 +56,14 @@ selection; we own the panel it opens.
    connection re-attaches via `GET /api/run/:runId/stream` with `Last-Event-ID`.
 7. **The chart autonomy toggle is a readout.** `tier` lives in frontmatter. Changing it
    would be a git write the runner owns. The row is disabled and says so.
+8. **Provenance is parsed, never stored.** The header's badge is derived on every render
+   from the cascade's own `source_ref` string (`{layer}:{path}@{digest}`, ADR-014 §2). The
+   drawer holds no `layer` field, so there is nothing to invalidate and no way for a stale
+   answer to survive. `data/provenance.ts` is the web app's only reader of that grammar.
+9. **`unknown` is a state, not a fallback.** `GET /api/agents/:slug` carries no
+   `source_ref` today, so the header opens on an honest "source unknown" rather than
+   assuming `global`. The badge primitive refuses a default `state` for the same reason
+   (tokens contract §10) and this spec does not work around it.
 
 ## Coverage
 
@@ -85,11 +93,13 @@ selection; we own the panel it opens.
 | REQ-DRW-22 | §2.3 | Focus trap + Esc to close + scrim click; focus ring is monochrome | `apps/web/src/drawer/a11y/useFocusTrap.ts` · `apps/web/src/drawer/a11y/focus-trap.ts` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/a11y/focus-trap.test.ts` |
 | REQ-DRW-23 | §2.3 | Every agent-facing string is projected from frontmatter; the drawer stores no copy | `apps/web/src/drawer/data/project.ts` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/data/project.test.ts` |
 | REQ-DRW-24 | §2.3 | No raw hex in the drawer tree — colours are `var(--token)` | `apps/web/src/drawer/drawer.module.css` | `scripts/check-tokens.mjs` |
-| REQ-DRW-25 | §2.3 | Map route `/map/:department/:agent` mounts the left drawer | `apps/web/src/drawer/JobDrawerRoute.tsx` · `apps/web/src/app/(views)/map/[department]/[agent]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-DRW-25 | §2.3 | Map route `/p/:project/map/:department/:agent` mounts the left drawer, and closing it returns to the department **in the project it was opened in** (M15) | `apps/web/src/drawer/JobDrawerRoute.tsx` · `apps/web/src/app/(views)/p/[project]/map/[department]/[agent]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
 | REQ-DRW-26 | §2.3 | Chart `More detail` opens the same component on the right via `DrawerHost` consuming `src/chart/events.ts` | `apps/web/src/drawer/DrawerHost.tsx` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` · `apps/web/src/chart/events.test.ts` |
 | REQ-DRW-27 | §2.3 | Chart extras (autonomy toggle, REPLACES cost quote, SKILLS cards, TOOLS, HOW TO RUN IT, NOW badge) share the map section set | `apps/web/src/drawer/sections/ChartSections.tsx` · `apps/web/src/drawer/JobDrawer.tsx` | `apps/web/src/drawer/JobDrawer.test.tsx` |
 | REQ-DRW-28 | §2.3 | Direction is logical (`inset-inline-*`, `data-side=start\|end`) so RTL is a `dir` attribute, not a retrofit | `apps/web/src/drawer/drawer.module.css` | `apps/web/src/i18n/direction.ts` |
 | REQ-DRW-29 | §2.3 | An unknown input type is reported in the drawer as a schema gap, not coerced into a text box | `apps/web/src/drawer/data/inputs.ts` | `apps/web/src/drawer/data/inputs.test.ts` |
+| REQ-DRW-30 | §2.3 | Both drawer headers show where the agent came from, using the shared `ProvenanceBadge`, projected from the cascade's `source_ref` — the drawer stores no layer of its own (`Plan §23.6`, ADR-014 §2) | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/sections/Header.tsx` · `apps/web/src/drawer/run/console-model.ts` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` |
+| REQ-DRW-31 | §2.3 | Unknown provenance renders as **unknown** and never as `global`; an unreadable `source_ref`, a silent runner, or another agent's run all resolve to the same honest empty state | `apps/web/src/drawer/data/provenance.ts` · `apps/web/src/drawer/drawer.module.css` | `apps/web/src/drawer/data/provenance.test.ts` · `apps/web/src/drawer/sections/Header.test.tsx` |
 
 ## Interfaces we expose
 
@@ -113,7 +123,8 @@ Everything else under `src/drawer` is private.
 | `GET /api/agents/:slug`, `GET /api/runs`, `POST /api/run`, `GET /api/run/:runId/stream`, `POST /api/schedule`, `POST /api/approvals/:runId`, `GET /api/status` | `runner-engineer` / `observability-engineer` | `comms/contracts/api-contracts.md` |
 | `openDrawer(agentSlug, {side:'right'})`, `OPEN_DRAWER_EVENT` | `chart-matrix-engineer` | `apps/web/src/chart/events.ts` |
 | `shell:flyTo` | `shell-navigation-engineer` | `apps/web/src/lib/shell-bus.ts` |
-| `GlassPanel`, `Pill`, `Eyebrow`, `--dur-drawer` | `design-system-guardian` | `comms/contracts/design-tokens.md` |
+| `GlassPanel`, `Pill`, `Eyebrow`, `ProvenanceBadge`, `--dur-drawer` | `design-system-guardian` | `comms/contracts/design-tokens.md` §10 |
+| `sourceRef()` / `CascadeLayer`, and `SseStartData.sourceRef` on the first frame | `runner-engineer` · resolution semantics `agent-library-curator` | `comms/contracts/api-contracts.md` · ADR-014 |
 | Drawer string keys | `rtl-arabic-pdpl-specialist` | `apps/web/src/i18n/strings.en.ts` |
 
 ## Test plan
@@ -123,7 +134,12 @@ Everything else under `src/drawer` is private.
 - **Transport** (`run/transport.test.ts`, `run/sse.test.ts`) — start is POST `/api/run`;
   re-attach is GET `/api/run/:runId/stream` with `Last-Event-ID`.
 - **Console reducer** (`run/console-model.test.ts`) — the seven events, the approval
-  pause, unknown events as notices.
+  pause, unknown events as notices, and `start`'s `agent` + `sourceRef` retained so the
+  header can answer at all.
+- **Provenance** (`data/provenance.test.ts`, `sections/Header.test.tsx`) — every input
+  either yields a layer the cascade named or yields `unknown`; `override` reads as
+  `project` per ADR-014 §4.1; one agent's run is never attributed to another agent's
+  header; the unknown state draws no mark and is not painted in the disabled token.
 - **Focus arithmetic** (`a11y/focus-trap.test.ts`) — Esc / Tab wrap.
 - **Markup** (`JobDrawer.test.tsx`) — INPUTS markup is the frontmatter label, not the
   agent name; chart NOW badge and autonomy toggle; chart event name is stable.
@@ -152,3 +168,19 @@ Everything else under `src/drawer` is private.
 - **Virtualizing past the 2k/400 window with a real list virtualizer.** The reducer
   drops and counts; a windowing library would be a component-library-shaped dependency
   Part V forbids.
+- **Provenance badges on MAP nodes and CHART job cards.** BOARD puts both explicitly out
+  of M15 — *"shell and drawer only — one vertical slice, not four half-slices"*. The
+  primitive already takes `size="sm"` for exactly that, and the mapping they need is
+  `data/provenance.ts`, which is exported for them rather than duplicated.
+- **`fork` / `drifted` / `orphaned`.** Three of the badge's five states are unreachable and
+  nothing here pretends otherwise. `forked_from` **is** in the schema now that ADR-014 is
+  accepted, and that is still not enough: all three are states of a *comparison* against
+  the parent's current digest (cascade §4.3), and §11 records that nothing computes one —
+  *"nothing computes a digest comparison — not built."* They arrive through the same
+  function when the resolver does.
+- **Inventing `AgentDetail.sourceRef`.** The field the drawer needs is requested from
+  `runner-engineer`, not added speculatively to a contract this agent does not own.
+  Until it lands, provenance is known only after a run has reported it.
+- **Project-scoping the drawer's own fetches.** `data/client.ts` and `run/transport.ts`
+  still call the pre-M15 unscoped paths, which now answer `400 project_scope_missing`.
+  Real, mine, and deliberately not fixed inside a provenance dispatch — see the handoff.

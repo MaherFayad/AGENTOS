@@ -53,11 +53,14 @@ citations live in Decision 9 and in "Interfaces we expose".
    tier legend chips are outline + glyph + label (§1.3). If a `status: live` indicator is
    ever added here it will be the only colour on the view, and it will be an ADR.
 
-7. **CHART owns the contents of the existing chart routes.** The shell still owns the
-   routing skeleton (`src/app/(views)/**`, §2.0). CHART replaces the `ViewMount`
+7. **CHART owns the contents of the existing chart routes; the shell owns their shape.**
+   The routing skeleton is `src/app/(views)/**` (§2.0). CHART replaces the `ViewMount`
    placeholders in `chart/page.tsx` and `chart/[department]/page.tsx` with `<ChartPage />`
-   (via a thin `ChartRoute` that keeps the tab bar and `/chart/:department` in sync).
-   New route segments are still the shell's to add.
+   (via a thin `ChartRoute` that keeps the tab bar and the department segment in sync).
+   New route segments are still the shell's to add — and M15 added one: every view now
+   lives under `p/[project]/` (`Plan §9`), so those files are `(views)/p/[project]/chart/`.
+   That is a re-scoping of the routes, not a rename CHART made; Decision 10 is what it
+   obliges of us.
 
 8. **An unstaffed department gets an empty state, not an empty grid.** Twelve hatch
    blocks say "twelve deliberate gaps"; an unmapped department says "nobody has been here
@@ -68,6 +71,17 @@ citations live in Decision 9 and in "Interfaces we expose".
    CHART emits `openDrawer(agentSlug, {side:'right'})` and renders nothing further.
    Their `<DrawerHost />` is mounted as a **sibling** on the chart routes so the event
    has a listener; that is their component, not a second drawer in `src/chart`.
+
+10. **CHART never spells the project segment itself.** M15 put a project in every view URL,
+    which means CHART now builds links that contain something CHART does not own. Two
+    consequences, both asserted below. (a) `ChartRoute` reads the project from `useShell()`
+    and builds every destination through the shell's `withProject`, so a route built by the
+    tab bar cannot drift from one built by the breadcrumb or the project switcher — one
+    place knows the segment's shape. (b) An unknown `:department` redirects to *its own*
+    project's chart, never to a bare `/chart`: a bare one drops the project and lands on
+    the legacy resolver, which would then have to pick a project — the ambient default the
+    whole axis exists to remove. This is behaviour, not path bookkeeping, which is why it
+    is REQ-CHT-43/44 and not a footnote on REQ-CHT-42.
 
 ## Coverage
 
@@ -114,16 +128,19 @@ citations live in Decision 9 and in "Interfaces we expose".
 | REQ-CHT-39 | §2.6 | A department with no agents shows an honest empty state instead of a fabricated grid | `apps/web/src/chart/components/ChartEmptyState.tsx` | `apps/web/src/chart/components/ChartView.test.tsx` |
 | REQ-CHT-40 | §2.6 | If the agent library cannot be read, the view says so rather than rendering an empty rollout | `apps/web/src/chart/data/agents.ts` · `apps/web/src/chart/components/ChartEmptyState.tsx` | `apps/web/src/chart/components/ChartView.test.tsx` |
 | REQ-CHT-41 | §2.6 | No literal colour anywhere in `src/chart` — chrome is monochrome and this view carries no data ink | `apps/web/src/chart/components/StatLine.tsx` · `apps/web/src/chart/components/EmptyCell.tsx` | `apps/web/src/chart/components/Matrix.test.tsx` |
-| REQ-CHT-42 | §2.6 | `/chart` and `/chart/:department` render `<ChartPage />` from `src/chart`, not `ViewMount` | `apps/web/src/app/(views)/chart/page.tsx` · `apps/web/src/app/(views)/chart/[department]/page.tsx` · `apps/web/src/app/(views)/chart/ChartRoute.tsx` · `apps/web/src/app/(views)/chart/mount.tsx` · `apps/web/src/chart/ChartPage.tsx` | manual — open `/chart` |
+| REQ-CHT-42 | §2.6 | `/p/:project/chart` and `/p/:project/chart/:department` render `<ChartPage />` from `src/chart`, not `ViewMount` | `apps/web/src/app/(views)/p/[project]/chart/page.tsx` · `apps/web/src/app/(views)/p/[project]/chart/[department]/page.tsx` · `apps/web/src/app/(views)/p/[project]/chart/ChartRoute.tsx` · `apps/web/src/app/(views)/p/[project]/chart/mount.tsx` · `apps/web/src/chart/ChartPage.tsx` | manual — open `/p/:project/chart` |
+| REQ-CHT-43 | §2.6 | A `:department` that is not in the ADR-001 enum redirects to that same project's chart (`/p/:project/chart`) — the project segment survives the redirect, so no chart route can hand a project choice back to the legacy resolver (Decision 10b) | `apps/web/src/app/(views)/p/[project]/chart/[department]/page.tsx` | manual — see Test plan |
+| REQ-CHT-44 | §2.6 | CHART writes no project prefix of its own: `ChartRoute` takes the project from `useShell()` and every tab destination is built with the shell's `withProject` — no `/p/` literal exists under `src/chart` or in the chart route adapter (Decision 10a) | `apps/web/src/app/(views)/p/[project]/chart/ChartRoute.tsx` | `apps/web/src/components/shell/route.test.ts` (the helper) · manual — see Test plan (our use of it) |
 
 ## Interfaces we expose
 
 From `apps/web/src/chart` (`index.ts` is the whole public surface):
 
 - `<ChartPage />` — mountable page; optional `agents` prop skips the client fetch,
-  `department` / `onDepartmentChange` make it routable by the shell. `/chart` and
-  `/chart/:department` mount it via `ChartRoute` (URL sync) and `ChartMount` (disk
-  projection of `agents/**/SKILL.md`).
+  `department` / `onDepartmentChange` make it routable by the shell. `/p/:project/chart`
+  and `/p/:project/chart/:department` mount it via `ChartRoute` (URL sync) and `ChartMount`
+  (disk projection of `agents/**/SKILL.md`). `<ChartPage />` itself takes no project prop —
+  it is project-agnostic, and the segment is handled entirely in the route adapter.
 - `<ChartView />` — the presentational view, for anyone who already has agents in hand.
 - `openDrawer(agentSlug, {side, handler})`, `OPEN_DRAWER_EVENT`
   (`'commandcenter:open-drawer'`), `OpenDrawerDetail` — the §2.6.5 selection contract.
@@ -142,9 +159,12 @@ Everything else under `src/chart` is private.
 | `GET /api/agents` (list projection) | `runner-engineer` | `comms/contracts/api-contracts.md` — **requested, not yet in the contract** |
 | `Pill`, `Chip`, `Eyebrow`, `DURATION`, `EASE` | `design-system-guardian` | `comms/contracts/design-tokens.md` |
 | The right drawer | `drawer-engineer` | §2.6.5 — `openDrawer` event; their `<DrawerHost />` is a sibling on the chart routes, not a chart component |
+| `useShell()`, `withProject` — the project segment's shape | `shell-navigation-engineer` | `Plan §9` (M15) — consumed **only** in `(views)/p/[project]/chart/ChartRoute.tsx`, never inside `src/chart` |
 
-All five couplings are funnelled through two files, `src/chart/data/contracts.ts` and
-`src/chart/ui.ts`, so a rename upstream is a one-file change here.
+The first five couplings are funnelled through two files, `src/chart/data/contracts.ts` and
+`src/chart/ui.ts`, so a rename upstream is a one-file change here. The sixth is deliberately
+outside both: `src/chart` knows nothing about projects, so the project axis touches exactly
+one adapter file and no component.
 
 ## Test plan
 
@@ -160,8 +180,16 @@ All five couplings are funnelled through two files, `src/chart/data/contracts.ts
     once the app scaffold lands, and by `fidelity-qa-reviewer`'s a11y sweep.
   - REQ-CHT-07 (Instrument Serif italic) and REQ-CHT-28 (500ms reveal, reduced motion)
     are visual — the 1440px side-by-side and a `prefers-reduced-motion` toggle.
-  - REQ-CHT-42 — `/chart` mounts `<ChartPage />`; confirmed when the matrix (not
+  - REQ-CHT-42 — `/p/:project/chart` mounts `<ChartPage />`; confirmed when the matrix (not
     `ViewMount`) is the thing on screen.
+  - REQ-CHT-43/44 (project segment) — the redirect is a server-component `redirect()` and
+    the tab push is a `useRouter()` call, so both need a running app rather than
+    `renderToStaticMarkup`. Checked by walking `/p/:project/chart/not-a-department` (lands
+    on the same project's chart, URL still carries `:project`) and clicking a tab in a
+    non-default project (URL keeps that project). Both belong in `cc-fidelity-check`'s
+    navigation pass alongside the shell's own project-axis checks, since the failure mode
+    they share — a link silently reverting to the default project — is one an isolated
+    chart test cannot see.
 - **The two tests the brief names explicitly:** stat-line derivation lives in
   `model/stats.test.ts` + `components/StatLine.test.tsx` (fixtures in, counts asserted);
   hatch-on-every-empty-cell lives in `components/EmptyCell.test.tsx` (walks the real

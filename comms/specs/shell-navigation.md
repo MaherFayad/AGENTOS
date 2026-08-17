@@ -87,6 +87,66 @@ other id appears there; where a requirement touches a neighbour, the row says wh
     exists. Note that §2.7 calls it a "login/landing page": under decision 11 the landing
     half is legitimate marketing and the login half does not exist in v1.
 
+### M15 — the project segment (`Plan §9`, `Plan §23.12`)
+
+Decisions 13–16 were taken while re-scoping every route under `/p/:project`. They are
+filed here rather than in a Part Two spec because ADR-013 keeps the coverage gate pointed
+at the spec of record: the routing skeleton is still PART II's and the chrome is still
+§2.0's, so the requirements below cite those and name `Plan §n` in their own text. That is
+the same treatment `observability.md` gives REQ-OBS-27 and it is deliberate — a second
+spec file for the same surface would be a second owner for the same rows.
+
+13. **Every view URL carries its project, and `null` is a question, never a default.** The
+    whole view tree moved to `app/(views)/p/[project]/…`, mirroring the API shape
+    `packages/contracts/src/project.ts` fixes (*"a request names its project in its path,
+    and there is no default"*). `parseShellRoute` returns `project: null` for a path with
+    no `/p/` segment, meaning *this URL does not say* — and nothing in the shell
+    substitutes a value for it. A `null` that quietly became `'agentos'` here would
+    reintroduce, one layer up, the ambient default the API contract refuses: some
+    project's data rendered under a name the reader supplied from memory.
+
+14. **The compatibility path is one catch-all that asks, not a redirect that assumes.**
+    `app/(views)/[...legacy]/page.tsx` is the lowest-priority match in the App Router, so
+    the four real view trees win before it is consulted — the whole pre-M15 URL space costs
+    one file rather than a duplicate tree. It renders no project's data. It reads
+    `GET /api/projects` for the coordinator's own `mounted` slug and `replace`s the URL to
+    name it. **When it cannot ask, it picks nothing** and says so. That last clause is what
+    makes this a design rather than a default with extra steps, and it is why the redirect
+    could not live in `next.config`: the build does not know which library a coordinator
+    mounts, and baking one in would ship an app that relabels one deployment's data with
+    another's project name.
+
+    **Intended resolution for a project-less URL, stated once because it is the first thing
+    a bookmark hits:** `/map` → `/p/<mounted>/map`, where `<mounted>` is the coordinator's
+    answer and nothing else. Three named senders stay unscoped on purpose and all land
+    here — `manifest.webmanifest`'s `start_url` and shortcuts (a static file cannot name a
+    project without naming the same one on every deployment), push deep links until a
+    payload carries a project field (`sessions-relay-engineer`'s to add), and anything
+    bookmarked before M15. *Verified 2026-08-17 against a runner booted at `1e5b5d7`:
+    `GET /api/projects` answers `mounted: "agentos"`, so the resolution completes. The
+    "this link does not name a project" screen seen earlier was a **stale runner process
+    that predated the route**, not the resting state — it is the honest failure state, and
+    it is what a reader sees whenever the coordinator is unreachable.*
+
+15. **The switcher joins the left cluster; it is not a fifth tab.** `Plan §23.5` is
+    explicit that the centre column's budget is spent — four wide-tracked labels measure
+    ~400px and six will not fit. The switcher is placed before the fullscreen toggle inside
+    the left `1fr` of decision 2's grid, so it changes the weight of a side cluster and
+    moves the tab group by nothing. Same mechanism, same reason, as the SESSIONS tab and
+    the cost ticker.
+
+16. **No shell surface falls back to a pre-project route.** `/api/graph`, `/api/panels`
+    and `/api/cost/today` are all still mounted and now answer **400
+    `project_scope_missing`**, with the contract's instruction attached: *"it is not a
+    fallback and must not be used as one … answering it with a plausible `usd: null` would
+    hide the migration from the only people who can finish it."* So when there is no
+    project the shell asks for **nothing** — `projectApiUrl` returns `null`, `useEndpoint`
+    renders `noTargetMessage`, and the search panel and the ticker each print which absence
+    it is. The consequence is worth stating positively: **there is no state in which a
+    shell surface shows a real number about a project other than the one the URL names.** A
+    design with a correctly-labelled fallback would have had one, and a correct label is a
+    weaker guarantee than an impossible state.
+
 ## Coverage
 
 | ID | Spec § | Requirement | Implemented in | Verified by |
@@ -136,12 +196,12 @@ other id appears there; where a requirement touches a neighbour, the row says wh
 | REQ-SHELL-43 | §2.0 | A skip link is the first tabbable element and jumps past the chrome to the view | `apps/web/src/components/shell/AppShell.tsx` | `apps/web/src/components/shell/AppShell.test.tsx` |
 | REQ-SHELL-44 | §2.0 | Every colour in the shell is a token; the only colour is the copper eyebrow and the copper LIVE numeral | `apps/web/src/components/shell/AppShell.tsx` | `scripts/check-tokens.mjs` |
 | REQ-SHELL-45 | PART II | The shell mounts once for all four views and survives navigation between them without remounting | `apps/web/src/app/(views)/layout.tsx` | `apps/web/src/components/shell/AppShell.test.tsx` |
-| REQ-SHELL-46 | PART II | URL reflects view state: `/map`, `/dashboards`, `/chart`, `/sessions` | `apps/web/src/components/shell/route.ts` · `apps/web/src/app/(views)/map/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
-| REQ-SHELL-47 | PART II | Drill-ins are addressable: `/map/:department` and `/chart/:department` | `apps/web/src/app/(views)/map/[department]/page.tsx` · `apps/web/src/app/(views)/chart/[department]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
-| REQ-SHELL-48 | PART II | An open drawer is addressable: `/map/:department/:agent` | `apps/web/src/app/(views)/map/[department]/[agent]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
-| REQ-SHELL-49 | PART II | A dashboard and a session are addressable: `/dashboards/:id`, `/sessions/:id` | `apps/web/src/app/(views)/dashboards/[id]/page.tsx` · `apps/web/src/app/(views)/sessions/[id]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-46 | PART II | URL reflects view state **inside a project**: `/p/:project/map`, `/p/:project/dashboards`, `/p/:project/chart`, `/p/:project/sessions` — the whole view tree lives under `p/[project]/` (M15, `Plan §9`) | `apps/web/src/components/shell/route.ts` · `apps/web/src/app/(views)/p/[project]/map/page.tsx` · `apps/web/src/app/(views)/p/[project]/dashboards/page.tsx` · `apps/web/src/app/(views)/p/[project]/chart/page.tsx` · `apps/web/src/app/(views)/p/[project]/sessions/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-47 | PART II | Drill-ins are addressable inside the project: `/p/:project/map/:department` and `/p/:project/chart/:department` | `apps/web/src/app/(views)/p/[project]/map/[department]/page.tsx` · `apps/web/src/app/(views)/p/[project]/chart/[department]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-48 | PART II | An open drawer is addressable: `/p/:project/map/:department/:agent` | `apps/web/src/app/(views)/p/[project]/map/[department]/[agent]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-49 | PART II | A dashboard and a session are addressable: `/p/:project/dashboards/:id`, `/p/:project/sessions/:id` | `apps/web/src/app/(views)/p/[project]/dashboards/[id]/page.tsx` · `apps/web/src/app/(views)/p/[project]/sessions/[id]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
 | REQ-SHELL-50 | PART II | Back and forward behave, because navigation is router pushes and no view holds shadow state | `apps/web/src/components/shell/ViewTabs.tsx` · `apps/web/src/components/shell/route.ts` | `apps/web/src/components/shell/route.test.ts` |
-| REQ-SHELL-51 | PART II | An unknown or root path resolves to MAP rather than erroring | `apps/web/src/components/shell/route.ts` · `apps/web/src/app/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-51 | PART II | An unknown or root path resolves to MAP rather than erroring — `/` redirects to `/map`, which names no project and is answered by the resolver (REQ-SHELL-93), not by an error | `apps/web/src/components/shell/route.ts` · `apps/web/src/app/page.tsx` · `apps/web/src/app/(views)/[...legacy]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
 | REQ-SHELL-52 | PART II | Every view route is a mount point an owning agent swaps into, with an honest empty state until then | `apps/web/src/components/shell/ViewMount.tsx` | `apps/web/src/components/shell/AppShell.test.tsx` |
 | REQ-SHELL-53 | PART II | The shell↔canvas seam is five named, typed events and nothing else | `apps/web/src/lib/shell-bus.ts` | `apps/web/src/lib/shell-bus.test.ts` |
 | REQ-SHELL-54 | §3.6 | A web app manifest is served with name, short_name, start_url, scope and `display: standalone` | `apps/web/public/manifest.webmanifest` | `apps/web/src/lib/pwa.test.ts` · `scripts/__tests__/shell-pwa.test.mjs` |
@@ -179,6 +239,24 @@ other id appears there; where a requirement touches a neighbour, the row says wh
 | REQ-SHELL-86 | §2.7 | Four-step card row: Install, Interview, Second brain, Live | — | — |
 | REQ-SHELL-87 | §2.7 | All of the above use the Part I tokens with no marketing-only palette | — | — |
 | REQ-SHELL-88 | §2.7 | The landing page is public-facing and lives outside the tailnet-only app; it carries no login | — | — |
+| REQ-SHELL-89 | PART II | A path with no `/p/` segment parses to `project: null` — *this URL does not say* — and no code path in the shell substitutes a value for it (M15, `Plan §9`) | `apps/web/src/components/shell/route.ts` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-90 | PART II | `/p/:project` is consumed only when the segment passes `packages/contracts`' own slug predicate — the runner's, not a second one — so `/p/all`, `/p/api` and `/p/p` are not projects | `apps/web/src/components/shell/route.ts` · `packages/contracts/src/project.ts` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-91 | PART II | Every href the shell or a view builds stays in the project it was built from, and degrades to the pre-project shape rather than emitting `/p/null/…` when there is none | `apps/web/src/components/shell/route.ts` · `apps/web/src/components/shell/useProjectHref.ts` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-92 | PART II | Every pre-M15 path is answered by one catch-all rather than a duplicated route tree, and that file renders no project's data | `apps/web/src/app/(views)/[...legacy]/page.tsx` · `apps/web/src/components/shell/LegacyRouteResolver.tsx` | `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-93 | PART II | A project-less URL is resolved by asking `GET /api/projects` which project this coordinator mounts, then `replace`-ing the URL to name it — so the reader sees the project in the address bar before any of its data is drawn | `apps/web/src/components/shell/LegacyRouteResolver.tsx` · `apps/web/src/components/shell/useProjects.ts` | `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-94 | PART II | When the coordinator cannot be asked, or answers without naming a mounted project, **nothing is picked**: the page says the link does not name a project and why, and no view is mounted under an unnamed project | `apps/web/src/components/shell/LegacyRouteResolver.tsx` | `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-95 | PART II | Switching project keeps the view and the department and drops the agent, the panel and the session — the same slug in two projects is a different agent (ADR-014 §2) | `apps/web/src/components/shell/route.ts` · `apps/web/src/components/shell/ProjectSwitcher.tsx` | `apps/web/src/components/shell/route.test.ts` · `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-96 | §2.0 | The project switcher sits first in the top-left cluster, adds no fifth tab, and spends none of the centring grid's `auto` column — the tab group does not move (`Plan §23.5`) | `apps/web/src/components/shell/ProjectSwitcher.tsx` · `apps/web/src/components/shell/TopBar.tsx` | `apps/web/src/components/shell/AppShell.test.tsx` |
+| REQ-SHELL-97 | §2.0 | The switcher is a real `listbox` reachable without a pointer: `⌘K`/`Ctrl+K` opens from anywhere, arrows and Home/End walk, Enter selects, Esc closes and returns focus to the trigger | `apps/web/src/components/shell/ProjectSwitcher.tsx` | `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-98 | §2.0 | The pill shows the slug **the URL names**, and the coordinator's display name only once the coordinator confirms that slug exists; an unconfirmed name is marked in the visible label, not only in a tooltip a phone cannot show | `apps/web/src/components/shell/ProjectSwitcher.tsx` · `apps/web/src/components/shell/useProjects.ts` | `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-99 | §2.0 | A URL naming a project the coordinator does not serve renders and says so in a sentence, rather than 404ing later; a listed project this coordinator cannot serve is marked `elsewhere` | `apps/web/src/components/shell/useProjects.ts` · `apps/web/src/components/shell/ProjectSwitcher.tsx` | `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-100 | §2.0 | With one project the switcher says out loud that nothing here demonstrates scoping, and prints the coordinator's own `scopeEnforced` — with "not reported" kept apart from "not enforced" | `apps/web/src/components/shell/ProjectSwitcher.tsx` · `apps/web/src/components/shell/useProjects.ts` | `apps/web/src/components/shell/ProjectSwitcher.test.tsx` |
+| REQ-SHELL-101 | §2.0 | The breadcrumb strip carries a project trail — `project › department › leaf` — whose head crumb is the project the URL names and never the coordinator's mounted one, with the separator rendered by the component so RTL flips it (`Plan §23.12`, §1.4) | `apps/web/src/components/shell/BreadcrumbStrip.tsx` · `apps/web/src/components/shell/route.ts` | `apps/web/src/components/shell/AppShell.test.tsx` · `apps/web/src/components/shell/route.test.ts` |
+| REQ-SHELL-102 | §2.0 | The search index is read from this project's scoped routes only, and every result is a link into this project's map or dashboards | `apps/web/src/components/shell/useSearchIndex.ts` · `apps/web/src/components/shell/SearchPill.tsx` | `apps/web/src/components/shell/SearchPill.test.tsx` |
+| REQ-SHELL-103 | §2.0 | No shell surface calls a pre-project route: with no project in the URL `projectApiUrl` returns `null`, nothing is requested, and the deliberate 400 on the old spelling is never converted into a shrug | `apps/web/src/components/shell/useSearchIndex.ts` · `apps/web/src/components/shell/useEndpoint.ts` | `apps/web/src/components/shell/CostTicker.test.tsx` |
+| REQ-SHELL-104 | §2.0 | The cost ticker reads `/api/p/:project/cost/today` and has exactly two scopes, `project` and `unscoped`, both readable off the DOM — there is no state in which it shows a real number about another project | `apps/web/src/components/shell/CostTicker.tsx` | `apps/web/src/components/shell/CostTicker.test.tsx` |
+| REQ-SHELL-105 | §2.0 | The search panel says which absence it is when the URL names no project, instead of an empty list | `apps/web/src/components/shell/useSearchIndex.ts` · `apps/web/src/components/shell/SearchPill.tsx` | — |
+| REQ-SHELL-106 | §2.0 | Every endpoint-backed shell control drops the previous target's answer before asking about the new one, so no figure survives a project switch on screen | `apps/web/src/components/shell/useEndpoint.ts` | — |
 
 ## Interfaces we expose
 
@@ -193,8 +271,21 @@ message.
 - `parseShellRoute`, `breadcrumbFor`, `searchPlaceholder`, `viewHref`, `viewHasZoom`,
   `viewHasLiveCounter`, `VIEWS`, `VIEW_LABELS`, `ShellView`, `ShellRoute` — routing as
   pure functions, testable without a router.
-- `useShell()` — `{ route, zoom, yourTree, liveCounts, liveCountsMessage, search,
-  reducedMotion, helpOpen }`.
+- **The project segment, also as pure functions** (M15): `splitProject`, `withProject`,
+  `projectPrefix`, `switchProjectHref`, `projectTrail`, `PROJECT_SEGMENT`. `ShellRoute`
+  gained `project: string | null`; `null` means *the URL does not say* and must not be
+  read as a default (decision 13).
+- **`useProjectHref()` / `useProjectSegment()`** — the seam for the four view owners.
+  A view builds `href('/map/sales')` and stays in the project it is already in without
+  taking a dependency on `ShellContext`. `chart-matrix.md` and `dashboards.md` already
+  consume it; `map-galaxy-engineer` and `drawer-engineer` are its other callers.
+  **Changing what it prefixes is an ADR, not a refactor.**
+- `projectApiUrl(template, project)` (from `useSearchIndex.ts`) — the one place a scoped
+  API URL is built. Returns `null` when there is no project, which every caller must read
+  as *do not ask*, never as *ask the wide one* (decision 16).
+- `useShell()` — `{ route, project, zoom, yourTree, liveCounts, liveCountsMessage, search,
+  reducedMotion, helpOpen, projects }`. `project` is a `ProjectScope`: what the URL says,
+  what the coordinator confirmed, and — when those differ — the sentence that says so.
 - **`src/lib/shell-bus.ts`** — the contract that matters to `map-galaxy-engineer` and
   `chart-matrix-engineer`:
   - shell → canvas: `shell:flyTo` `{target, source, durationMs}`, `shell:zoom`
@@ -214,12 +305,25 @@ message.
   `components/primitives/**`. The shell imports them through one file,
   `components/shell/ui.ts`, so a rename breaks one file rather than fifteen.
 - `comms/contracts/api-contracts.md` (`runner-engineer`) — `GET /api/status`
-  (`tailscale`, `queueDepth`), `GET /api/panels`, and `POST /api/push/subscribe`.
-- `GET /api/cost/today` → `{usd}` — `observability-engineer`'s route, deliberately not
-  proxied by the runner (their FYI of 2026-08-15). The ticker reads it directly.
-- `comms/contracts/graph-layout.md` (`map-galaxy-engineer`) — `GET /api/graph` shape for
-  the search index and the live counts. Read defensively: a payload that drifts degrades
-  to "nothing indexed", never to a crash in the top bar.
+  (`tailscale`, `queueDepth`), `GET /api/p/:project/panels`, and `POST /api/push/subscribe`.
+  **`/api/status` is coordinator-level and stays unscoped on purpose** — tailnet state and
+  queue depth are facts about the process, not about a project. It is the one shell read
+  that decision 16 does not apply to, written down here so it is not "fixed" later.
+- `comms/contracts/project-scoping.md` (`runner-engineer`, in trust for
+  `platform-projects-engineer`) and `packages/contracts/src/project.ts` — the slug
+  predicate, `RESERVED_PROJECT_SLUGS`, `projectPath`, `RUNNER_ROUTES`,
+  `COST_TICKER_ROUTE`. The shell defines none of these a second time, which is why
+  `/p/all` cannot become a project by disagreement between two regexes.
+- `GET /api/projects` → `{projects[], mounted, scopeEnforced}` — the switcher's list and
+  the legacy resolver's only input. `mounted` and `scopeEnforced` are read as reported and
+  never inferred: `scopeEnforced` is tri-state on purpose, because "not reported" and "not
+  enforced" are two different sentences.
+- `GET /api/p/:project/cost/today` → `{usd, runs, ledger}` — `observability-engineer`'s
+  route, deliberately not proxied by the runner (their FYI of 2026-08-15). The pre-project
+  spelling answers 400 and the ticker does not call it (decision 16).
+- `comms/contracts/graph-layout.md` (`map-galaxy-engineer`) — `GET /api/p/:project/graph`
+  shape for the search index and the live counts. Read defensively: a payload that drifts
+  degrades to "nothing indexed", never to a crash in the top bar.
 - `agents/**/SKILL.md` via that graph payload only. The shell holds no agent list.
 
 ## Test plan
@@ -235,6 +339,16 @@ message.
   down" is a first-class case here, not an afterthought.
 - **Token discipline** — `node scripts/check-tokens.mjs`. Zero violations in
   `components/shell/**`, `src/lib/**` and `src/app/**` is the standing bar.
+- **Two rows are owed a test and say so with `—`** (which is what makes
+  `validate:coverage` warn on them rather than passing them in silence):
+  **REQ-SHELL-105**, the search panel's no-project sentence — the shared helper it rests
+  on is pinned by `CostTicker.test.tsx` (REQ-SHELL-103), but the panel's own copy is not,
+  and one `SearchPill.test.tsx` case at `pathname: '/map'` closes it. **REQ-SHELL-106**,
+  the drop-the-previous-answer rule in `useEndpoint` — this one is genuinely unreachable
+  today, because the coordinator mounts one project and refuses every other with
+  `project_not_mounted`, so a test would have to drive the hook directly rather than a
+  surface. Both are in scope for me and were left out of this pass only because it was
+  scoped to the spec file.
 - **Not automatable here.** (a) The 1440px side-by-side against their frame — that is
   `fidelity-qa-reviewer`'s gate (PART VI). (b) Real install-to-home-screen on iOS and
   Android, and a real push arriving while the app is closed: both need a device on the
@@ -265,3 +379,27 @@ message.
 - **A visible install banner.** The affordance sits in the `?` sheet; §2.0 fixes what is
   in the top bar and an uninvited banner over the galaxy would be the first thing anyone
   screenshotting this product would want removed.
+
+### M15 — deliberately not done
+
+- **A `p/[project]/layout.tsx` that validates the slug and 404s.** An unknown project
+  renders, and the switcher and the trail both mark it unconfirmed in the visible label
+  (REQ-SHELL-98, REQ-SHELL-99). Refusing the page instead would put the coordinator's
+  project list on the critical path of every navigation, and would turn "the runner is
+  down" into "your project does not exist" — which is the wrong sentence and the one a
+  reader would act on.
+- **A static redirect for the legacy paths.** Decision 14: the build cannot know which
+  library a coordinator mounts, so the redirect has to ask. This costs one frame on a
+  bookmarked link and buys the property that no deployment can relabel another's data.
+- **The all-projects search toggle** (`/api/all/…` exists in the contract). A second
+  project would be needed to show that it scopes anything, and a toggle whose two states
+  look identical teaches the reader that scope is decorative.
+- **The cost ticker's account split** (`work $12.40 · personal $3.10`, `Plan §23.12`). It
+  lands as a field on the existing `amount` reading, not as a second component — the
+  formatter and the four unknown-shaped cases are reusable as they stand. Blocked on
+  `ops.credential` having more than one row, not on shell work.
+- **Any client persistence of "the last project you were in."** Decision 11 still holds:
+  there is no user, so there is nowhere honest to keep it. The URL is the state.
+- **A project field in push deep links.** A notification payload has no project yet, so a
+  tapped notification resolves through the legacy catch-all. That field is
+  `sessions-relay-engineer`'s to add (§3.6); the shell will consume it the day it exists.
