@@ -142,6 +142,36 @@ describe('ProjectSwitcher — keyboard before pointer (`Plan §23.11` rule 7)', 
     fireEvent.click(screen.getByRole('option', { name: /AgentOS/ }));
     expect(routerMock.push).not.toHaveBeenCalled();
   });
+
+  /**
+   * From the RTL arrow-key audit that fixed §2.0's tablist. The switcher is a **vertical**
+   * listbox, and `dir` does not touch the block axis: ArrowDown is the next project in both
+   * directions, and `Home`/`End` are ordinals rather than edges. Correct already — pinned so
+   * that a later "make the shell RTL-aware" pass cannot turn a right answer into a wrong one
+   * by symmetry. Reading order mirrors; the block axis and ordinals do not.
+   */
+  it('RTL: ArrowDown still walks forward, and Home/End stay ordinal', async () => {
+    stubFetch({ '/api/projects': { json: TWO_PROJECTS } });
+    renderShell(
+      <div dir="rtl">
+        <ProjectSwitcher />
+      </div>,
+      { pathname: '/p/agentos/map/sales/account-enrichment' },
+    );
+    await waitFor(() => expect(screen.getByText('AgentOS')).toBeTruthy());
+
+    fireEvent.keyDown(trigger(), { key: 'ArrowDown' });
+    const list = screen.getByRole('listbox');
+    fireEvent.keyDown(list, { key: 'ArrowDown' }); // agentos → client-x, as in LTR
+    expect(screen.getByRole('option', { name: /Client X/ }).id).toBe(
+      list.getAttribute('aria-activedescendant'),
+    );
+
+    fireEvent.keyDown(list, { key: 'Home' }); // "the first project", not "the leading edge"
+    expect(screen.getByRole('option', { name: /AgentOS/ }).id).toBe(
+      list.getAttribute('aria-activedescendant'),
+    );
+  });
 });
 
 describe('LegacyRouteResolver — a link that does not name a project', () => {

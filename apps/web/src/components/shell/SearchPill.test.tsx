@@ -96,4 +96,32 @@ describe('SearchPill (§2.0)', () => {
     type('anything');
     await waitFor(() => expect(screen.getByText(/off the tailnet/i)).toBeTruthy());
   });
+
+  /**
+   * The other half of the RTL arrow-key audit that fixed `SegmentedControl` (§2.0).
+   *
+   * The result list walks on the **block** axis, and `dir` does not touch the block axis —
+   * ArrowDown means the next result in Arabic exactly as it does in English. That is the
+   * right answer, but until now it was an untested one, and "correct by inspection" in one
+   * of the two directions the product ships in is the precise standard that let the tablist
+   * bug live. So it is pinned: **the fix must not be "completed" into this control.**
+   *
+   * Search is also the keyboard path into a canvas galaxy (§2.0), so an Arabic reader
+   * losing these arrows would lose the MAP view entirely.
+   */
+  it('RTL: ArrowDown still walks forward, because the block axis does not mirror', async () => {
+    renderShell(
+      <div dir="rtl">
+        <SearchPill />
+      </div>,
+    );
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const input = type('a');
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(1));
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getAllByRole('option')[1]?.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(screen.getAllByRole('option')[0]?.getAttribute('aria-selected')).toBe('true');
+  });
 });

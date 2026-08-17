@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { elementDirection, inlineStep } from '@/chart/model/direction';
 import { cx } from './cx';
 
 /**
@@ -16,6 +17,30 @@ import { cx } from './cx';
  * letter-spacing adds a phantom space after the last glyph. Without the
  * compensation every tracked label in the shell sits a hair left of centre;
  * with it, they look drawn rather than typed.
+ *
+ * ---
+ *
+ * **Arrow keys follow reading order.** `MIRRORS['shell.segmentedControl']` names this
+ * control: *"§2.0 — tab order is reading order."* The tablist is an `inline-flex` row, so
+ * `dir="rtl"` reverses it on its own and MAP sits at the far *right*; before 2026-08-17 the
+ * handler mapped `ArrowRight` to `+1` regardless, so the arrows ran backwards for every
+ * Arabic reader of the shell's primary navigation. `inlineStep` reverses with the row;
+ * `elementDirection` reads the direction off the rendered tree, so a control inside one of
+ * §2.5's or §3.1's LTR islands keys LTR even on an RTL page.
+ *
+ * **`Home` and `End` deliberately do not mirror.** They are ordinal — "the first tab", not
+ * "the tab at the leading edge" — and flipping them would be a second bug rather than a
+ * completion of the fix. Same test as everywhere else: reading order mirrors, ordinals,
+ * space and time do not.
+ *
+ * **On the import above, which points the wrong way.** A primitive should not depend on a
+ * view, and `@/chart/model/direction` is `chart-matrix-engineer`'s. It is deliberate and
+ * interim: the alternative is a second copy of the same six lines, and two copies of one
+ * rule is exactly what let this bug exist in two components at once. The promotion target
+ * is `i18n/direction.ts`, next to `inlineSign` and the `MIRRORS` table that governs both
+ * call sites — `rtl-arabic-pdpl-specialist`'s file, so it is proposed rather than performed
+ * (`decision-request` of 2026-08-17). Until then the odd import is the visible debt, which
+ * is the point of leaving it visible.
  */
 
 export interface SegmentedOption<T extends string> {
@@ -45,9 +70,10 @@ export function SegmentedControl<T extends string>({
 
   const onKeyDown = (e: React.KeyboardEvent, index: number) => {
     const last = options.length - 1;
-    let next = index;
-    if (e.key === 'ArrowRight') next = index === last ? 0 : index + 1;
-    else if (e.key === 'ArrowLeft') next = index === 0 ? last : index - 1;
+    // The step is along the LIST, and the wrap with it — never along the screen.
+    const delta = inlineStep(e.key, elementDirection(e.currentTarget));
+    let next: number;
+    if (delta !== 0) next = (index + delta + options.length) % options.length;
     else if (e.key === 'Home') next = 0;
     else if (e.key === 'End') next = last;
     else return;
