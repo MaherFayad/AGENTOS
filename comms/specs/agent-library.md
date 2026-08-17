@@ -101,11 +101,19 @@ the coverage checker steals another agent's section:
 | REQ-LIB-42 | PART IV | Every agent ships `status: draft`; nothing hand-sets `live` | `agents/` | validator warns on any hand-set `live` |
 | REQ-LIB-43 | PART IV | Validator: every `wired_into` name exists in `agents/_registry/connectors.json` (invariant 5); the file is required | `scripts/validate-frontmatter.mjs` | `node scripts/validate-frontmatter.mjs` |
 | REQ-LIB-44 | PART IV | Seeder only emits `wired_into` names that exist in the connector registry | `scripts/seed-agents.mjs` | `node scripts/seed-agents.mjs` |
+| REQ-LIB-45 | PART IV | The department enum is declared exactly once — `DEPARTMENT_SLUGS` in `departments.ts`; `frontmatter.ts` aliases the type and declares no `DEPARTMENT*` value (ADR-001, ADR-035) | `packages/contracts/src/departments.ts` | `scripts/__tests__/barrel-exports.test.mjs` |
+| REQ-LIB-46 | PART IV | No runtime name is exported by two `export *` modules of `packages/contracts/src/index.ts` — the duplicate makes Next discard the whole barrel and every client import resolve to `undefined` (ADR-035) | `scripts/check-barrel-exports.mjs` | `scripts/__tests__/barrel-exports.test.mjs` |
+| REQ-LIB-47 | PART IV | An explicit `export { X } from` that shadows a starred **value** is refused — it silences TS2308 and does not fix the bundler (ADR-035) | `scripts/check-barrel-exports.mjs` | `scripts/__tests__/barrel-exports.test.mjs` |
+| REQ-LIB-48 | PART VI | A gate boots the app and observes the artifact: every route 2xx and renders the shell, the compile log is free of `Attempted import error` / `conflicting star exports`, and every `__barrel_optimize__?names=N` client module exports `N` | `scripts/smoke-routes.mjs` | `npm run smoke` — falsified against the live broken dev server (ADR-035) |
 
 ## Interfaces we expose
 
-- **`packages/contracts/src/frontmatter.ts`** — `DEPARTMENTS` (ordered, ADR-001),
-  `DEPARTMENT_LABELS`, `TIERS`, `PHASES`, `STATUSES`, `APPROVALS`, `INPUT_TYPES`,
+- **`packages/contracts/src/departments.ts`** — `DEPARTMENT_SLUGS` (the literal tuple; the
+  **only** declaration of the department enum, ADR-001/ADR-035), `DEPARTMENT_LABELS`,
+  `DEPARTMENTS` (the ordered angle/rail table), `DepartmentSlug`, `DepartmentInfo`,
+  `isDepartment`, `getDepartment`, `findDepartment`, `departmentLabel`.
+- **`packages/contracts/src/frontmatter.ts`** — `Department` (a **type alias** of
+  `DepartmentSlug`, never a value), `TIERS`, `PHASES`, `STATUSES`, `APPROVALS`, `INPUT_TYPES`,
   `LADDER_RUNGS`; types `AgentFrontmatter`, `InputField`, `Delivery`, `Ladder`,
   `ClusterRegistry`, `ConnectorRegistry`, `ConnectorDefinition`, `AgentFile`,
   `ValidationReport`; schemas `agentFrontmatterSchema`, `clusterRegistrySchema`,

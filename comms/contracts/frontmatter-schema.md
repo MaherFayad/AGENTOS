@@ -156,3 +156,19 @@ is feedback, not the boundary.
 The seven canonical `department` values and `cluster` as registry-validated free text are
 decided in `comms/decisions/ADR-001-department-taxonomy.md`. This contract's enums match
 that ADR. `cluster` is not a TypeScript enum.
+
+**Where the enum lives, as of ADR-035 (2026-08-17).** `packages/contracts/src/departments.ts`
+declares `DEPARTMENT_SLUGS` — a literal `as const` tuple — and it is the **only** declaration
+of the department enum in the repo. `DEPARTMENT_LABELS` and the ordered `DEPARTMENTS` table
+(slug · label · index · angle · rail neighbours) derive from it in the same file.
+`frontmatter.ts` imports the tuple for `z.enum(...)` and for `clusterRegistrySchema`, and
+exports `Department` as a **type alias** of `DepartmentSlug`, never a second value.
+
+This is not tidiness. `frontmatter.ts` used to declare its own `DEPARTMENTS` beside
+`departments.ts`'s, both star-exported from `index.ts`, and Next's `optimizePackageImports`
+barrel optimizer responds to a duplicate runtime name by **discarding the entire barrel** —
+so every named import from `@agnetos/contracts` in a client component resolved to
+`undefined` and all four views white-screened, while `tsc --noEmit` was clean and
+`next build` exited 0. `npm run validate:barrel` (`scripts/check-barrel-exports.mjs`) now
+refuses the duplicate, and `validate:frontmatter` separately refuses a `DEPARTMENT*` value
+re-declared in `frontmatter.ts`. **The seven slugs and their order are unchanged.**
