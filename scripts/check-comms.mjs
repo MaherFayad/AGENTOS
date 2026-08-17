@@ -175,6 +175,12 @@ async function checkInbox(roster) {
   for (const dir of await listDir(inbox)) {
     if (!dir.isDirectory()) continue;
 
+    // `_archive/` holds answered and closed messages, one subdirectory per agent. It is
+    // deliberately outside this walk: rule 1 says an agent reads its *open* messages, and
+    // that instruction only means something if answered mail actually leaves the inbox.
+    // Nothing is deleted — the record moves, so the reading cost stops growing with it.
+    if (dir.name === '_archive') continue;
+
     // A message addressed to nobody is a message nobody reads.
     if (dir.name !== '_all' && !roster.has(dir.name)) {
       fail(`comms/inbox/${dir.name}/ is not an agent on the BOARD roster (and is not _all).`);
@@ -333,10 +339,67 @@ async function checkStatus(roster) {
   return roster.size;
 }
 
+/**
+ * The reading budget.
+ *
+ * Rule 1 makes `BRIEF.md` the one file every dispatch reads in full, so its length is
+ * multiplied by every agent that ever runs. `BOARD.md` grew from ~600 to over 1,300 lines
+ * inside a single session while rule 1 still pointed at it, and the reading cost quietly
+ * exceeded the work — roughly 4,000 lines ingested per dispatch before anything happened.
+ *
+ * A cap in prose is a preference; a cap in a gate is a mechanism. This is the mechanism.
+ * When BRIEF outgrows it the answer is to *cut*, not to raise the number — the standing
+ * findings earn their place by costing a session each, and the milestone section is
+ * supposed to shrink as milestones close.
+ */
+const BRIEF_MAX_LINES = 150;
+
+/**
+ * Open mail is also read every dispatch (rule 1), so it is the same tax with a different
+ * name. 137 sat open at once before rule 6 existed. This warns rather than fails: unlike
+ * BRIEF, the count is not fully in any one agent's control — you cannot close a message
+ * whose answer is with the user.
+ */
+const OPEN_MESSAGE_WARN = 60;
+
+async function checkReadingBudget(openCount) {
+  const rel = 'comms/BRIEF.md';
+  let text;
+  try {
+    text = await readFile(join(COMMS, 'BRIEF.md'), 'utf8');
+  } catch {
+    fail(`${rel} is missing — it is what comms/README.md rule 1 tells every agent to read.`);
+    return;
+  }
+
+  // Total lines, not non-blank ones. The first version of this check counted non-blank and
+  // read 143 on a file `wc -l` called 177 — the cap said "150 lines" and measured something
+  // else, so a reader and the gate disagreed about whether the same file was over budget.
+  // That is the house defect (a declared value read as an observed one) inside the gate
+  // written to prevent it. Caught by planting 40 lines and watching this stay green.
+  const lines = text.split('\n').length;
+  if (lines > BRIEF_MAX_LINES) {
+    fail(
+      `${rel} is ${lines} lines, over its ${BRIEF_MAX_LINES}-line cap. ` +
+        `Every dispatch reads this file in full, so its length is multiplied by every agent ` +
+        `that ever runs. Cut it — do not raise the cap.`,
+    );
+  }
+
+  if (openCount > OPEN_MESSAGE_WARN) {
+    warn(
+      `${openCount} open inbox messages (soft limit ${OPEN_MESSAGE_WARN}). Rule 1 makes ` +
+        `agents read their open mail, so this is a tax every later dispatch pays. Answer ` +
+        `and archive to comms/inbox/_archive/<agent>/ (rule 6), or say why they must stay open.`,
+    );
+  }
+}
+
 async function main() {
   const roster = await rosterFromBoard();
 
   const messages = await checkInbox(roster);
+  await checkReadingBudget(messages);
   const contracts = await checkContracts();
   const decisions = await checkDecisions();
   const agents = await checkStatus(roster);

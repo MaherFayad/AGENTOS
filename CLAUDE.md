@@ -9,9 +9,14 @@ until an ADR says otherwise.
 
 ## Before doing anything in this repo
 
-1. Read [comms/BOARD.md](comms/BOARD.md) — ownership, milestones, standing constraints.
+1. Read [comms/BRIEF.md](comms/BRIEF.md) — capped at 150 lines: current milestone, the
+   rules that don't bend, and the findings that each cost a session. **This is the whole
+   mandatory read.** [comms/BOARD.md](comms/BOARD.md) is the full record — consult the
+   section you need; do not ingest 1,300 lines to change one file.
 2. Read [comms/README.md](comms/README.md) — the agent communication protocol.
-3. Read the contracts in [comms/contracts/](comms/contracts/) that your work consumes.
+3. Read the **sections** of the contracts in [comms/contracts/](comms/contracts/) that
+   your work consumes. A contract you consume is not optional — most cross-agent bugs are
+   a consumer who guessed — but the contracts total 4,400 lines and nobody needs all of it.
 
 ## Working with the specialist agents
 
