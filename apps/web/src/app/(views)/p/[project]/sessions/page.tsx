@@ -1,29 +1,38 @@
-import { SessionsTab } from '@/sessions';
+import { redirect } from 'next/navigation';
 
 /**
- * `/sessions` — §3.1's session list. Owner: `sessions-relay-engineer`.
+ * `/p/:project/sessions` — **redirected to `/p/:project/threads`** (M16, `Plan §23.8`).
  *
- * **No longer a tab, and deliberately not a redirect** (M16, `Plan §23.8`). THREADS took
- * the fourth slot; this path stays live as a sub-view under it, and `parseShellRoute`
- * lights THREADS while you are here.
+ * `shell-navigation-engineer` deliberately left this un-redirected and wrote the condition
+ * on it: *"when your thread list can list session threads, this becomes a redirect; that
+ * step is theirs."* It can now. `ThreadsView` mounts `SessionsTab` unchanged as its session
+ * group — same rows, same key gate, same client-side decryption boundary, same push
+ * settings — so nothing that worked here has been sent to a placeholder.
  *
- * The alternative was `redirect('/p/:project/threads')`. It was rejected because
- * `/threads` is a `ViewMount` until `sessions-relay-engineer` builds it: redirecting would
- * take a screen that works — decrypting and listing real relay sessions — and send it to a
- * placeholder. Removing a working surface is not what "replaces" means while the
- * replacement is empty. When the thread list can list session threads, this becomes a
- * redirect; that step is theirs, and this comment is the note it is waiting on.
+ * Redirecting is not cosmetic tidying. THREADS took the fourth tab slot, so after the
+ * rename **no navigation control in the product pointed at this path at all**: the session
+ * list was reachable only by typing the URL or following a push deep link saved on a home
+ * screen. This route existing but being unreachable is worse than either of the two honest
+ * options, and the honest option is the one where the tab that replaced SESSIONS contains
+ * them.
  *
- * `+ New session` in the top bar routes here with `?new=1`. Spawning a session
- * needs a machine with the Claude CLI attached to the relay, which the browser
- * cannot do on its own — the list's empty state says exactly that rather than
- * offering a button that would lie.
+ * `?new=1` is forwarded, because that is exactly the home-screen shortcut case above:
+ * `+ New session` used to land here, and it now lands on the addressing composer.
+ *
+ * **`/p/:project/sessions/:id` is NOT redirected and must never be.** A relay session id is
+ * not an `ops.thread` uuid (`thread-model.md` §5.1), §9.1 is answered *no* (ADR-037) so no
+ * mapping exists to redirect through, and every push notification already on a home screen
+ * points at that path (`sessions/push/payload.ts`). `ShellRoute` keeps `.thread` and
+ * `.session` as separate fields with a test that neither ever holds the other's value.
  */
 export default async function SessionsPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ project: string }>;
   searchParams: Promise<{ new?: string }>;
-}): Promise<React.JSX.Element> {
-  const query = await searchParams;
-  return <SessionsTab spawnRequested={query.new === '1'} />;
+}): Promise<never> {
+  const [{ project }, query] = await Promise.all([params, searchParams]);
+  const suffix = query.new === '1' ? '?new=1' : '';
+  redirect(`/p/${encodeURIComponent(project)}/threads${suffix}`);
 }

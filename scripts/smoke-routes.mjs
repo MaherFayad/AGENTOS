@@ -99,9 +99,16 @@ const ROUTES = [
   { path: '/p/agentos/chart/sales', marker: '>MAP<' },
   { path: '/p/agentos/dashboards', marker: '>MAP<' },
   // M16 — THREADS took the fourth tab slot from SESSIONS (`Plan §23.5`, `Plan §23.8`).
-  // Both session paths stay live *underneath* it rather than being redirected: `/threads`
-  // is a `ViewMount` until `sessions-relay-engineer` builds the view, and a redirect would
-  // send a working screen to a placeholder. All four are requested here because the whole
+  //
+  // `/sessions` is now a **redirect** to `/threads` (the condition
+  // `shell-navigation-engineer` left on it is met: the THREADS list mounts the real
+  // session list as its session group). `fetch` follows redirects, so the marker below is
+  // checked against `/threads`'s HTML — which is the point, since a redirect that lands on
+  // a broken page is exactly what this gate exists to catch.
+  //
+  // `/sessions/:id` is **not** redirected and must never be: a relay session id is not an
+  // `ops.thread` uuid, §9.1 is answered *no* (ADR-037), and every push notification already
+  // on a home screen points at that path. All four are requested here because the whole
   // point of this gate is that a route which compiles is not a route that loads.
   // The marker on these four is `>THREADS<` — the tab's own text node, angle brackets
   // included — rather than `THREADS`. That is not fussiness: the bare word was tried and

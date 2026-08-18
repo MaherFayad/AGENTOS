@@ -1,0 +1,449 @@
+/* =============================================================================
+ * threads.module.css — the THREADS tab (`Plan §23.5`, `Plan §23.8`, tokens Part I)
+ *
+ * NO COLOR LITERALS. Every value is var(--token) from tokens.css; every duration
+ * is var(--dur-*), which carries the prefers-reduced-motion guard for free.
+ *
+ * THE COLOR BUDGET FOR THIS ENTIRE VIEW:
+ *   --ink-copper  on the dot of a thread that is *waiting on a person*, and on the
+ *                 fan-out confirm, which is the one control in this product that
+ *                 can spend N× money. That is the "alive, waiting on you" state
+ *                 and it is the only thing here allowed to be a colour (§1.3).
+ *   everything else — ivory / ivory-2 / ink-2 / ink-3 / line / card, on --bg.
+ *                 The composer is chrome and chrome is monochrome.
+ *
+ * Both copper uses carry a `token-exempt:` line naming the value the fill
+ * carries, because `apps/web/src/threads/` is scanned as **chrome** by
+ * check-tokens' deny-list (design-tokens §8b.2) and an exemption is a claim that
+ * this colour means this thing.
+ *
+ * PHONE RULES (§3.1's, applied to a second surface rather than re-decided):
+ *   · every interactive target is >= 44px
+ *   · safe-area insets on the scrolling list and on the composer
+ *   · no hover-only affordance — a thumb has no hover, so hover only ever
+ *     reinforces something already visible
+ * ========================================================================== */
+
+.view {
+  --thr-safe-b: env(safe-area-inset-bottom, 0px);
+  --thr-safe-l: env(safe-area-inset-left, 0px);
+  --thr-safe-r: env(safe-area-inset-right, 0px);
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--ivory);
+  font-family: var(--font-sans);
+}
+
+/* rtl-exempt: a notch is a physical edge of a physical device and does not move
+   when the reader's language does. `padding-inline-start: env(safe-area-inset-left)`
+   would pad the wrong edge under dir="rtl" and leave the cutout overlapping the
+   list. No design padding is welded to these two lines — that lives on .header and
+   .scroll — so the physical keyword here is the whole declaration and the right
+   answer. Same reasoning, same wording, as sessions.module.css. */
+.view {
+  padding-left: var(--thr-safe-l);
+  padding-right: var(--thr-safe-r);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 14px 8px;
+}
+
+.eyebrow {
+  color: var(--ink-2);
+}
+
+.billingNote {
+  @apply text-meta;
+  margin: 0;
+  padding: 0 14px 12px;
+  color: var(--ink-2);
+}
+
+/* ============================================================ the scroll body */
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.group + .group {
+  margin-top: 20px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.groupCount {
+  @apply text-meta;
+  color: var(--ink-2);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card-sm);
+  background: var(--card);
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-reveal),
+    border-color var(--dur-hover) var(--ease-reveal);
+}
+
+.row:hover,
+.row:focus-visible {
+  background: var(--card-2);
+  border-color: var(--line-2);
+}
+
+.row:focus-visible {
+  outline: var(--border-w) solid var(--ivory);
+  outline-offset: 2px;
+}
+
+.rowBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rowName {
+  @apply text-body;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ivory);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  @apply text-meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+
+.sep {
+  color: var(--ink-3);
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ink-3);
+}
+
+.dot[data-state='running'] {
+  background: var(--ivory-2);
+}
+
+/* --ink-copper is §1.3's single sanctioned word for ALIVE, and the value this fill
+   carries is "this thread has asked you a question and the run is parked until you
+   answer" — `waiting` is the only thread state that costs a human time
+   (thread-model §4.5, the `question_unanswered` path). It is deliberately the same
+   colour the sessions list paints on `waiting-permission`: a reader should not have
+   to learn two vocabularies for one condition. No other thread state gets a fill —
+   `open`, `running`, `closed` and `failed` are all states the machine can leave on
+   its own, and `running` above is --ivory-2 for exactly that reason. */
+.dot[data-state='waiting'] {
+  /* token-exempt: a status dot IS the datum; this one means "this thread is parked on a question of yours" */
+  background: var(--ink-copper);
+}
+
+/* ============================================================= empty + absent */
+
+.notice {
+  @apply text-small;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 16px 14px;
+  border: var(--border-w) dashed var(--line);
+  border-radius: var(--r-card-sm);
+  color: var(--ink-2);
+}
+
+.noticeTitle {
+  @apply text-label;
+  color: var(--ivory-2);
+}
+
+/* ================================================================= composer */
+
+.composer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px calc(12px + var(--thr-safe-b));
+  border-top: var(--border-w) solid var(--line);
+  background: var(--bg);
+}
+
+.composerLabel {
+  color: var(--ink-2);
+}
+
+.input {
+  @apply text-body;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-card-sm);
+  background: var(--card);
+  color: var(--ivory);
+  font-family: inherit;
+  resize: vertical;
+}
+
+.input::placeholder {
+  color: var(--ink-3);
+}
+
+.input:focus-visible {
+  outline: var(--border-w) solid var(--ivory);
+  outline-offset: 2px;
+}
+
+.previewRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+
+.hint {
+  @apply text-meta;
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.refusal {
+  @apply text-meta;
+  margin: 0;
+  color: var(--ivory-2);
+}
+
+.token {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--ivory);
+}
+
+/* ------------------------------------------------- the three interrupt levels */
+
+.levels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.level {
+  @apply text-pill;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ivory-2);
+  cursor: pointer;
+}
+
+.level[aria-checked='true'] {
+  border-color: var(--line-2);
+  background: var(--card-2);
+  color: var(--ivory);
+}
+
+.level[aria-disabled='true'] {
+  border-style: dashed;
+  color: var(--ink-2);
+  cursor: not-allowed;
+}
+
+.level:focus-visible {
+  outline: var(--border-w) solid var(--ivory);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ the send row */
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.send {
+  @apply text-pill;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--card-2);
+  color: var(--ivory);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.send:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.send:focus-visible {
+  outline: var(--border-w) solid var(--ivory);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------- the @@ confirm */
+
+/* --ink-copper-line / --ink-copper-fill carry "alive, waiting on you" (§1.3), and
+   this panel is the single place in the product where a person is asked to
+   authorise N runs instead of one. Same treatment as the sessions permission card,
+   deliberately: both are "the product has stopped and is waiting for your
+   decision", and one vocabulary for one condition is the whole argument for a
+   restricted palette. It is NOT a warning colour, and there is no second hue in
+   here — the refusal sentence inside this panel is drawn in greys. */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  /* token-exempt: the product has stopped and is waiting for your decision — the same value the sessions permission card carries */
+  border: var(--border-w) solid var(--ink-copper-line);
+  /* token-exempt: same — this panel is only ever on screen while a person is being asked to authorise N runs */
+  background: var(--ink-copper-fill);
+  border-radius: var(--r-card-lg);
+}
+
+.confirmEyebrow {
+  color: var(--ivory-2);
+}
+
+.confirmBody {
+  @apply text-small;
+  margin: 0;
+  color: var(--ivory);
+}
+
+.confirmRefusal {
+  @apply text-meta;
+  margin: 0;
+  color: var(--ivory-2);
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.confirmActions button {
+  @apply text-pill;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ivory);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirmActions button:focus-visible {
+  outline: var(--border-w) solid var(--ivory);
+  outline-offset: 2px;
+}
+
+/* =============================================================== one thread */
+
+.threadHead {
+  padding: 16px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card-sm);
+  background: var(--card);
+}
+
+.messageHead {
+  @apply text-meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+}
+
+/* rtl-exempt: a message body is text a person typed and its direction is the
+   direction of that text, not of the interface. `unicode-bidi: plaintext` asks the
+   browser to resolve each paragraph by its own first strong character, which is
+   what makes an Arabic note inside an English UI — and the reverse — render as
+   written instead of as laid out. */
+.messageBody {
+  @apply text-small;
+  margin: 0;
+  color: var(--ivory);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+}

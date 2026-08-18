@@ -53,25 +53,18 @@
 
 /* ============================================================ the list tab */
 
+/* M16: this is a GROUP inside the THREADS view, not a tab that owns the viewport.
+   `height: 100%` and the safe-area padding both moved to `.view` in
+   threads.module.css — the outer view is the scroller and the inset owner now, and
+   a second scroller nested in the first is a list a thumb cannot reach the bottom
+   of. `background: transparent` for the same reason: one surface paints the page. */
 .tab {
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-height: 0;
-  background: var(--bg);
+  background: transparent;
   color: var(--ivory);
   font-family: var(--font-sans);
-}
-
-/* rtl-exempt: a notch is a physical edge of a physical device and does not move
-   when the reader's language does. `padding-inline-start: env(safe-area-inset-left)`
-   would pad the RIGHT edge under dir="rtl" and leave the cutout overlapping the
-   list. There is no design padding welded to these two lines — the inline
-   padding of the tab lives on .header / .list — so the physical keyword here is
-   the whole declaration and the correct answer. */
-.tab {
-  padding-left: var(--ses-safe-l);
-  padding-right: var(--ses-safe-r);
 }
 
 .header {
@@ -79,7 +72,9 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 20px 12px;
+  /* Inline padding is the THREADS view's now (`.scroll`), so this only owns the
+     block rhythm between the groups. */
+  padding: 4px 0 12px;
 }
 
 /* The wide-tracked cap label that appears everywhere in this product. Paired
@@ -100,21 +95,10 @@
 /* Part V billing split — the cost column is the human's subscription. */
 .billingNote {
   margin: 0;
-  padding: 0 20px 12px;
+  padding: 0 0 12px;
   @apply text-meta;
   line-height: 1.5;
   color: var(--ink-2);
-}
-
-.spawn {
-  margin: 0 16px 12px;
-  padding: 12px 14px;
-  border: var(--border-w) solid var(--line);
-  border-radius: var(--r-card);
-  @apply text-small;
-  line-height: 1.5;
-  color: var(--ivory-2);
-  background: var(--card);
 }
 
 .push {
@@ -122,7 +106,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 16px calc(12px + var(--ses-safe-b));
+  /* No safe-area inset: the THREADS composer sits below this now and owns the
+     bottom edge. Two elements padding for one notch double-pads it. */
+  padding: 12px 0 4px;
   border-top: var(--border-w) solid var(--line);
 }
 
@@ -159,13 +145,11 @@
   accent-color: var(--ink-copper);
 }
 
+/* Not a scroller any more — see the note on `.tab`. The THREADS view scrolls, this
+   list grows, and the composer stays pinned below both. */
 .list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  padding: 0 16px 16px;
+  flex: 0 0 auto;
+  padding: 0 0 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -203,9 +187,22 @@
   outline-offset: 2px;
 }
 
-/* The row that is costing the human time reads as raised before you parse it. */
+/* The row that is costing the human time reads as raised before you parse it.
+ *
+ * token-exempt: the value this fill and this line carry is `state ===
+ * 'waiting-permission'` — a live Claude Code session that has stopped and is
+ * waiting for a human to allow or deny a tool call. §1.3's single sanctioned
+ * meaning for copper is ALIVE, and this is the only row state where the product
+ * is alive *and* parked on a person. Checked against the selector rather than
+ * asserted: the attribute is `data-state`, written from `meta.state`, which is
+ * decrypted session metadata (`SessionState`) and not a hover, a selection or a
+ * focus. `:hover` and `:focus-visible` two rules above deliberately use
+ * `--card-2` / `--line-2` and no colour, which is what makes this one a claim
+ * about the session rather than about the pointer. */
 .row[data-state='waiting-permission'] {
+  /* token-exempt: this line means state === 'waiting-permission' — a live session stopped on a tool call, waiting on you */
   border-color: var(--ink-copper-line);
+  /* token-exempt: same state, same value — and :hover / :focus-visible above deliberately carry no colour at all */
   background: var(--ink-copper-fill);
 }
 
@@ -284,7 +281,15 @@
   animation: sesBreathe var(--ses-dot-breathe) var(--ease-reveal) infinite;
 }
 
+/* token-exempt: a status dot IS data ink — the fill is the datum and there is no
+ * text under it to carry the value instead. What this one carries is the same
+ * `waiting-permission` state as the row above: a session stopped on a permission
+ * prompt. Note the contrast with `working` directly above, which is `--ivory-2`
+ * and a breathing animation — alive, but not waiting on *you*, and therefore no
+ * colour. The two states are drawn with different instruments on purpose, so
+ * copper never means merely "running". */
 .dot[data-state='waiting-permission'] {
+  /* token-exempt: a status dot IS the datum; this one means the session is stopped on a permission prompt */
   background: var(--ink-copper);
   box-shadow: 0 0 0 4px var(--ink-copper-fill);
 }
@@ -513,8 +518,20 @@
   background: var(--bg);
 }
 
+/* token-exempt: this card is only ever rendered when a `PermissionRequest` is
+ * pending on a live session — `SessionView` mounts the dock from
+ * `transcript.pending !== null`, so there is no idle, hovered or selected state
+ * that can reach these two declarations. The value the fill carries is the same
+ * one §1.3 sanctions copper for and the same one the list row and the status dot
+ * carry: the session is alive and has stopped for you. It is deliberately the
+ * identical treatment in all three places — one vocabulary for one condition is
+ * the entire argument for a restricted palette, and a fourth hue for "permission"
+ * specifically would make the reader learn a second word for the thing they
+ * already recognise from the list. */
 .permission {
+  /* token-exempt: rendered only while a PermissionRequest is pending — the session is alive and stopped for you */
   border: var(--border-w) solid var(--ink-copper-line);
+  /* token-exempt: same — SessionView mounts this dock from transcript.pending, so there is no idle state that reaches it */
   background: var(--ink-copper-fill);
   border-radius: var(--r-card-lg);
   padding: 14px;

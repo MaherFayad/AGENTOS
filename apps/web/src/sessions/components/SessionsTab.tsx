@@ -1,7 +1,15 @@
 'use client';
 
 /* =============================================================================
- * components/SessionsTab.tsx — the fourth tab (spec §3.1)
+ * components/SessionsTab.tsx — the session group (spec §3.1)
+ *
+ * **It is no longer a tab, and it is no longer a page.** M16 gave the fourth slot
+ * to THREADS (`Plan §23.5`), and this component now mounts as the *session
+ * threads* group inside `ThreadsView`. `/p/:project/sessions` redirects there.
+ * The name is kept because renaming a file is two paths in a diff and no reader's
+ * question is answered by it; what changed is the layout, which no longer claims
+ * the viewport height or its own scroller — the THREADS view owns both, and two
+ * nested scrollers on a phone is a list you cannot reach the bottom of.
  *
  * One row per session: name, repo, model, state, elapsed, cost — sorted with
  * `waiting on permission` first, because that is the state that is costing the
@@ -29,11 +37,7 @@ import { PushSettings } from './PushSettings';
 import s from '../sessions.module.css';
 import type { DecryptedSession } from '../types';
 
-export function SessionsTab({
-  spawnRequested = false,
-}: {
-  spawnRequested?: boolean;
-} = {}): React.JSX.Element {
+export function SessionsTab(): React.JSX.Element {
   const t = useT();
   const { status, key, error, unlock } = useSessionKey();
   const { list } = useSessionList(key);
@@ -63,12 +67,6 @@ export function SessionsTab({
         ) : null}
       </header>
       <p className={s.billingNote}>{t('sessions.billing')}</p>
-
-      {spawnRequested ? (
-        <p className={s.spawn} role="status">
-          {t('sessions.spawn')}
-        </p>
-      ) : null}
 
       <div className={s.list} role="list">
         {list.state === 'loading' ? (

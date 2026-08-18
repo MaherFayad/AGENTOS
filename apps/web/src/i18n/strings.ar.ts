@@ -251,19 +251,104 @@ export const ar: Catalog = {
   'chart.card.collapse': 'طيّ {name}',
   'chart.phaseTag': '{index} · {phase}',
 
-  /* THREADS — the fourth tab (`Plan §23.8`) ---------------------------------
-   * Two nouns and one short declarative sentence, written rather than `todo()`d:
-   * the English was cut back until it was the translatable kind, precisely so
-   * this scaffold would not spend two of the five gaps `i18n.test.ts` allows.
-   * `المحادثات` over the literal `السلاسل` — chains reads as a data structure,
-   * not a place. Filed by `shell-navigation-engineer`; the wording is this
-   * file's owner's to correct under §23.11 rule 6, and it is routed to them. */
-  'threads.mount.title': 'المحادثات',
-  'threads.mount.one.title': 'محادثة واحدة',
-  'threads.mount.body':
-    'قائمة المحادثات ومُحرِّر الرسائل يظهران هنا. لم يجرِ أيّ تشغيل بعد، فلا توجد محادثة لعرضها.',
+  /* THREADS — the fourth tab (`Plan §23.5`, `Plan §23.8`) --------------------
+   *
+   * The three `threads.mount.*` scaffold keys are gone with `ThreadsMount.tsx`.
+   * `المحادثات` is kept as the term for a thread — chosen with the tab rename,
+   * over the literal `السلاسل`, which reads as a data structure and not a place.
+   *
+   * WRITTEN OUT RATHER THAN `todo()`d, and that was not optional: `i18n.test.ts`
+   * caps the untranslated set at five keys for the whole app, and this surface
+   * alone is thirty. §23.11 rule 6 also asks that a new surface be
+   * Arabic-reviewed *before* it ships rather than after. **The wording is
+   * `rtl-arabic-pdpl-specialist`'s to correct — it is routed to them, not
+   * assumed to be finished.**
+   *
+   * TWO TERMS OF ART, PICKED ONCE AND USED THROUGHOUT:
+   *   الإرسال الجماعي   fan-out (`@@`) — "collective sending". Not `بثّ`
+   *                     (broadcast), which reads as one-to-many *listening* and
+   *                     loses that each member answers independently and costs
+   *                     its own run.
+   *   عملية تشغيل        a run. The unit of money in this product, so it keeps
+   *                     the same phrase as the runner's copy elsewhere.
+   *
+   * The plural of `threads.fanout.count` uses all six CLDR classes. English gets
+   * away with one/other here; Arabic does not, and this is the one string in the
+   * product where the number is the whole point of the sentence.
+   *
+   * NO CURRENCY IN ANY OF THESE, in either language. `i18n.test.ts` fails on a
+   * currency symbol under `threads.` — the count is real and the money is not. */
+  'threads.eyebrow': 'المحادثات',
+  'threads.billing':
+    'الجلسة محسوبة على اشتراكك في Claude. أمّا عمليات تشغيل محادثة الوكيل فمحسوبة على مساحة المشغّل المحدودة بسقف. حسابان مختلفان.',
 
-  /* §3.1 SESSIONS ----------------------------------------------------------- */
+  'threads.group.agent': 'محادثات الوكلاء',
+  'threads.agent.unreadableTitle': 'غير قابلة للقراءة في هذه النسخة',
+  'threads.agent.unreadable':
+    'الناقص شيئان لا شيء واحد: المشغّل لا يقدّم مسارًا يسرد المحادثات، والجدول الذي كانت ستأتي منه لم يعمل قطّ على قاعدة بيانات حيّة. هذا غياب قراءة، لا عدد يساوي صفرًا.',
+
+  'threads.compose.label': 'محادثة جديدة',
+  /* The three sigils are Latin punctuation against Arabic; they sit in their own
+     LTR run and the sentence after them is ordinary prose, so no isolation
+     character is needed inside the catalogue — the input is `dir="auto"` by
+     virtue of being a textarea the person types into. */
+  'threads.compose.placeholder': '@sales/account-enrichment · #sales · @@sales — أو اكتب من دون عنوان',
+  'threads.compose.send': 'إرسال',
+  'threads.compose.review': 'مراجعة الإرسال الجماعي',
+  'threads.compose.levelLabel': 'كيف تصل هذه الرسالة',
+  'threads.compose.unknownDepartment':
+    'لا يوجد في خريطة هذا المشروع قسم باسم {name}. الإرسال مسموح على أيّ حال — المشغّل هو من يحلّ العناوين، وهذه القائمة قد تكون قديمة.',
+  'threads.compose.noProject':
+    'هذا العنوان لا يسمّي مشروعًا، والمحادثة تنتمي إلى مشروع. افتحها من مبدّل المشاريع ليتمّ الإرسال.',
+  'threads.compose.offline':
+    'تعذّر الوصول إلى المشغّل، فلم يُرسَل شيء. قد يكون هذا الجهاز خارج شبكة Tailnet.',
+  'threads.compose.refusedFallback': 'رفض المشغّل هذا الطلب ولم يذكر السبب.',
+  'threads.compose.malformed':
+    'أُنشئت المحادثة وعاد الجواب بشكل لا تفهمه هذه النسخة، فلا مكان لتوجيهك إليه. هذا خلل هنا.',
+
+  'threads.fanout.eyebrow': 'تأكيد الإرسال الجماعي',
+  'threads.fanout.count': {
+    one: 'هذا يخاطب {name}، وفيه عضو واحد. أي عملية تشغيل واحدة، لكلّ عضو واحدة.',
+    two: 'هذا يخاطب {name}، وفيه عضوان. أي عمليّتا تشغيل، لكلّ عضو واحدة.',
+    few: 'هذا يخاطب {name}، وفيه {count} أعضاء. أي {count} عمليات تشغيل، لكلّ عضو واحدة.',
+    many: 'هذا يخاطب {name}، وفيه {count} عضوًا. أي {count} عملية تشغيل، لكلّ عضو واحدة.',
+    other: 'هذا يخاطب {name}، وفيه {count} عضو. أي {count} عملية تشغيل، لكلّ عضو واحدة.',
+  },
+  'threads.fanout.countUnknown':
+    'هذا يخاطب كلّ أعضاء {name} ويبدأ عملية تشغيل لكلّ واحد منهم. عدد الأعضاء لم يُحصَ هنا، فلا يُعرض أيّ رقم.',
+  'threads.fanout.refused':
+    'لن تبدأ أيّ عملية تشغيل اليوم: الإرسال الجماعي موقوف حتى يُثبت سقف الإنفاق قدرته على الرفض، ولم يُفعَّل قطّ. تُفتح المحادثة على أيّ حال، ويرافقها الرفض. يُرفع الحجب بـ: {unblockedBy}.',
+  'threads.fanout.cancel': 'إلغاء',
+  'threads.fanout.open': 'فتح المحادثة',
+
+  'threads.one.eyebrow': 'محادثة',
+  'threads.one.loading': 'جارٍ قراءة المحادثة…',
+  'threads.one.unavailableTitle': 'لا شيء لعرضه',
+  'threads.one.notFound':
+    'لا توجد محادثة بهذا المُعرِّف في هذا المشروع. ومُعرِّف محادثة من مشروع آخر يُقرأ بالطريقة نفسها، عن قصد.',
+  'threads.one.malformed':
+    'عادت المحادثة بشكل لا تفهمه هذه النسخة. المشغّل وهذا التطبيق غير متوافقين — وهذا خلل هنا، لا محادثة مفقودة.',
+  'threads.one.offline':
+    'تعذّر الوصول إلى المشغّل، فلا يمكن قراءة هذه المحادثة. قد يكون هذا الجهاز خارج شبكة Tailnet.',
+  'threads.one.noProject':
+    'هذا العنوان لا يسمّي مشروعًا، وكلّ محادثة تنتمي إلى مشروع. افتحها من مبدّل المشاريع.',
+  'threads.one.emptyTitle': 'لا مداخلات بعد',
+  'threads.one.empty': 'المحادثة موجودة ولم يُقَل فيها شيء.',
+  'threads.one.inMailbox': 'ما زالت في صندوق الوارد',
+
+  'threads.state.open': 'مفتوحة',
+  'threads.state.running': 'قيد التشغيل',
+  'threads.state.waiting': 'بانتظارك',
+  'threads.state.closed': 'مغلقة',
+  'threads.state.failed': 'فاشلة',
+
+  'threads.kind.human': 'أنت',
+  'threads.kind.agent': 'وكيل',
+  'threads.kind.question': 'سؤال',
+  'threads.kind.answer': 'إجابة',
+  'threads.kind.system': 'النظام',
+
+  /* §3.1 SESSIONS — now the session group inside THREADS --------------------- */
   'sessions.state.working': 'قيد العمل',
   'sessions.state.awaitingPermission': 'بانتظار إذن',
   'sessions.state.idle': 'خاملة',
@@ -286,8 +371,6 @@ export const ar: Catalog = {
     other: '{count} جلسة بانتظارك',
   },
   'sessions.billing': 'محسوبة على اشتراكك في Claude، لا على السقف الشهري للمشغّل.',
-  'sessions.spawn':
-    'تبدأ الجلسة الجديدة على جهاز يعمل عليه Claude Code، لا في هذا المتصفّح. اربط ذلك الجهاز بالمُرحِّل فتظهر الجلسة هنا.',
   'sessions.list.loading': 'جارٍ قراءة المُرحِّل…',
   'sessions.list.undecryptable': {
     one: 'تعذّر فكّ تشفير جلسة واحدة على المُرحِّل بمفتاح هذا الجهاز.',

@@ -298,31 +298,92 @@ export const en = {
   'chart.phaseTag': '{index} · {phase}',
 
   /* ---------------------------------------------------------------------------
-   * THREADS — the fourth tab (`Plan §23.8`). Scaffold copy only: these two
-   * screens are `ViewMount` placeholders that `sessions-relay-engineer` deletes
-   * when the real view lands, so both keys go with them.
+   * THREADS — the fourth tab (`Plan §23.5`, `Plan §23.8`). The three
+   * `threads.mount.*` scaffold keys were deleted with `ThreadsMount.tsx`; this is
+   * the real view's copy.
    *
-   * They are catalogued anyway rather than typed into the JSX, because the
-   * alternative was raising the RTL baseline for a surface that ships this
-   * milestone — and "it is temporary" is how every untranslated string in this
-   * app got here.
+   * NOTHING HERE MAY HOLD A CURRENCY FIGURE, and `i18n.test.ts` fails on one
+   * appearing under `threads.`. `Plan §23.8` asks the composer for
+   * `@@sales · 4 runs · ~$0.40`; the `4` is the resolved member count and the
+   * `$0.40` has no source, because zero runs have ever completed and there is
+   * nothing to average. See the register block further down for the full note —
+   * the same rule governs both halves of this feature.
    *
-   * **One body sentence for both screens, and deliberately short.** The first
-   * draft was two paragraphs of English rhythm that would have gone into
-   * `strings.ar.ts` as two `todo()`s — which would have put the untranslated
-   * count at exactly the ceiling `i18n.test.ts` sets, leaving the next agent to
-   * file an honest gap with nowhere to put it. That test's own comment names
-   * that trap. Scaffold copy is not worth spending somebody else's budget on, so
-   * it says the one thing that is true and stops: nothing has ever run.
+   * The fan-out confirm is the one screen in this product that asks a person to
+   * authorise N runs instead of one, so its copy states **two** facts and never
+   * one: how many runs the address means, and that none of them will start
+   * today. Either alone misleads, in opposite directions.
    * ------------------------------------------------------------------------ */
-  'threads.mount.title': 'Threads',
-  'threads.mount.one.title': 'One thread',
-  'threads.mount.body':
-    'The thread list and its message composer land here. Nothing has ever run, so there is no thread to show.',
+  'threads.eyebrow': 'Threads',
+  'threads.billing':
+    'A session is billed to your Claude subscription. An agent thread’s runs are billed to the runner’s capped workspace. Two different pots.',
+
+  'threads.group.agent': 'Agent threads',
+  'threads.agent.unreadableTitle': 'Not readable in this build',
+  /* Deliberately NOT "no threads yet". Both halves are named because fixing
+   * either one alone leaves this list empty, and the next reader would then be
+   * told a new story about the same blank space. */
+  'threads.agent.unreadable':
+    'Two things are missing, not one: the runner serves no route that lists threads, and the table they would come from has never met a running database. This is an absence of a reading, not a count of zero.',
+
+  'threads.compose.label': 'New thread',
+  'threads.compose.placeholder': '@sales/account-enrichment, #sales, @@sales — or just type',
+  'threads.compose.send': 'Send',
+  /* `@@` never sends on submit; the button opens the confirm instead, and says so. */
+  'threads.compose.review': 'Review fan-out',
+  'threads.compose.levelLabel': 'How this message lands',
+  'threads.compose.unknownDepartment':
+    'This project’s map has no department called {name}. Sending anyway is allowed — the runner resolves addresses, and this list can be stale.',
+  'threads.compose.noProject':
+    'This address does not name a project, and a thread belongs to one. Open it from the project switcher and this sends.',
+  'threads.compose.offline': 'Can’t reach the runner, so nothing was sent. This box may be off the tailnet.',
+  'threads.compose.refusedFallback': 'The runner refused this and did not say why.',
+  'threads.compose.malformed':
+    'The thread was created and the answer came back in a shape this build doesn’t understand, so there is nowhere to send you. That is a bug here.',
+
+  'threads.fanout.eyebrow': 'Confirm fan-out',
+  'threads.fanout.count': {
+    one: 'This addresses {name}, which has {count} member. That is {count} run, one each.',
+    other: 'This addresses {name}, which has {count} members. That is {count} runs, one each.',
+  } satisfies Plural,
+  /* No numeral at all. A count nobody took is not a zero, and this is the one
+   * screen where a plausible number would be acted on. */
+  'threads.fanout.countUnknown':
+    'This addresses every member of {name} and starts one run for each. How many members that is has not been counted here, so no number is shown.',
+  'threads.fanout.refused':
+    'No run starts today: fan-out dispatch is held until the spend cap has proven it can refuse something, and it has never once fired. The thread is still opened, and the refusal travels with it. Unblocked by: {unblockedBy}.',
+  'threads.fanout.cancel': 'Cancel',
+  'threads.fanout.open': 'Open the thread',
+
+  'threads.one.eyebrow': 'Thread',
+  'threads.one.loading': 'Reading the thread…',
+  'threads.one.unavailableTitle': 'Nothing to show',
+  'threads.one.notFound':
+    'There is no thread with this id in this project. A thread id from another project reads the same way, on purpose.',
+  'threads.one.malformed':
+    'The thread came back in a shape this build doesn’t understand. The runner and this app are out of step — that is a bug here, not a missing thread.',
+  'threads.one.offline': 'Can’t reach the runner, so this thread can’t be read. This box may be off the tailnet.',
+  'threads.one.noProject':
+    'This address does not name a project, and every thread belongs to one. Open it from the project switcher.',
+  'threads.one.emptyTitle': 'No turns yet',
+  'threads.one.empty': 'This thread exists and nothing has been said in it.',
+  'threads.one.inMailbox': 'still in the mailbox',
+
+  'threads.state.open': 'Open',
+  'threads.state.running': 'Running',
+  'threads.state.waiting': 'Waiting on you',
+  'threads.state.closed': 'Closed',
+  'threads.state.failed': 'Failed',
+
+  'threads.kind.human': 'You',
+  'threads.kind.agent': 'Agent',
+  'threads.kind.question': 'Question',
+  'threads.kind.answer': 'Answer',
+  'threads.kind.system': 'System',
 
   /* ---------------------------------------------------------------------------
-   * §3.1 SESSIONS. Still live: `/sessions` and `/sessions/:id` are paths under
-   * the THREADS tab after M16, not a view of their own.
+   * §3.1 SESSIONS — now the *session group* inside the THREADS view, not a view
+   * of its own. `/sessions` redirects to `/threads`; `/sessions/:id` stays.
    * ------------------------------------------------------------------------ */
   'sessions.state.working': 'Working',
   'sessions.state.awaitingPermission': 'Waiting on permission',
@@ -343,7 +404,6 @@ export const en = {
     other: '{count} waiting on you',
   } satisfies Plural,
   'sessions.billing': 'Billed to your Claude subscription, not the runner’s monthly cap.',
-  'sessions.spawn': 'A new session starts on a machine running Claude Code, not in this browser. Pair that machine with the relay and it will appear here.',
   'sessions.list.loading': 'Reading the relay…',
   'sessions.list.undecryptable': {
     one: 'One session on the relay could not be decrypted with this device’s key.',

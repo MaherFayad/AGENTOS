@@ -100,7 +100,7 @@ out of that heading.
 
 | ID | Spec § | Requirement | Implemented in | Verified by |
 |---|---|---|---|---|
-| REQ-SES-01 | §3.1 | `/p/:project/sessions` is the fourth tab and mounts `SessionsTab`, not a `ViewMount` placeholder | `apps/web/src/app/(views)/p/[project]/sessions/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
+| REQ-SES-01 | §3.1 | **M16: THREADS is the fourth tab and mounts the session list as its session group.** `/p/:project/sessions` redirects to `/p/:project/threads`, forwarding `?new=1` — nothing that worked at the old path was sent to a placeholder | `apps/web/src/threads/ThreadsView.tsx` · `apps/web/src/app/(views)/p/[project]/sessions/page.tsx` | `apps/web/src/components/shell/route.test.ts` · `scripts/smoke-routes.mjs` |
 | REQ-SES-02 | §3.1 | A session is addressable at `/p/:project/sessions/:id` and renders from the id alone — the server has nothing readable to look up | `apps/web/src/app/(views)/p/[project]/sessions/[id]/page.tsx` | `apps/web/src/components/shell/route.test.ts` |
 | REQ-SES-03 | §3.1 | The list shows name, repo, model, state, elapsed and cost for each session | `apps/web/src/sessions/components/SessionsTab.tsx` | `apps/web/src/sessions/__tests__/list.test.mjs` |
 | REQ-SES-04 | §3.1 | State is exactly `working` \| `waiting-permission` \| `idle` | `apps/web/src/sessions/types.ts` | `apps/web/src/sessions/__tests__/list.test.mjs` |
@@ -147,7 +147,7 @@ out of that heading.
 | REQ-SES-45 | §3.1 | `POST /api/push/subscribe` stores the endpoint on a local volume; `POST /api/push/notify` accepts `{kind, id}` only | `apps/web/src/app/api/push/subscribe/route.ts` · `apps/web/src/app/api/push/notify/route.ts` | `apps/web/src/sessions/__tests__/push.test.mjs` |
 | REQ-SES-46 | §3.1 | Interactive taps in this tab are ≥44px; safe-area insets are honoured; no hover-only affordance | `apps/web/src/sessions/sessions.module.css` | manual — phone checklist |
 | REQ-SES-47 | §3.1 | Copper appears only on the permission card, the waiting-permission row/dot, and the Allow/Send pills — chrome is otherwise monochrome | `apps/web/src/sessions/sessions.module.css` | `scripts/check-tokens.mjs` |
-| REQ-SES-48 | §3.1 | `+ New session` (`/p/:project/sessions?new=1`) does not spawn from the browser — it says a paired machine running Claude Code does | `apps/web/src/app/(views)/p/[project]/sessions/page.tsx` · `apps/web/src/sessions/components/SessionsTab.tsx` | manual — visual |
+| REQ-SES-48 | §3.1 | **M16: `?new=1` focuses the addressing composer** rather than showing a spawn note. Spawning a CLI session from the browser is still impossible and the session group's empty state is where that is said, so the note and its two catalogue keys were deleted rather than left unreachable | `apps/web/src/app/(views)/p/[project]/threads/page.tsx` · `apps/web/src/threads/AddressComposer.tsx` | manual — visual |
 | REQ-SES-49 | §3.1 | Server logs from this feature are an id and a byte count, never ciphertext or plaintext | `apps/web/src/sessions/relay/envelope.ts` | `apps/web/src/sessions/__tests__/no-plaintext-boundary.test.mjs` |
 | REQ-SES-50 | §3.1 | Byte-compatible NaCl secretbox against live happy-server | — | — |
 | REQ-SES-51 | §3.1 | RFC 8291 Web Push delivery via a `web-push` sender (the seam exists; delivery is pending the dependency) | — | — |
@@ -156,12 +156,23 @@ out of that heading.
 | REQ-SES-54 | §3.1 | **Project scoping stops at the URL.** The session route reads `id` and never `project`, and `/api/sessions*` `/api/push*` gained no project segment when every runner route did (ADR-015) — filtering a session list by project would mean reading `encryptedMetadata` on the server | `apps/web/src/app/(views)/p/[project]/sessions/[id]/page.tsx` · `apps/web/src/app/api/sessions/route.ts` · `apps/web/src/sessions/relay/proxy.ts` | `apps/web/src/sessions/__tests__/no-plaintext-boundary.test.mjs` |
 | REQ-SES-55 | §3.1 | The push deep link stays unscoped — `deepLinkFor` emits `/sessions/:id` with no project, because a project slug is a plaintext partition of the user's sessions and a push payload is read by FCM and by a lock screen | `apps/web/src/sessions/push/payload.ts` · `apps/web/public/sw-push.js` | `apps/web/src/sessions/__tests__/push.test.mjs` |
 | REQ-SES-56 | §3.1 | `account_id` is refused a place in the session envelope (`Plan §11` Q19 · ADR-032) — the allowlist is exactly five keys, and an upstream row that volunteers an account id loses it | `apps/web/src/sessions/relay/envelope.ts` | `apps/web/src/sessions/__tests__/no-plaintext-boundary.test.mjs` |
+| REQ-SES-57 | §3.1 · `Plan §23.8` | The composer previews a turn's cost as a **run count and never a money figure** — `TurnCost.estimatedUsd` is typed `null`, no preview field can hold one, and no `threads.*` catalogue key may contain a currency symbol | `apps/web/src/threads/lib/preview.ts` · `apps/web/src/i18n/strings.en.ts` | `apps/web/src/threads/lib/preview.test.ts` (incl. a live `@ts-expect-error` under `typecheck:tests`) · `apps/web/src/i18n/i18n.test.ts` |
+| REQ-SES-58 | §3.1 · `Plan §23.8` | `@@department` prints the **resolved member count**, and prints **no numeral at all** when nothing has been counted — an uncounted roster never becomes `runs: 0` | `apps/web/src/threads/lib/roster.ts` · `apps/web/src/threads/lib/preview.ts` | `apps/web/src/threads/lib/roster.test.ts` · `apps/web/src/threads/lib/preview.test.ts` |
+| REQ-SES-59 | §3.1 · `Plan §12` | `#department` and a bare line print a **lower bound** (`at least 1 run`), because the lead or the Chief of Staff answers *or delegates* | `apps/web/src/threads/lib/preview.ts` | `apps/web/src/threads/lib/preview.test.ts` · `apps/web/src/threads/AddressComposer.test.tsx` |
+| REQ-SES-60 | §3.1 · `Plan §23.11` | `@@` never sends on submit: it raises an explicit confirm that **names the count**, takes focus on Cancel, dismisses on Escape, and holds Tab between its two buttons — no keyboard path fires the fan-out | `apps/web/src/threads/AddressComposer.tsx` | `apps/web/src/threads/AddressComposer.test.tsx` |
+| REQ-SES-61 | §3.1 · `Plan §23.8` | The agent-thread group says it is **unreadable**, not empty, and names both reasons (no collection route, no database that has ever run). The claim expires by itself the day a list route is declared | `apps/web/src/threads/lib/threadListRoute.ts` · `apps/web/src/threads/ThreadsView.tsx` | `apps/web/src/threads/lib/threadListRoute.test.ts` |
+| REQ-SES-62 | §3.1 · thread-model §4.2 | The composer offers three interrupt levels and presents `steer` as **refused with a stated reason** — `aria-disabled` (not `disabled`, so the reason is announced), visible text, and a sentence that is true whether or not a run is in flight | `apps/web/src/threads/AddressComposer.tsx` · `apps/web/src/components/primitives/InterruptBadge.tsx` | `apps/web/src/threads/AddressComposer.test.tsx` |
+| REQ-SES-63 | §3.1 · thread-model §9.1 | **A session thread has no mailbox** (ADR-037). The THREADS list merges session threads client-side after decryption and renders no mailbox depth for them; `addressOfSummary` returns `null` for `delivery: 'session'` rather than inventing a fifth address form | `comms/decisions/ADR-037-session-threads-get-no-mailbox.md` · `apps/web/src/threads/lib/detail.ts` | `apps/web/src/sessions/__tests__/no-plaintext-boundary.test.mjs` |
 
 ## Interfaces we expose
 
 From `apps/web/src/sessions/index.ts`:
 
-- `<SessionsTab spawnRequested?>` — the fourth tab. Mounted at `/p/:project/sessions`.
+- `<SessionsTab>` — **no longer a tab and no longer a page.** Mounted by
+  `apps/web/src/threads/ThreadsView.tsx` as the *session threads* group inside THREADS;
+  `/p/:project/sessions` redirects there. It no longer claims the viewport height or its own
+  scroller (the view owns both) and it takes no props — `spawnRequested` went with the
+  `?new=1` spawn note, which the composer replaced.
 - `<SessionView sessionId>` — full-screen transcript. Mounted at
   `/p/:project/sessions/:id`, and it takes the id alone: the project segment is
   in the address, never in the lookup (decision 10). A pre-M15 `/sessions/:id`

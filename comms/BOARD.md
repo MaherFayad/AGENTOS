@@ -1018,7 +1018,9 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 035 | **One declaration per runtime name in a barrel**, and a gate that loads the artifact | `agent-library-curator` | **accepted 2026-08-17** — `ADR-035-one-declaration-per-runtime-name-in-a-barrel.md`, landed at `46ca512`. **Registered retroactively 2026-08-18 by `observability-engineer`**: the file existed and this table did not list it, which is the exact state that produced the double-012. The next agent computing "next free" from this table would have taken 035 and collided with a landed, accepted ADR |
 | 036 | **Erasure and retention — the product's first two destructive operations, and the tier no delete verb reaches** (§9.3 ruling + §9.4 horizon; `thread-model.md` §7.3, `specs/observability.md`) | `observability-engineer` | **claimed 2026-08-18, before the file** — row first, per the rule directly above. Carries tiers 1 and 2 of erasure and the unbounded retention position; **does not** carry the model-endpoint egress question, which is `rtl-arabic-pdpl-specialist`'s separate ADR and is unclaimed below |
 
-037+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
+| 037 | **Session threads get no mailbox** — `thread-model.md` §9.1 answered **no** for v1. `message_never_holds_session_content` stays, `envelope.ts`'s allowlist is untouched, and interrupting a relay session keeps travelling the relay's own client-encrypted control channel (which is what Allow / Deny already is). The load-bearing reason is not only rule 5: **the runner's mailbox drain has no reach into a CLI session**, so an `ops.message` row addressed to one would be a queue with no reader that still looks delivered | `sessions-relay-engineer` | **claimed 2026-08-18, before the file** — row first, per the rule above. Ruling already binding in `apps/web/src/threads/` and cited from four files |
+
+038+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
 translate it through `comms/decisions/README.md` first.
 
 **A file at a number this table does not list is the double-012 in slow motion.** 035 sat
