@@ -362,6 +362,26 @@ const BRIEF_MAX_LINES = 150;
  */
 const OPEN_MESSAGE_WARN = 60;
 
+/**
+ * `inbox/_all/` is read by **every agent on every dispatch**, so its length is multiplied by
+ * the whole roster — the same arithmetic that put a 150-line cap on BRIEF, applied to the
+ * one directory nobody owns.
+ *
+ * Measured 2026-08-18, and it is the finding that corrects the BRIEF cap rather than
+ * confirming it: `_all` was **2,740 lines across 29 broadcasts — eighteen times the BRIEF
+ * cap** — while per-agent open mail added another 220–2,180. A dispatch was reading roughly
+ * 3,000–5,000 lines of inbox against a briefing capped at 150. **Capping BRIEF addressed
+ * about 4% of the reading cost.** The cap was not wrong; it was aimed at the smaller half.
+ *
+ * A warn rather than a fail, and the distinction is deliberate: a broadcast is *correct* to
+ * send at the moment of a milestone flip or a breaking contract change. What is not correct
+ * is leaving it there afterwards. Its durable content belongs in BOARD, a contract, or
+ * BRIEF; once it is there the announcement is tax, and archiving it loses nothing because
+ * `_archive/` keeps the record. Failing the build would punish the send instead of the
+ * hoard.
+ */
+const ALL_BROADCAST_LINE_WARN = 900;
+
 async function checkReadingBudget(openCount) {
   const rel = 'comms/BRIEF.md';
   let text;
@@ -398,6 +418,26 @@ async function checkReadingBudget(openCount) {
       `${openCount} open inbox messages (soft limit ${OPEN_MESSAGE_WARN}). Rule 1 makes ` +
         `agents read their open mail, so this is a tax every later dispatch pays. Answer ` +
         `and archive to comms/inbox/_archive/<agent>/ (rule 6), or say why they must stay open.`,
+    );
+  }
+
+  // The broadcast budget — the larger half of the same cost, and the one that was missed.
+  let broadcastLines = 0;
+  let broadcastFiles = 0;
+  for (const entry of await listDir(join(COMMS, 'inbox', '_all'))) {
+    if (!entry.isFile() || !entry.name.endsWith('.md') || isTemplate(entry.name)) continue;
+    broadcastFiles++;
+    const body = await readFile(join(COMMS, 'inbox', '_all', entry.name), 'utf8');
+    broadcastLines += body.replace(/\n$/, '').split('\n').length;
+  }
+  if (broadcastLines > ALL_BROADCAST_LINE_WARN) {
+    warn(
+      `comms/inbox/_all/ is ${broadcastLines} lines across ${broadcastFiles} broadcasts ` +
+        `(soft limit ${ALL_BROADCAST_LINE_WARN}). Every agent reads this on every dispatch, so ` +
+        `it is multiplied by the whole roster — at ${broadcastLines} lines it costs each one ` +
+        `${Math.round(broadcastLines / BRIEF_MAX_LINES)}x the entire BRIEF. A broadcast is ` +
+        `right to send and wrong to leave: put its durable content in BOARD, a contract or ` +
+        `BRIEF, then move it to comms/inbox/_archive/_all/ (rule 6). Nothing is deleted.`,
     );
   }
 }

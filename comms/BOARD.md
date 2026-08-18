@@ -9,8 +9,11 @@ Two (§9–§24). It is **a plan that amends the spec of record, not a second sp
 a bare `§10` always means the spec of record, which has no §10.
 
 **Current milestone:** `M16 — Threads · addressing · mailbox` (Part Two, P2) **opened
-2026-08-17**; **its foundation slice landed at `8a9bdf5` and is awaiting review**, and
-`thread-model-engineer` is now on the roster · `M3 — Runner +
+2026-08-17**; **nine of eleven slices are in and reviewed as of 2026-08-18** — 6 PASS, 3 FAIL,
+all three FAILs fixed. Open: the THREADS view + addressing composer
+(`sessions-relay-engineer`) and the mailbox composer (`drawer-engineer`). The Arabic/RTL +
+PDPL pass is held *deliberately* until those two land, because a review of files two agents
+are writing is a review of something that no longer exists. See the M16 section · `M3 — Runner +
 Run now + Langfuse` (unblocked by M2; the runner half waits on the human for
 `RUNNER_ANTHROPIC_API_KEY`) · `M6 — DASHBOARDS` (FAIL open, fix in flight) · `M4 — SESSIONS`
 (relay unverified against a bootable Happy) · `M8` ongoing. M0, M1, M2, M5 and **M15** are
@@ -23,21 +26,22 @@ earlier FAIL verdict at `8e77a23` is not deleted and not edited** — it is the 
 true two commits before, and `comms/handoffs/M15-fidelity-qa-reviewer-acceptance.md` stays where
 it is.
 
-**M16 is open, exactly one agent was dispatched onto it, and that agent has delivered.**
-`thread-model-engineer` wrote **ADR-023** (`proposed`), **`contracts/thread-model.md`** and
-migration **`0008_threads.sql`**, plus the addressing parser and the thread writer, at `8a9bdf5`
-— the foundation every other slice consumes. **The remaining slices are still held**, and they
-are held on a different thing now: not on the contract existing, but on `fidelity-qa-reviewer`
-answering. The reason for sequencing this way is the defect this board has paid for four times
-— six agents reading one plan section produce six readings of one shape, and the disagreement
-surfaces a week later as two contracts.
+**M16 was sequenced one-agent-first on purpose, and the sequencing worked.**
+`thread-model-engineer` wrote **ADR-023**, **`contracts/thread-model.md`** and migration
+**`0008_threads.sql`** alone, plus the addressing parser and the thread writer, at `8a9bdf5`.
+Only then did the other slices start. The reason was the defect this board has paid for four
+times — six agents reading one plan section produce six readings of one shape, and the
+disagreement surfaces a week later as two contracts. **Nothing built in the second wave
+needed a shape renegotiated**, which is the evidence the order was right rather than slow.
 
-**If you own an M16 slice: read `contracts/thread-model.md` now; do not build against it yet.**
-Reading is exactly the point of having written it, and it costs nothing if the review moves a
-shape. Building is what cannot be undone cheaply. M6, M3, M4, M8 and four owed `## Answer`
-blocks still outrank M16 read-ahead. **`runner-engineer` is the one exception with something
-genuinely owed today** — nine proposed `ApiErrorCode`s and the route spelling
-(`thread-model.md` §11 and §4.1) are decisions only they can make, and the drain waits on them.
+**If you own one of the two open M16 slices: build against `contracts/thread-model.md`, not
+against `Plan §12`.** The contract is reviewed and the plan is not; where they differ the
+contract has already absorbed a correction the plan does not know about — most sharply, the
+interrupt levels are **two and a refusal**, not three.
+
+**Read its sections, not the file.** It is 540 lines and no slice consumes all of it; §10
+names what each consumer gets. That is rule 1 as amended — the reading cost of this repo
+exceeded the work once already.
 
 **Phase 0 is still not closed, and M15 was built and closed anyway — on purpose, with the
 reason stated. M16 proceeds on the same terms.** `Plan §20` says Phase 0 blocks everything, and
@@ -651,24 +655,59 @@ instrument as `FAN_OUT_DISPATCH.allowed`. Verified in the tree, not taken on rep
   this (`REQ-DS-111`: `deliverable` required on `steer`, refused state dashed at `--ink-2`), which
   is the slice arriving at the right answer independently.
 
-**One slice is dispatched. Ten are held.** Only the lead's two rows are live work today; every
-other row waits on `contracts/thread-model.md` existing. A slice owner who starts against
-`Plan §12` before the contract lands is building a second reading of a shape that has one
-author — see the split of `POST /api/thread/:id/message` below for what that costs.
+**Superseded 2026-08-18 — the hold is lifted and nine of eleven slices have landed.** The
+paragraph below is kept because its *reasoning* still governs the two that have not: a slice
+owner who starts against `Plan §12` instead of `contracts/thread-model.md` is building a
+second reading of a shape that has one author.
 
-#### The foundation slice landed 2026-08-17 at `8a9bdf5` — and it is **not** reviewed
+> **One slice is dispatched. Ten are held.** Only the lead's two rows are live work today;
+> every other row waits on `contracts/thread-model.md` existing — see the split of
+> `POST /api/thread/:id/message` below for what a second reading costs.
 
-**What exists:** ADR-023 (`proposed`), `comms/contracts/thread-model.md`, migration
-`0008_threads.sql`, the addressing grammar as a parser with named refusals, and the thread
-writer. Handoff: `comms/handoffs/M16-thread-model-engineer-threads-addressing-mailbox.md`.
-Schema and writer were written together and checked against each other **with no database**.
+#### Status 2026-08-18 — reviewed, and nine of eleven slices are in
 
-**Landed is not passed, and this row will not say otherwise.** `fidelity-qa-reviewer` has not
-answered. The `review-request` could not even be *sent* until 21:50, because the agent was not
-on the roster and `check-comms.mjs` refuses an unrostered `from:` — see the roster note above.
-It is the first thing filed now. **The remaining ten slices stay held until that answer**, which
-is a smaller wait than it looks: the contract they were waiting on now exists and can be read
-today. Reading it is not the same as building against it.
+**The hold released on the answer, not on the clock.** `fidelity-qa-reviewer` drained a
+nine-message queue: **6 PASS, 3 FAIL, all three FAILs fixed and re-answered.** Every verdict
+names the standard it graded at — **source, tokens, and (new) a real page load.** The 1440px
+side-by-side has still never been run on any milestone; it needs *reference frames*, which
+remain with the user.
+
+| Slice | State |
+|---|---|
+| Lead — schema, contract, ADR-023 | **in**, FAILed once on `in_reply_to`, fixed at `5600cc9` |
+| Addressing grammar + refusals | **in** |
+| `POST /api/p/:project/thread/:id/message` + mailbox drain | **in**, FAILed on three items, fixed at `ea0a0a9` |
+| THREADS in the tab slot | **in** — `/sessions` paths stay live underneath, not redirected |
+| Both monochrome registers | **in**, FAILed on two items, fixed |
+| `thread-feed` + ADR-028 | **in** — cap accepted, two enforcers |
+| `thread_id` on the metrics plane | **in**, PASSed — empty and honest |
+| PDPL / erasure ruling (§9.3) | **in** — project-level only, tier 3 stated not implied |
+| THREADS view + addressing composer | **open** — `sessions-relay-engineer` |
+| Mailbox composer (two levels + a refusal) | **open** — `drawer-engineer` |
+| Arabic/RTL + PDPL pass over the new surfaces | **held, correctly** — deferred while agents are in those files |
+
+**Four instruments were found reporting green while blind**, each by an agent trying to use
+one rather than read it: the identity checker's comment-stripper (and beneath it, a PDPL
+assertion that had never once read the table it named); every `@ts-expect-error` in the web
+suite (tsconfig excluded the tests, vitest does not typecheck — now closed by
+`typecheck:tests`); the smoke markers (matching `<meta name="description">`, so they passed
+against a shell with no tab bar); and `messageSpanAttributes`, a real mechanism that was
+merely opt-in while three call sites put message bodies verbatim into OTLP.
+
+**The generalisation, which is the part worth keeping:** an include-list is a decision to be
+blind to everything unnamed, and a substring is a claim you did not narrow.
+
+**One correction to a rule that does not bend.** Rule 7's *"traces stay local"* answers for
+the observability plane and **not** for the plane carrying the words: `lib/prompt.ts` renders
+every prior turn's body into the model prompt, and nothing here asserts a processing region
+for that endpoint. `thread-model.md` §7.3 no longer claims the body stays in the process.
+
+**What exists from the foundation:** ADR-023, `comms/contracts/thread-model.md`, migration
+`0008_threads.sql`, the addressing parser with named refusals, and the thread writer. Schema
+and writer were checked against each other **with no database**, and that is still true —
+`0008` has never been applied. Handoff:
+`comms/handoffs/M16-thread-model-engineer-threads-addressing-mailbox.md`; verdict:
+`comms/handoffs/M16-fidelity-qa-reviewer-m16-foundation-slice-verdict.md`.
 
 **Three decisions inside it want a reviewer's push, and they are here rather than buried in a
 contract because each one contradicts something a slice owner would otherwise read as settled.**
@@ -940,7 +979,7 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 020 | Task-board semantics · *`Plan §3` calls this "ADR-012"* | — | **reserved, unwritten** |
 | 021 | Auth exists in v2 — accounts inside the tailnet · *`Plan §3` calls this "ADR-013"* | `identity-access-engineer` | **reserved, unwritten** |
 | 022 | Foundry token-budget policy · *`Plan §3` calls this "ADR-014"* | `agent-foundry-architect` *(undefined)* | **reserved, unwritten** |
-| 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its three interrupt levels (`note` · `steer` · `halt`); **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **proposed** — file exists, `ADR-023-thread-unification.md`, 2026-08-17, at `8a9bdf5`. Written under the draft-naming rule's exception: it is a claimed number with **one** registered author and no concurrent drafter, so it was written straight to its number. Unreviewed |
+| 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its interrupt levels — **two and a refusal, not three**: `note` and `halt` are delivered, `steer` is refused (409 `interrupt_not_deliverable`) whether or not a run is in flight, because the SDK's streaming-input mode has never been exercised and the first thing that would exercise it is a paid run; **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **reviewed 2026-08-18** — `ADR-023-thread-unification.md`, 2026-08-17 at `8a9bdf5`. Written straight to its number under the draft-naming rule's exception (one registered author, no concurrent drafter). `fidelity-qa-reviewer` graded the slice **FAIL on one item** — `in_reply_to` was the only reference in `0008` not project-pinned, under a comment promising messages cannot cross projects — fixed at `5600cc9` with a gate asserting the *rule* (every FK into a project-scoped table names `project_id` on both sides), not the line. Everything else in the slice graded honest. |
 | 024 | Scheduler ownership, six trigger types · *`Plan §18` "ADR-019"* | `scheduler-engineer` | **reserved** |
 | 025 | Client strategy — Expo, Tauri, contentless push · *`Plan §18` "ADR-020"* | `client-platform-engineer` | **reserved** |
 | 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | — | **reserved** |
