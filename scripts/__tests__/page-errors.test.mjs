@@ -127,6 +127,47 @@ test('an uncaught exception is never a backend absence, whatever it mentions', (
   assert.equal(isBackendAbsence(line, BASE), false);
 });
 
+/* ---- shape 2: the WebSocket to the same absent runner ---- */
+
+const wsLine = (url) =>
+  describeError('Log.entryAdded', {
+    entry: {
+      level: 'error',
+      source: 'network',
+      text:
+        `WebSocket connection to '${url}' failed: Error during WebSocket handshake: ` +
+        `net::ERR_INVALID_HTTP_RESPONSE`,
+      url: 'webpack-internal:///(app-pages-browser)/./src/map/data/useGraph.ts',
+    },
+  });
+
+test('the WebSocket to our own /ws/ is the same absent backend as the /api/ 5xx', () => {
+  // Verbatim from the run that exposed the inconsistency: the gate excused
+  // /api/p/agentos/graph returning 5xx and failed on ws://…/ws/p/agentos/graph, which is the
+  // same runner being down, reported twice.
+  assert.equal(isBackendAbsence(wsLine(`ws://127.0.0.1:4401/ws/p/agentos/graph`), BASE), true);
+  assert.equal(isBackendAbsence(wsLine(`wss://127.0.0.1:4401/ws/p/agentos/graph`), BASE), true);
+});
+
+test('a WebSocket to another origin stays fatal', () => {
+  assert.equal(isBackendAbsence(wsLine('ws://evil.test/ws/p/agentos/graph'), BASE), false);
+  // The near-miss a substring check would wave through: our host appearing inside someone
+  // else's URL.
+  assert.equal(isBackendAbsence(wsLine('ws://cdn.example.com/proxy/127.0.0.1:4401/ws/x'), BASE), false);
+});
+
+test('a WebSocket to a path that is not /ws/ stays fatal', () => {
+  // Only the runner bridge is excused. A socket to anything else failing is our defect.
+  assert.equal(isBackendAbsence(wsLine('ws://127.0.0.1:4401/live/p/agentos/graph'), BASE), false);
+  // The trailing slash is load-bearing and this line is why it is asserted separately: the
+  // first falsification of this rule weakened `/ws/` to `/ws` and **every test still passed**,
+  // because nothing here distinguished the segment from a path that merely starts with those
+  // two letters. A neighbouring route named `/wsocket` or `/wsapi` would have been silently
+  // excused. The plant survived, so the gap was in the tests, not the rule.
+  assert.equal(isBackendAbsence(wsLine('ws://127.0.0.1:4401/wsocket/p/agentos/graph'), BASE), false);
+  assert.equal(isBackendAbsence(wsLine('ws://127.0.0.1:4401/wsapi'), BASE), false);
+});
+
 test('console.error is never a backend absence', () => {
   const line = describeError('Runtime.consoleAPICalled', {
     type: 'error',

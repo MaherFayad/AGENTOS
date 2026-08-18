@@ -65,7 +65,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -279,18 +279,43 @@ export function describeError(method, params) {
 }
 
 /**
- * Is this finding one of our own `/api/` routes answering 5xx?
+ * Is this finding our own backend being absent, rather than our code being wrong?
  *
- * Deliberately narrow — see the comment on `backendGaps`. A 404 is a wrong URL and stays
- * fatal; a failure on any other origin is not ours to excuse.
+ * Two shapes, and the second was missing until `drawer-engineer` reported the
+ * inconsistency: an `/api/` route answering 5xx, **and the WebSocket handshake to the same
+ * absent runner**. Excusing one while failing the other is incoherent — `/api/p/x/graph`
+ * returning 503 and `ws://…/ws/p/x/graph` refusing to handshake are one fact reported twice,
+ * and the gate was calling that fact honest in HTTP and fatal in WebSocket. It made
+ * `smoke:browser` red for a reason unrelated to the change under test, which is how a gate
+ * stops being consulted.
+ *
+ * That is the include-list finding again, in the file whose header quotes it: **the original
+ * rule named `/api/` and was therefore blind to every other way the same backend can be
+ * absent.** It is written as a list of shapes now, so adding one is a visible edit here
+ * rather than a silent widening somewhere else.
+ *
+ * Still deliberately narrow: a 404 is a wrong URL and stays fatal, a non-5xx stays fatal,
+ * another origin is not ours to excuse, and an uncaught exception or `console.error` is
+ * never laundered into this bucket however it is worded.
  *
  * @param {string} line   a line from `describeError`
  * @param {string} base   the origin under test, e.g. `http://127.0.0.1:4401`
  */
 export function isBackendAbsence(line, base) {
   if (!line.startsWith('browser network error')) return false;
-  if (!line.includes(`${base}/api/`)) return false;
-  return /status of 5\d\d/.test(line);
+
+  // Shape 1 — our own HTTP API answering 5xx.
+  if (line.includes(`${base}/api/`) && /status of 5\d\d/.test(line)) return true;
+
+  // Shape 2 — the WebSocket to our own origin failing its handshake. `base` is `http://host`
+  // while the socket URL is `ws://host`, so the origin is compared with the scheme stripped
+  // rather than by substring — `includes(host)` would also match a third-party URL that
+  // merely mentions it.
+  const host = base.replace(/^https?:\/\//, '');
+  if (/^browser network error — WebSocket connection to/.test(line)) {
+    if (line.includes(`ws://${host}/ws/`) || line.includes(`wss://${host}/ws/`)) return true;
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------------ *
@@ -381,11 +406,24 @@ async function main() {
   const port = Number(opt('--port') ?? (reuse ? 0 : await freePort()));
   const base = reuse ?? `http://127.0.0.1:${port}`;
   const settleMs = Number(opt('--settle') ?? 2500);
-  // Fixed, deliberately, and it is the one limitation left in the concurrency story:
-  // **two of these running at once still share a distDir.** A per-port name would fix that
-  // and cost more than it buys — Next appends `<distDir>/types/**` to `apps/web/tsconfig.json`
-  // the first time it sees one, so a dynamic name would add a dead include entry on every
-  // run and churn a tracked file. Named here rather than left for someone to discover.
+  // Fixed, and the collision it used to cause is now *reported* rather than suffered.
+  //
+  // The history is worth keeping because I got it wrong twice. Originally fixed, with the
+  // concurrency limitation written in a comment — and it duly happened: two overlapping runs
+  // shared `.next-pagecheck`, one wiped it from under the other, and the second died on a
+  // missing `prerender-manifest.json`, which reads like a broken app and is nothing of the
+  // kind. That is "a comment is not a mechanism", committed by someone quoting it.
+  //
+  // The obvious fix — a per-run distDir — is **worse**, and measured so rather than reasoned:
+  // Next appends `<distDir>/types/**` to `apps/web/tsconfig.json` when it first sees one, and
+  // it writes *during compilation*, so restoring afterwards races. With two agents running
+  // this gate at once it corrupted a tracked file, leaving two dead `run-<port>` entries and
+  // dropping one run's entry when the other restored. A fix that dirties a tracked file to
+  // clean a build directory is not a fix.
+  //
+  // So: one distDir, already present in the committed tsconfig, so Next never rewrites
+  // anything — and a lock, so the second run says what is wrong instead of destroying the
+  // first. `--port` gives a caller their own everything when they genuinely need it.
   const distDir = '.next-pagecheck';
 
   const browser = findBrowser();
@@ -401,8 +439,44 @@ async function main() {
   /** @type {import('node:child_process').ChildProcess | null} */
   let server = null;
   let serverLog = '';
+
+  // The lock. A stale one from a killed run must not block forever, so it carries a
+  // timestamp and anything older than the server-boot timeout is ignored — a lock that can
+  // deadlock the gate is a lock people delete by hand, and then it protects nothing.
+  const lockPath = join(WEB, distDir, '.gate-lock');
+  const LOCK_STALE_MS = 200_000;
+  let holdsLock = false;
+  const releaseLock = async () => {
+    if (holdsLock) await rm(lockPath, { force: true }).catch(() => {});
+    holdsLock = false;
+  };
+
+  if (!reuse) {
+    let held = null;
+    try {
+      const raw = await readFile(lockPath, 'utf8');
+      const at = Number(JSON.parse(raw).at);
+      if (Number.isFinite(at) && Date.now() - at < LOCK_STALE_MS) held = JSON.parse(raw);
+    } catch {
+      /* no lock, or an unreadable one, which we treat as absent */
+    }
+    if (held) {
+      console.error(
+        `check-page-errors — ${join(WEB, distDir)} is in use by pid ${held.pid} (started ` +
+          `${Math.round((Date.now() - held.at) / 1000)}s ago).\n` +
+          `  Two runs sharing one build directory is how the last one died on a missing\n` +
+          `  prerender-manifest — a failure that looks like a broken app and is not. Wait for\n` +
+          `  it, or run with --port <n> to get your own server. Refusing rather than racing.`,
+      );
+      process.exit(2);
+    }
+  }
+
   if (!reuse) {
     await rm(join(WEB, distDir), { recursive: true, force: true }).catch(() => {});
+    await mkdir(join(WEB, distDir), { recursive: true }).catch(() => {});
+    await writeFile(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }));
+    holdsLock = true;
     const nextBin = join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
     server = spawn(process.execPath, [nextBin, 'dev', '--port', String(port), '--hostname', '127.0.0.1'], {
       cwd: WEB,
@@ -427,6 +501,7 @@ async function main() {
     } catch (e) {
       console.error(`check-page-errors — ${e.message}\n`);
       console.error(serverLog.slice(-4000));
+      await releaseLock();
       process.exit(2);
     }
   }
@@ -475,6 +550,7 @@ async function main() {
   if (!wsUrl) {
     if (server) server.kill();
     chrome.kill();
+    await releaseLock();
     process.exit(2);
   }
 
@@ -524,6 +600,7 @@ async function main() {
   chrome.kill();
   if (server) server.kill();
   await rm(profile, { recursive: true, force: true }).catch(() => {});
+  await releaseLock();
 
   /* ---- the emptiness guard ---- */
   // Same reasoning as smoke-routes': a gate that observed nothing must not report a pass.
