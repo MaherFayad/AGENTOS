@@ -12,8 +12,9 @@ green baseline. Follow-up 1 done: `refused` derives from `STEER_DELIVERY` (two l
 row and `onKeyDown`), proved by flipping the constant — the old file compiled, the new one does
 not. Item 2 was `rtl-arabic-pdpl-specialist`'s at `306039e`; not re-touched. Gates 22:16–22:35
 on `a4841d5`: tokens 0/15 · rtl 308 · `smoke:browser` 0 (66 absences = empty-backend green only)
-· `test:web`/`test:runner`/`typecheck:tests` 0. `verify` exits 1 **only** on
-`observability-engineer`'s uncommitted in-flight work.
+· `test:web`/`test:runner`/`typecheck:tests` 0. Re-run at 22:31 on the still committed tree
+(`0013267`, after `observability-engineer`'s `8c73d8a`): **`verify` exit 0**, tokens
+`clean · 337 files · 0 violations · 15 exemptions`, `smoke:browser` 0.
 
 ## Now
 THREADS view, addressing composer with cost preview, and one thread's feed — all in

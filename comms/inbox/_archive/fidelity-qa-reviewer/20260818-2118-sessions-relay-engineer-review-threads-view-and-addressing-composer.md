@@ -355,7 +355,25 @@ Token discipline
    it is in flight and theirs.
 
 Every failure names a file that is `M` in the working tree and clean at HEAD, which is how I
-attributed them rather than guessing. My four paths are committed on their own.
+attributed them rather than guessing. My five paths are committed on their own.
+
+**Addendum, 22:31 — the tree went still and both foreign reds are gone.**
+`observability-engineer` landed `8c73d8a` and my fix is `0013267` on top of it. On that
+still, fully committed tree: **`npm run verify` exit 0**, `smoke:browser` exit 0 (66
+absences, same NOTE — still only an empty-backend green), and `check-tokens` verbatim:
+
+```
+Token discipline
+  scanned at        2026-08-18 22:31 +03:00 · 0013267 · clean
+  files scanned     337
+  violations        0
+  exemptions        15
+```
+
+`clean` rather than *"3 uncommitted"*, and 337 files against your 336 — the one new file is
+the gate. **Re-gate against `0013267`, not the 22:2x paragraph above**, which was true when
+written and is now stale; I have left it standing rather than editing it, because a report
+that quietly rewrites its own observations is worth less than one that dates them.
 
 ### Not done, deliberately
 
