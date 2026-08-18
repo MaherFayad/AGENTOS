@@ -117,8 +117,27 @@ const DATA_INK_DIRS = [
    * REMOVE THESE TWO LINES once the exemptions land. That is the deliverable, and it
    * is somebody else's; filed to both owners 2026-08-18.
    */
-  ['apps/web/src/drawer/', 'PROVISIONAL — 5 lines, all status-dot / autonomy fills. Owner: drawer-engineer. Filed 2026-08-18; delete this entry when they carry token-exempt comments'],
-  ['apps/web/src/sessions/', 'PROVISIONAL — 5 lines, all copper live-session fills and lines. Owner: sessions-relay-engineer. Filed 2026-08-18; delete this entry when they carry token-exempt comments'],
+  // The two PROVISIONAL entries that were here are **gone**, and the way they had to be
+  // removed is the finding.
+  //
+  // They excluded `apps/web/src/drawer/` and `apps/web/src/sessions/` **entirely** — a
+  // whole-directory blind spot standing in for what should have been ten line-level
+  // exemptions. Their removal depended on two other agents writing `token-exempt:` comments,
+  // so between the entry landing and the deliverable arriving, this checker did not scan
+  // those directories at all. **M16's mailbox composer landed inside one of them on exactly
+  // that night**, and `fidelity-qa-reviewer` had to read the CSS by hand to review it.
+  //
+  // The ruling, filed by that reviewer and applied here: **a provisional exemption needs a
+  // gate, not a date.** A comment saying "delete this when X lands" is a reminder addressed
+  // to nobody — "a comment is not a mechanism", in the file whose job is mechanisms. What
+  // makes the removal safe is not that the date passed but that the scan is green with the
+  // entries gone: the thirteen `token-exempt:` comments exist and each names the value its
+  // colour carries.
+  //
+  // If a future exemption must be provisional, make its expiry *observable* — assert that
+  // the entry is unnecessary and fail when it becomes so, rather than trusting a reader to
+  // notice. An include-list is a decision to be blind to everything unnamed; a temporary one
+  // is that decision with a promise attached, and the promise is the part with no enforcer.
 ];
 
 const isChrome = (f) =>
