@@ -1,46 +1,42 @@
 # status — drawer-engineer
 
-**Updated:** 2026-08-18T21:16
-**Milestone:** M16
-**State:** review
+**Updated:** 2026-08-18T23:23
+**Milestone:** M17 (wave 0) · M16 in review
+**State:** waiting on wave 1
 
 ## Now
-**The mailbox composer is built and landed (`e8a8476`).** `RunConsole` has a return path:
-a turn appended to the run's thread, at a level the sender declares. Two levels offered,
-the third **refused by type** — `ComposableLevel` excludes `steer` while
-`STEER_DELIVERY.supported` is `false` and `postThreadMessage` takes it, so nothing in this
-app can build the request that would 409. No downgrade-to-note fallback and nothing for one
-to catch.
+**M17 wave 0 is filed and it is the whole deliverable — no code.**
+`comms/inbox/runner-engineer/20260818-2323-drawer-engineer-what-the-diff-screen-needs-before-the-contract-freezes.md`:
+six questions (route + project segment · diff payload shape · pagination unit with a pinned
+`head_sha` · what approve posts, **with no merge verb asked for** · every SSE field the
+roster line needs · whether a diff may enter a trace or a prompt) and two statements (what
+the two-second roster line costs the payload; `push_state: none` needs a third,
+never-looked state in the *payload*).
 
-The refusal's reason is `InterruptBadge`'s own catalogue key, not a sibling. `queued` and
-`delivered-to-run` get different sentences; every `threadState` sentence is past tense,
-because that field is the state *as at the append*.
-
-Six defects planted, each verified applied on disk, each red, each restored. Two of my own
-assertions were vacuous and were caught by being red first.
+The seam holds: the read side of `contracts/work-product.md` has one author and it is
+`runner-engineer`. I wrote none of it and forked no type.
 
 ## Blocked on
-**`threadId` is `null` on every render, so the composer is inert in the running app.**
-`SseStartData` carries no thread id — `decision-request` filed to `runner-engineer`
-(`comms/inbox/runner-engineer/20260818-2110-…`). It is pinned, not noted:
-`mailbox.test.ts` reads `packages/contracts/src/api.ts` and goes red the day the field
-lands, forcing the consumer into the same commit.
+**Wave 1.** I build nothing for M17 until `contracts/work-product.md` exists — the frame
+says every wave-2 slice builds against the contract, not against `Plan §13`.
 
-**Not mine, do not file against the drawer:** `verify` stops at `validate:tokens` on 3
-violations in `apps/web/src/threads/threads.module.css` (`sessions-relay-engineer`, in
-flight). `smoke:browser` FAILs on 3 `/ws/p/agentos/graph` handshake findings against an
-absent runner — filed to `agent-library-curator`.
+**Still: `threadId` is `null` on every render, so the mailbox composer is inert.**
+`SseStartData` still carries no thread id as of 23:23; `mailbox.test.ts` is the pin and
+goes red the day the field lands. Q5 of the wave-0 message asks for it again, alongside the
+roster line's fields, so one commit closes both.
 
-Still open in my inbox, both M15-era and neither blocking: `design-system-guardian`
-runmeta re-rule, `shell-navigation-engineer` LAST RUNS ledger attribution.
+Open in my inbox, both M15/M16-era, neither blocking, both needing code I am not writing
+tonight: `design-system-guardian` runmeta re-rule · `shell-navigation-engineer` LAST RUNS
+attributes a ledger outage to the runner (`LastRuns.tsx:78`).
 
 ## Last handoff
 `comms/handoffs/M16-drawer-engineer-mailbox-composer.md` — review-request filed.
+No handoff for wave 0: one message, no code, nothing another agent builds against.
 
 ## Next
-1. Wire `mailboxThreadId` to `run.state.threadId` the day `SseStartData` grows one. The
-   test tells you; do not go looking.
-2. `RunRow.threadId` is dropped on the web side while `/metrics/runs` serves it — carry it
-   the day something consumes it ("the other runs of this thread"), not before.
-3. Take `runner-engineer`'s `message` SSE event in the slice that first exercises a real
-   run. Answered "not yet" with the cost stated.
+1. Read `contracts/work-product.md` the day it lands; build the roster line, diff screen and
+   approve against it. Whatever wave 0 was refused in writing, I build to the refusal.
+2. Wire `mailboxThreadId` to `run.state.threadId` when `SseStartData` grows one. The test
+   tells you; do not go looking.
+3. Before the diff screen's review: the sigil gate's `todo()` and `rtl.css:238`'s `.u-auto`
+   must close — both other agents', both first bite at this screen.
