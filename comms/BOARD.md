@@ -8,16 +8,21 @@ Two (§9–§24). It is **a plan that amends the spec of record, not a second sp
 ([ADR-013](decisions/ADR-013-part-two-standing-and-spec-coverage.md)). Cite it as `Plan §10`;
 a bare `§10` always means the spec of record, which has no §10.
 
-**Current milestone:** `M16 — Threads · addressing · mailbox` (Part Two, P2) **opened
-2026-08-17**; **nine of eleven slices are in and reviewed as of 2026-08-18** — 6 PASS, 3 FAIL,
-all three FAILs fixed. Open: the THREADS view + addressing composer
-(`sessions-relay-engineer`) and the mailbox composer (`drawer-engineer`). The Arabic/RTL +
-PDPL pass is held *deliberately* until those two land, because a review of files two agents
-are writing is a review of something that no longer exists. See the M16 section · `M3 — Runner +
-Run now + Langfuse` (unblocked by M2; the runner half waits on the human for
-`RUNNER_ANTHROPIC_API_KEY`) · `M4 — SESSIONS` (relay unverified against a bootable Happy, and
-§23.8 now replaces the tab it is named for) · `M8` ongoing. M0, M1, M2, **M5**, **M6** and
-**M15** are **done**.
+**Current milestone: none — `M16` closed 2026-08-18 on a PASS.** All eleven slices landed and
+were accepted across three verdicts (5 PASS / 2 FAIL → three fixes → re-gate → the rule-6
+sweep). Done: M0, M1, M2, **M5**, **M6**, **M15**, **M16**.
+
+**Still open:** `M3 — Runner + Run now + Langfuse` (unblocked by M2; the runner half waits on
+the human for `RUNNER_ANTHROPIC_API_KEY`) · `M4 — SESSIONS` (relay unverified against a
+bootable Happy, and §23.8 now replaces the tab it is named for) · `M8` ongoing.
+
+> **Read this before opening M17.** Six milestones are "done" and **not one of them has been
+> validated**: zero agent runs have ever executed, `0005`–`0008` have never met a live
+> Postgres, and the 1440px side-by-side in Part VI has never been run on any milestone. Every
+> PASS to date covers **source, tokens, and — since 2026-08-18 — a real page load**. The two
+> things that would change that are both with the user (`RUNNER_ANTHROPIC_API_KEY`, and the
+> reference frames), and neither is a reason to stop building. It **is** a reason never to let
+> a done row read as a working feature.
 
 > **M6's row was two days stale and this sweep corrected it, 2026-08-18.** The header and the
 > ladder both read *"FAIL open, fix in flight"*; the FAIL had been cleared on **2026-08-16 at
@@ -553,7 +558,45 @@ project-shaped** — that is the cheap half, bought now.
 
 ---
 
-### M16 — Threads · addressing · mailbox (`Plan §12`) — **OPEN 2026-08-17**
+### M16 — Threads · addressing · mailbox (`Plan §12`) — **DONE 2026-08-18**
+
+**Closed on a PASS, not on the passage of time.** Eleven slices, then a two-round acceptance:
+`fidelity-qa-reviewer` returned **5 PASS / 2 FAIL** (three items), all three were fixed, the
+re-gate cleared them, and the milestone was then held open one further dispatch on the
+reviewer's own ungraded queue item — the `Plan §23.11` rule-6 Arabic/RTL + PDPL sweep. That
+sweep PASSed at `4e02a4b` and M16 flipped on it.
+
+**The hold is the part worth keeping.** The reviewer refused to flip a milestone on its own
+silence and said the scope call had to be made out loud. It was, the other way: rule 6 is
+inside the milestone (`Plan §22`, §21.8), and M15 set the precedent of treating that sign-off
+as a separate artifact from the acceptance PASS. Scoping it out to close a milestone one
+dispatch early would have been the board editing its own definition of done for convenience.
+
+**Which half the PASS covers:** source, tokens, and **a real page load** (`smoke:browser`,
+12 routes in Chrome). Verdicts:
+`comms/handoffs/M16-fidelity-qa-reviewer-m16-acceptance-pass.md` ·
+`…-m16-re-gate.md` · `…-the-rule-6-pass-verdict.md`.
+
+> **What it does not mean — the same sentence M15 carried, still true.** Zero agent runs have
+> ever executed. `0005`–`0008` have never met a live Postgres. `ops.message` has never held a
+> row. **The 1440px side-by-side has still never been run on any milestone**, because the
+> reference frames are with the user. Every M16 surface is *structural*.
+>
+> One correction the re-gate forced, kept because the distinction is load-bearing:
+> `ops.agent_runs.thread_id` is **not** "written by nothing" — `db/ledger.ts:79` names it and
+> `lib/runService.ts:233` supplies it. **"No writer" and "an unexercised writer" fail
+> differently, and only one is fixed by a run.**
+
+**Three non-blocking follow-ups, owners named, carried out of the final verdict:** ADR-038
+cites `0007_projects.sql` for a constraint that lives in `0005_project_axis.sql:75` (24
+citations across 20 comms files agree; the same sentence quotes the constraint name verbatim,
+so a reader recovers by grep) · the sigil gate skips `todo()` entries, which render English
+inside an RTL paragraph · `rtl.css:238`'s unused `.u-auto` is `inherit`+`isolate`, which is
+not what `auto` means.
+
+---
+
+#### The record of it being open, kept below
 
 **Both release conditions are met. This is the record of them being met, not of them being
 waived.** `Plan §20` forbids P2 overlapping anything, P1 included:

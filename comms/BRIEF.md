@@ -6,24 +6,25 @@ than the work. If this disagrees with BOARD, **BOARD wins** and this file is sta
 
 ## Where the build is
 
-- **Done:** M0, M1, M2, **M5**, **M6** · **M15** (Projects · cascade · identity) — PASSED.
-- **M16** (Threads · addressing · mailbox, `Plan §12`) — **all eleven slices built**: ADR-023,
-  028, 036, 037 · `thread-model.md` · `0008_threads.sql` · thread routes + mailbox drain ·
-  both registers · `thread-feed` · THREADS in the tab slot (`/sessions` redirects) · THREADS
-  view + addressing composer · mailbox composer · the erasure ruling. **Awaiting the final
-  acceptance pass**; the Arabic/RTL + PDPL sweep of the new surfaces is still owed.
+- **Done:** M0, M1, M2, **M5**, **M6**, **M15**, **M16** — M16's eleven slices PASSED
+  2026-08-18: ADR-023/028/036/037/038 · `thread-model.md` · `0008_threads.sql` · thread routes
+  + mailbox drain · both registers · `thread-feed` · the tab slot · both composers · erasure.
+- **No milestone is open.** Still open: **M3** (waits on the API key), **M4** (relay unverified),
+  **M8**. Next in the plan is **M17** (`Plan §13`) — nothing blocks opening it.
 - **Phase 0 is still open**, and it blocks *validation* of everything, not construction.
+  **Six milestones are done and none is validated** — every PASS covers source, tokens and a
+  real page load. Never let a done row read as a working feature.
 
 > **Completed is not validated.** Zero agent runs have ever executed. `runnerConfigured` is
 > false, the ledger is empty, and `0005`–`0008` have never met a live Postgres. What you
 > build is *structural* until a real run exercises it. Label it that way; never let a column
 > landing read as the feature working.
 
-**With the user, blocking everything empirical:** `RUNNER_ANTHROPIC_API_KEY` (the `.env`
-value is a placeholder) · the twenty `COMPANY.md` answers (0/20) · Tailscale · **reference
-frames for the 1440px comparison** (the browser half is done — `smoke:browser`) · ADR-011.
-**Never** invent or work around the API key, write a figure into `spend.json`, or fabricate
-a `COMPANY.md` answer.
+**With the user, blocking everything empirical:** `RUNNER_ANTHROPIC_API_KEY` (`.env` holds a
+placeholder) · the twenty `COMPANY.md` answers (0/20) · Tailscale · **reference frames for the
+1440px comparison** (the browser half is done — `smoke:browser`) · ADR-011 · **ADR-038**, which
+needs a DPA answer and a region. **Never** invent or work around the API key, write a figure
+into `spend.json`, fabricate a `COMPANY.md` answer, or derive a processing region from docs.
 
 ## The rules that do not bend
 
