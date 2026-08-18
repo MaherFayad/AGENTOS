@@ -99,6 +99,86 @@ test('an open message needs no answer', async () => {
   assert.deepEqual(errs, []);
 });
 
+// ---------------------------------------------------------------------------------------
+// The broadcast age gate. `_all/` reached 2,740 lines across 29 broadcasts — eighteen times
+// the whole BRIEF cap — read by every agent on every dispatch. The line-total control is an
+// aggregate and cannot express the thing that produced that: one broadcast outliving its
+// event. These lock the per-file control in BOTH directions, because a gate that has only
+// ever been green is a claim.
+// ---------------------------------------------------------------------------------------
+
+const BCAST = (created) => `---
+from: commandcenter-orchestrator
+to: all
+type: fyi
+re: '-'
+status: open
+created: ${created}
+---
+
+## Context
+
+Fixture.
+`;
+
+/** As `runWith`, but the message lands in `_all/` and both errors and warnings come back. */
+async function runBroadcast(filename, contents) {
+  const dir = await mkdtemp(join(tmpdir(), 'cc-comms-'));
+  try {
+    await cp(join(ROOT, 'comms'), join(dir, 'comms'), { recursive: true });
+    await cp(join(ROOT, 'scripts'), join(dir, 'scripts'), { recursive: true });
+    const box = join(dir, 'comms', 'inbox', '_all');
+    await mkdir(box, { recursive: true });
+    await writeFile(join(box, filename), contents, 'utf8');
+    const r = spawnSync(process.execPath, [join(dir, 'scripts', 'check-comms.mjs'), '--json'], {
+      encoding: 'utf8',
+    });
+    const j = JSON.parse(r.stdout);
+    const mine = (xs) => xs.filter((e) => e.includes(filename));
+    return { errors: mine(j.errors), warnings: mine(j.warnings), status: r.status };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** Days ago as the frontmatter would spell it — relative, so these never expire. */
+const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 16);
+
+const BNAME = '20260101-1200-commandcenter-orchestrator-fixture.md';
+
+test('a broadcast past the hard limit FAILs and the message names the git mv', async () => {
+  const { errors, warnings, status } = await runBroadcast(BNAME, BCAST(daysAgo(48)));
+  assert.equal(errors.length, 1, `expected one error, got ${JSON.stringify(errors)}`);
+  assert.match(errors[0], /48 days old/);
+  assert.match(errors[0], /git mv .* comms\/inbox\/_archive\/_all\//);
+  assert.deepEqual(warnings, [], 'a hard failure must not also warn — one finding, one voice');
+  assert.equal(status, 1);
+});
+
+test('a broadcast past the soft limit warns and does NOT fail the build', async () => {
+  // The gap between the two limits is the design: 7 days says "check its content landed",
+  // 21 says "nobody is going to". Neither punishes the send.
+  const { errors, warnings } = await runBroadcast(BNAME, BCAST(daysAgo(9)));
+  assert.deepEqual(errors, []);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /9 days old/);
+});
+
+test('a fresh broadcast is silent — the gate must not punish the send', async () => {
+  const { errors, warnings } = await runBroadcast(BNAME, BCAST(daysAgo(1)));
+  assert.deepEqual(errors, []);
+  assert.deepEqual(warnings, []);
+});
+
+test('an unparseable `created:` is reported, not silently skipped', async () => {
+  // A file the checker cannot read is the one place a hoard would learn to hide, so the
+  // blind spot announces itself rather than counting as age 0 and passing.
+  const { errors, warnings } = await runBroadcast(BNAME, BCAST('banana'));
+  assert.deepEqual(errors, []);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /unparseable/);
+});
+
 test('the real comms/ tree passes', () => {
   const r = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8', cwd: ROOT });
   assert.equal(r.status, 0, r.stdout + r.stderr);

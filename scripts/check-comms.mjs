@@ -382,6 +382,46 @@ const OPEN_MESSAGE_WARN = 60;
  */
 const ALL_BROADCAST_LINE_WARN = 900;
 
+/**
+ * The line budget above is an **aggregate** control, and an aggregate cannot see the thing
+ * that actually produces the hoard: one broadcast that outlived its event. Twenty-nine short
+ * announcements are individually reasonable and collectively eighteen BRIEFs.
+ *
+ * So this is the per-file control, and it is deliberately mechanical about the one property
+ * of a broadcast that *is* mechanical — its **age**. A broadcast is an event notification. An
+ * event notification that is three weeks old is not notifying anyone of anything; whatever in
+ * it was durable is either recorded in BOARD, a contract or BRIEF by now, or it never will be.
+ *
+ * Warn at 7 days, fail at 21. The gap is the point: 7 says *this has done its job, check that
+ * its content landed*; 21 says *nobody is going to*. Neither punishes the send — the sender
+ * has three weeks — which is the same reason the line budget is a warn. **A failing build here
+ * is one `git mv` away from green**, and the fix is legal for anyone: `_all/` has no owner.
+ *
+ * Read from `created:` in the frontmatter, never from mtime. Every file in a fresh clone has
+ * today's mtime, so an mtime-based gate is green on CI and on any machine that re-checked out
+ * the tree — green for a reason that has nothing to do with the property being measured. That
+ * is the checkers-go-blind-silently family, and it would have been invisible here because the
+ * blindness only shows up somewhere other than the author's laptop.
+ *
+ * **What this instrument cannot see**, written down rather than discovered later:
+ *   - a broadcast sent yesterday whose content was already recorded in a contract — the
+ *     genuinely wasteful case, and the one no clock reaches. Judgement, not a gate.
+ *   - whether the durable content actually landed anywhere. It measures age, and age is a
+ *     *proxy*. Do not read a green here as "the content was filed"; that claim needs a reader.
+ *   - a broadcast with a malformed or future `created:` — counted as age 0 and reported as
+ *     unparseable rather than silently skipped, because a file a checker cannot read is the
+ *     one place a hoard would learn to hide.
+ */
+const BROADCAST_AGE_WARN_DAYS = 7;
+const BROADCAST_AGE_FAIL_DAYS = 21;
+
+/** Whole days between an ISO-ish `created:` stamp and now; `null` if it will not parse. */
+function ageInDays(created, now) {
+  const t = Date.parse(String(created ?? '').trim());
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((now - t) / 86_400_000);
+}
+
 async function checkReadingBudget(openCount) {
   const rel = 'comms/BRIEF.md';
   let text;
@@ -424,11 +464,38 @@ async function checkReadingBudget(openCount) {
   // The broadcast budget — the larger half of the same cost, and the one that was missed.
   let broadcastLines = 0;
   let broadcastFiles = 0;
+  const now = Date.now();
   for (const entry of await listDir(join(COMMS, 'inbox', '_all'))) {
     if (!entry.isFile() || !entry.name.endsWith('.md') || isTemplate(entry.name)) continue;
     broadcastFiles++;
+    const relFile = `comms/inbox/_all/${entry.name}`;
     const body = await readFile(join(COMMS, 'inbox', '_all', entry.name), 'utf8');
     broadcastLines += body.replace(/\n$/, '').split('\n').length;
+
+    // Per-file age — the control the aggregate cannot express. See the constants above.
+    const fm = parseFrontmatter(body);
+    const age = ageInDays(fm?.created, now);
+    if (age === null) {
+      warn(
+        `${relFile}: \`created:\` is missing or unparseable, so its age cannot be checked. ` +
+          `Use the message template's \`yyyy-MM-ddTHH:mm\`.`,
+      );
+    } else if (age >= BROADCAST_AGE_FAIL_DAYS) {
+      fail(
+        `${relFile} is ${age} days old and still in _all/. A broadcast is an event ` +
+          `notification; after ${BROADCAST_AGE_FAIL_DAYS} days it notifies nobody and is read ` +
+          `by every agent on every dispatch. Put its durable content in BOARD, a contract or ` +
+          `BRIEF — name where, do not assume it is already there — then ` +
+          `\`git mv ${relFile} comms/inbox/_archive/_all/\`. Nothing is deleted, and a move is ` +
+          `two paths: commit both.`,
+      );
+    } else if (age >= BROADCAST_AGE_WARN_DAYS) {
+      warn(
+        `${relFile} is ${age} days old (soft limit ${BROADCAST_AGE_WARN_DAYS}, hard limit ` +
+          `${BROADCAST_AGE_FAIL_DAYS}). Check that its durable content landed in BOARD, a ` +
+          `contract or BRIEF, then archive it to comms/inbox/_archive/_all/.`,
+      );
+    }
   }
   if (broadcastLines > ALL_BROADCAST_LINE_WARN) {
     warn(

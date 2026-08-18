@@ -14,8 +14,8 @@ If something here disagrees with BOARD, **BOARD wins** and this file is stale �
 - **Open: M16** — Threads · addressing · mailbox (`Plan §12`). Landed: ADR-023 + ADR-028,
   `contracts/thread-model.md`, `0008_threads.sql`, thread routes and mailbox drain,
   `thread_id` on metrics, both registers, `thread-feed`, THREADS in the tab slot.
-- **Not started:** the THREADS view and the mailbox composer. Both consume
-  `contracts/thread-model.md` — read its sections before building.
+- **Not started:** the THREADS view and the mailbox composer. Read the sections you consume of
+  `thread-model.md` **and `design-tokens.md` §11** — the two thread badges already exist.
 - **Phase 0 is still open**, and it blocks *validation* of everything, not construction.
 
 > **Completed is not validated.** Zero agent runs have ever executed. `runnerConfigured` is
