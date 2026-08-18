@@ -83,6 +83,10 @@ test('the plan span is handed input keys, never the flattened summary', async ()
       tool: () => ({ ok: () => {}, error: () => {} }) as never,
       usage: () => {},
       event: (name, detail) => events.push({ name, detail }),
+      // `RunTrace.withhold` is required, so every construction site had to acknowledge it —
+      // which is the required member doing its job. A fake that silently lacked it would be
+      // a plane where a body could not be withheld and nothing said so.
+      withhold: () => {},
       finish: async () => ({}) as never,
     };
     services.obs = { startRun: () => trace } as unknown as Observability;

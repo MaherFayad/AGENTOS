@@ -19,6 +19,7 @@ import {
   normaliseKey,
   placeholder,
 } from './redaction-rules.ts';
+import { NO_WITHHELD, WITHHELD_LABEL, type Withheld } from './withhold.ts';
 
 export type RedactionHit = { rule: string; label: string; path: string };
 
@@ -109,7 +110,12 @@ function deniedSuffix(run: string): string | null {
   return null;
 }
 
-function redactKeysInString(input: string, path: string, hits: RedactionHit[]): string {
+function redactKeysInString(
+  input: string,
+  path: string,
+  hits: RedactionHit[],
+  withheld: Withheld,
+): string {
   KEY_SEPARATOR.lastIndex = 0;
   let out = '';
   let cursor = 0;
@@ -132,6 +138,11 @@ function redactKeysInString(input: string, path: string, hits: RedactionHit[]): 
 
     // The key stays visible: *which* field was redacted is operationally useful and is
     // not itself client data. Only the value goes.
+    //
+    // The value is also registered as withheld before it is dropped, so the *same* text
+    // arriving later in this run under no key at all — in an error message, in a composed
+    // frame — is caught by characters instead of by a key it no longer has.
+    withheld.add(input.slice(valueStart, valueEnd));
     out += input.slice(cursor, valueStart) + placeholder(norm);
     cursor = valueEnd;
     KEY_SEPARATOR.lastIndex = valueEnd;
@@ -142,7 +153,12 @@ function redactKeysInString(input: string, path: string, hits: RedactionHit[]): 
 }
 
 /** Apply the key-in-string pass, the value rules and the literal-secret scrub to one string. */
-export function redactString(input: string, path: string, hits: RedactionHit[]): string {
+export function redactString(
+  input: string,
+  path: string,
+  hits: RedactionHit[],
+  withheld: Withheld = NO_WITHHELD,
+): string {
   let out = input;
 
   for (const secret of literalSecrets) {
@@ -152,9 +168,18 @@ export function redactString(input: string, path: string, hits: RedactionHit[]):
     }
   }
 
+  // Withheld literals run before every rule below, because they are the only pass that does
+  // not need the text to have kept a shape. A body interpolated into an error string has no
+  // key for the key pass and no pattern for the value pass; it still has its characters.
+  const scrubbed = withheld.scrub(out);
+  out = scrubbed.out;
+  for (let i = 0; i < scrubbed.count; i++) {
+    hits.push({ rule: 'withheld_literal', label: WITHHELD_LABEL, path });
+  }
+
   // Before the value rules: a denylisted key's value goes whatever shape it has, and the
   // value rules should then only see what survived.
-  out = redactKeysInString(out, path, hits);
+  out = redactKeysInString(out, path, hits, withheld);
 
   for (const rule of VALUE_RULES) {
     rule.pattern.lastIndex = 0;
@@ -173,11 +198,28 @@ export function redactString(input: string, path: string, hits: RedactionHit[]):
   return out;
 }
 
-function walk(value: unknown, path: string, depth: number, hits: RedactionHit[], skipValueRules: boolean): unknown {
+function walk(
+  value: unknown,
+  path: string,
+  depth: number,
+  hits: RedactionHit[],
+  skipValueRules: boolean,
+  withheld: Withheld,
+): unknown {
   if (value === null || value === undefined) return value;
 
   if (typeof value === 'string') {
-    return skipValueRules ? value : redactString(value, path, hits);
+    if (!skipValueRules) return redactString(value, path, hits, withheld);
+    // `KEY_ALLOWLIST` exempts a string from the *value rules*, because a pattern written for
+    // an IBAN means nothing on a model name. It does not exempt it from the withheld
+    // register, which matches characters rather than shapes: an allowlist is a decision to
+    // be blind to everything it names, and "the leak was in a field we had allowlisted" is
+    // that decision's bill.
+    const scrubbed = withheld.scrub(value);
+    for (let i = 0; i < scrubbed.count; i++) {
+      hits.push({ rule: 'withheld_literal', label: WITHHELD_LABEL, path });
+    }
+    return scrubbed.out;
   }
 
   if (typeof value === 'number' || typeof value === 'boolean') return value;
@@ -193,7 +235,7 @@ function walk(value: unknown, path: string, depth: number, hits: RedactionHit[],
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: redactString(value.message, `${path}.message`, hits),
+      message: redactString(value.message, `${path}.message`, hits, withheld),
     };
   }
 
@@ -204,7 +246,9 @@ function walk(value: unknown, path: string, depth: number, hits: RedactionHit[],
 
   if (Array.isArray(value)) {
     const kept = value.slice(0, MAX_ARRAY_LENGTH);
-    const out: unknown[] = kept.map((item, i) => walk(item, `${path}[${i}]`, depth + 1, hits, false));
+    const out: unknown[] = kept.map((item, i) =>
+      walk(item, `${path}[${i}]`, depth + 1, hits, false, withheld),
+    );
     if (value.length > kept.length) {
       hits.push({ rule: 'max_array', label: 'truncated', path });
       out.push(`[TRUNCATED ${value.length - kept.length} items]`);
@@ -224,7 +268,14 @@ function walk(value: unknown, path: string, depth: number, hits: RedactionHit[],
         continue;
       }
 
-      out[key] = walk(child, childPath, depth + 1, hits, ALLOW.has(norm) && typeof child === 'string');
+      out[key] = walk(
+        child,
+        childPath,
+        depth + 1,
+        hits,
+        ALLOW.has(norm) && typeof child === 'string',
+        withheld,
+      );
     }
     return out;
   }
@@ -233,12 +284,51 @@ function walk(value: unknown, path: string, depth: number, hits: RedactionHit[],
 }
 
 /**
+ * Register every denylisted key's *string* value before anything is rewritten.
+ *
+ * A separate pass rather than a line inside `walk`, and the reason is an ordering bug that
+ * would otherwise be silent. `redact({ body: X, note: 'halted: ' + X })` walks its keys in
+ * insertion order; registering during the walk means the same payload with the keys the
+ * other way round leaks. A defence whose result depends on `Object.entries` order is a
+ * defence that works on the example it was written against.
+ *
+ * The trade this takes is the file's existing one, stated at `KEY_SEPARATOR`:
+ * over-redaction costs a legible trace, under-redaction costs a client's data, and there is
+ * no unredact path. So `{ auth: 'not required' }` does make the string "not required"
+ * disappear elsewhere in the same run. That is the price, it is bounded by one run, and it
+ * is the right way round.
+ */
+function collectWithheld(value: unknown, depth: number, withheld: Withheld): void {
+  if (value === null || typeof value !== 'object' || depth >= MAX_DEPTH) return;
+
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, MAX_ARRAY_LENGTH)) collectWithheld(item, depth + 1, withheld);
+    return;
+  }
+  if (value instanceof Date || value instanceof Error) return;
+
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (DENY.has(normaliseKey(key)) && typeof child === 'string') withheld.add(child);
+    else collectWithheld(child, depth + 1, withheld);
+  }
+}
+
+/**
  * Redact an arbitrary payload. The returned value is a fresh structure — the caller's
  * object is never mutated, so a run's real inputs stay intact for the run itself.
+ *
+ * `withheld` is the run's literal register (`withhold.ts`). Omitted, redaction behaves
+ * exactly as it did before that file existed — which is what every caller outside
+ * `instrument.ts` wants, and what keeps `redact()` a pure function in tests.
  */
-export function redact<T = unknown>(value: T, rootPath = ''): RedactionResult {
+export function redact<T = unknown>(
+  value: T,
+  rootPath = '',
+  withheld: Withheld = NO_WITHHELD,
+): RedactionResult {
   const hits: RedactionHit[] = [];
-  return { value: walk(value, rootPath, 0, hits, false), hits };
+  if (withheld !== NO_WITHHELD) collectWithheld(value, 0, withheld);
+  return { value: walk(value, rootPath, 0, hits, false, withheld), hits };
 }
 
 /** Convenience for the many places that only need the cleaned value. */

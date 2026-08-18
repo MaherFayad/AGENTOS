@@ -131,6 +131,8 @@ function fakeObs(db: DbClient): Observability {
     tool: () => ({ ok: () => {}, error: () => {} }),
     usage: () => {},
     event: () => {},
+    // Required on `RunTrace` as of the withheld-literal register (`observability/withhold.ts`).
+    withhold: () => {},
     finish: async () => ({}) as never,
   };
   return { startRun: () => trace, db, close: async () => {} } as unknown as Observability;

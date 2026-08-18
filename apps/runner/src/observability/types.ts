@@ -226,6 +226,24 @@ export type RunTrace = {
   usage(u: Usage): void;
   /** Free-form milestone (plan emitted, approval requested, artifact written). */
   event(name: string, detail?: unknown): void;
+  /**
+   * Register a literal as client text this run may never emit — in a span attribute, a
+   * ledger column, an activity line or an **error message**. Traces nothing by itself.
+   *
+   * Call it the moment the process reads free text a human typed, *before* anything can be
+   * composed from it. `contracts/thread-model.md` §7.1: a message body may not leave through
+   * the observability plane at any granularity, and §9.3 refuses truncation by name — so
+   * the register matches a 32-character window of a registered literal as well as the whole
+   * of it, and `body.slice(0, 40)` in an error string is caught.
+   *
+   * **Why this is a method and not a type.** `rtl-arabic-pdpl-specialist` asked whether the
+   * tracer's entry points could refuse a message-shaped argument at compile time. They can
+   * for the object case, and it would not be worth it — see the verdict in the handoff — but
+   * more importantly no type reaches the case that matters: `` `halted: ${message.body}` ``
+   * is a `string` by the time any signature sees it. Interpolation erases provenance, so the
+   * only handle left is the characters, which is what this registers.
+   */
+  withhold(text: string): void;
   /** Close the run. Flushes the trace and writes the ledger row. */
   finish(outcome: RunOutcome): Promise<RunRecord>;
 };

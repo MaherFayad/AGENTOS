@@ -20,6 +20,7 @@ import { composeActivity } from './activity.ts';
 import { buildOtlpPayload, newSpanId, newTraceId, type OtelSpan, type SpanScope } from './langfuse.ts';
 import { priceRun } from './pricing.ts';
 import { redact, type RedactionHit } from './redact.ts';
+import { createWithheld } from './withhold.ts';
 import type {
   RunInit,
   RunOutcome,
@@ -86,8 +87,15 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
       'agnetos.thread.id': init.threadId,
     };
 
+    // One register per run, and per run is the whole design (`withhold.ts`). A literal this
+    // run was told to withhold is scrubbed from every string this run emits — including an
+    // error message, which is the one door no key rule and no value rule can reach. It is
+    // not process-global: a global register would scrub run B's trace because of run A's
+    // client, which is over-redaction with no bound and no way to reason about a trace.
+    const withheld = createWithheld();
+
     const hits: RedactionHit[] = [];
-    const redactedInputs = init.inputs ? redact(init.inputs, 'inputs') : null;
+    const redactedInputs = init.inputs ? redact(init.inputs, 'inputs', withheld) : null;
     if (redactedInputs) hits.push(...redactedInputs.hits);
 
     const spans: OtelSpan[] = [];
@@ -102,7 +110,8 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
       const spanId = makeSpanId();
       const spanStart = now();
       const seq = toolCalls.length;
-      const redactedInput = input === undefined ? undefined : redact(input, `tool.${name}.input`);
+      const redactedInput =
+        input === undefined ? undefined : redact(input, `tool.${name}.input`, withheld);
       if (redactedInput) hits.push(...redactedInput.hits);
       let settled = false;
 
@@ -111,9 +120,18 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
         settled = true;
         const spanEnd = now();
         const durationMs = spanEnd.getTime() - spanStart.getTime();
-        const redactedOutput = payload === undefined ? undefined : redact(payload, `tool.${name}.output`);
+        const redactedOutput =
+          payload === undefined ? undefined : redact(payload, `tool.${name}.output`, withheld);
         if (redactedOutput) hits.push(...redactedOutput.hits);
-        const redactedError = error ? (redact(error, `tool.${name}.error`).value as string) : null;
+        // The error string goes through the same register as everything else. Before
+        // `withhold.ts` this call was the widest hole in the plane: prose has no keys, so
+        // `redact` returned it verbatim with zero hits, and `span.error(`halted: ${body}`)`
+        // is the sentence a reasonable author writes.
+        const redactedErrorResult = error
+          ? redact(error, `tool.${name}.error`, withheld)
+          : null;
+        if (redactedErrorResult) hits.push(...redactedErrorResult.hits);
+        const redactedError = redactedErrorResult ? (redactedErrorResult.value as string) : null;
         if (status === 'error') errorCount += 1;
 
         spans.push({
@@ -186,7 +204,7 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
 
     function event(name: string, detail?: unknown): void {
       const at = now();
-      const redactedDetail = detail === undefined ? undefined : redact(detail, `event.${name}`);
+      const redactedDetail = detail === undefined ? undefined : redact(detail, `event.${name}`, withheld);
       if (redactedDetail) hits.push(...redactedDetail.hits);
       spans.push({
         traceId,
@@ -210,7 +228,9 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
       const endedAt = now();
       const durationMs = endedAt.getTime() - startedAt.getTime();
       const { costUsd, costSource } = priceRun(sdkCostUsd, model, totals, startedAt);
-      const redactedError = outcome.error ? (redact(outcome.error, 'error').value as string) : null;
+      const outcomeError = outcome.error ? redact(outcome.error, 'error', withheld) : null;
+      if (outcomeError) hits.push(...outcomeError.hits);
+      const redactedError = outcomeError ? (outcomeError.value as string) : null;
       const agentName = init.agentName ?? humaniseSlug(init.agent);
 
       // The activity line is composed from two things a person or an agent wrote:
@@ -235,7 +255,7 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
         artifacts: outcome.artifacts,
         summary: outcome.summary,
       });
-      const redactedActivity = redact(composed, 'activity');
+      const redactedActivity = redact(composed, 'activity', withheld);
       if (redactedActivity) hits.push(...redactedActivity.hits);
       const activity = redactedActivity.value as typeof composed;
 
@@ -339,7 +359,22 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
       return record;
     }
 
-    return { runId, traceId, traceUrl, tool, usage, event, finish };
+    /**
+     * Tell this run that a literal is client text and must never appear in its
+     * observability data, in any container, at any granularity.
+     *
+     * Nothing is traced by calling this. It is the door for the case the redactor cannot
+     * infer: text the process holds but never hands to `redact()` under a denylisted key —
+     * a `ThreadMessage.body` read through `messageSpanAttributes()`, which projects a
+     * `bodyChars` count and deliberately no body. The register never learns the body that
+     * way, so an error string composed from it a second later is not matched. One call at
+     * the point the body is read closes it; see the handoff for the call site.
+     */
+    function withhold(text: string): void {
+      withheld.add(text);
+    }
+
+    return { runId, traceId, traceUrl, tool, usage, event, withhold, finish };
   }
 
   return { startRun };

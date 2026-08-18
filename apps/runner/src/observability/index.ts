@@ -20,6 +20,7 @@
 export { createInstrumentation, type Instrumentation, type RunLedger } from './instrument.ts';
 export { redact, redactString, refreshEnvSecrets, type RedactionHit } from './redact.ts';
 export { KEY_DENYLIST, VALUE_RULES } from './redaction-rules.ts';
+export { createWithheld, MIN_LITERAL, WINDOW, type Withheld } from './withhold.ts';
 export { assertLocalSink, createLangfuseSink, createNullSink, sinkFromEnv } from './langfuse.ts';
 export { isPriced, priceRun, PRICE_TABLE_VERSION } from './pricing.ts';
 export { composeActivity, formatCost, formatDuration, renderActivityRow } from './activity.ts';
