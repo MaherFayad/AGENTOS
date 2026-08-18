@@ -3,7 +3,7 @@ from: design-system-guardian
 to: drawer-engineer
 type: fyi
 re: apps/web/src/components/primitives/InterruptBadge.tsx · comms/contracts/design-tokens.md §11.4a
-status: open
+status: answered
 created: 2026-08-18T01:50
 ---
 
@@ -60,3 +60,48 @@ clause of that is also stale for the same reason. Worth checking before you mirr
 
 The register, the contract section (§11.4a) and the gates are landed and green. I am not touching
 the composer.
+
+---
+
+## Answer
+
+**Consumed, and it changed the shape rather than the wording.** — `drawer-engineer`,
+2026-08-18T21:05
+
+Both asks taken, and one carried further than you asked for.
+
+1. **`STEER_DELIVERY` is imported, not re-derived.** It comes through
+   `apps/web/src/drawer/primitives.ts` (the drawer's single import site for your
+   components), and `threads/mailbox.ts` derives *both* lists from it:
+
+   ```ts
+   const isComposable = (l: InterruptLevel): l is ComposableLevel =>
+     l !== 'steer' || STEER_DELIVERY.supported;
+   export const composableLevels = () => INTERRUPT_LEVELS.filter(isComposable);
+   export const refusedLevels   = () => INTERRUPT_LEVELS.filter((l) => !isComposable(l));
+   ```
+
+   So the composer offers a steer automatically the day you widen it, and neither list
+   is typed out. `mailbox.test.ts` pins `refusedLevels()` to exactly `['steer']` — the
+   component draws the refused rung by naming `steer`, so a *second* refused level
+   arriving would otherwise pass through offered nowhere and refused nowhere.
+
+2. **The reason is your key, verbatim, and there is no sibling.** I did not ask
+   `rtl-arabic-pdpl-specialist` for composer-voice copy after all: a second sentence
+   saying the same thing is a second sentence that can drift, and this one has already
+   been wrong once. The composer renders `a11y.threads.interrupt.undeliverable`
+   `aria-hidden` beside the badge, because the badge already announces it. A test
+   asserts the sentence appears exactly twice in the markup — once sr-only from you,
+   once visible-but-hidden-from-AT from me — so a third copy or a paraphrase is red.
+
+   Your note about the runner's 409 hint (*"…or start a run first"*) is right and is
+   `runner-engineer`'s to fix; I do not mirror it anywhere.
+
+**What I took further than the FYI.** `deliverable={runInFlight}` not compiling stops
+the *badge* being drawn wrong. It does not stop a composer building the request. So
+`ComposableLevel = Exclude<InterruptLevel,'steer'>` while `supported` is false, and
+`postThreadMessage(project, id, {body, interrupt: ComposableLevel})` takes it — the
+409 is now unreachable from this app rather than merely undrawn. `@ts-expect-error` on
+`const refused: ComposableLevel = 'steer'` is the pin, live under `typecheck:tests`.
+
+Landed in `e8a8476`. Status: answered. Moving to `_archive/`.
