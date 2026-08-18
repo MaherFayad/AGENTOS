@@ -541,6 +541,60 @@ export const en = {
   'a11y.threads.interrupt.undeliverable':
     'Steering a run in progress is not available in this build, so this would be refused rather than queued.',
 
+  /* ---------------------------------------------------------------------------
+   * The mailbox composer in the drawer (`Plan §12` · `§23.12 P2`).
+   * Owner of the surface: `drawer-engineer`. Written in Arabic, not `todo()`d —
+   * `strings.ar.ts` states why, and `rtl-arabic-pdpl-specialist` may overwrite
+   * all seventeen without asking.
+   *
+   * THERE IS NO KEY HERE FOR THE REFUSAL'S REASON, ON PURPOSE. The composer
+   * renders `a11y.threads.interrupt.undeliverable` — the same sentence
+   * `InterruptBadge` announces — rather than a composer-voice sibling. A second
+   * sentence saying the same thing is a second sentence that can drift, and this
+   * one has already been wrong once: it used to name thread-model §4.2's
+   * condition (*"nothing is running on this thread"*) instead of the runner's,
+   * which told a reader with a run in flight that the refusal did not apply to
+   * them. One sentence, one place to correct it.
+   *
+   * NO KEY HERE CAN HOLD A FIGURE, for the same reason the register above has
+   * none: `TurnCost.estimatedUsd` is typed `null` and zero runs have completed.
+   *
+   * DISPOSITION AND STATE ARE DIFFERENT FACTS AND GET DIFFERENT SENTENCES.
+   * `queued` and `delivered-to-run` are what the runner says happened; the
+   * thread state is what the runner read *before* writing. Blurring them is
+   * exactly what invariant 7 forbids, one level down.
+   * ------------------------------------------------------------------------ */
+  'threads.mailbox.bodyLabel': 'Send into this thread',
+  'threads.mailbox.bodyPlaceholder': 'What should the agent know?',
+  'threads.mailbox.levelLabel': 'How it lands',
+  'threads.mailbox.send': 'Send',
+  'threads.mailbox.sending': 'Sending…',
+  'threads.mailbox.emptyBody': 'A message needs a body. Nothing was sent.',
+  /* The honest empty state for an address this build cannot know. `SseStartData`
+   * carries no thread id, so a run on screen cannot say which conversation it is
+   * a turn of. Named rather than hidden — a composer that silently disappears is
+   * indistinguishable from one nobody built. */
+  'threads.mailbox.noThread':
+    'The run stream does not say which thread this run belongs to, so there is no mailbox to address from here yet.',
+
+  'threads.mailbox.disposition.queued':
+    'Queued in the mailbox. Nothing has read it yet — the thread’s next run does.',
+  'threads.mailbox.disposition.deliveredToRun':
+    'Handed to the run in flight, which reads it at its next settled tool call.',
+
+  /* Five sentences rather than one with a `{state}` variable: a sentence
+   * assembled at the call site from two catalogue keys is banned outright
+   * (`i18n/entry.ts`), and a state name is a word that inflects. */
+  'threads.mailbox.appendState.open': 'The thread was open when this was appended.',
+  'threads.mailbox.appendState.running': 'The thread was running when this was appended.',
+  'threads.mailbox.appendState.waiting': 'The thread was waiting on a question when this was appended.',
+  'threads.mailbox.appendState.closed': 'The thread was closed when this was appended.',
+  'threads.mailbox.appendState.failed': 'The thread had failed when this was appended.',
+  'threads.mailbox.appendStateCaveat':
+    'That is the state read before the message was written, not the state after it.',
+  'threads.mailbox.haltNotYetMoved':
+    'A halt does not move the thread by itself. The run’s next drain reads it, stops the session, and moves the thread then.',
+
   'a11y.mapCanvas': 'Agent galaxy. Use the arrow keys to move between departments.',
   'a11y.drawer': 'Agent detail',
   'a11y.carousel': 'Command centers',

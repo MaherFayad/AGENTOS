@@ -29,9 +29,14 @@
  * Owner: drawer-engineer
  */
 
-import { PROJECT_ROUTE_PREFIX, RUNNER_ROUTES } from '@agnetos/contracts';
+import {
+  PROJECT_ROUTE_PREFIX,
+  RUNNER_ROUTES,
+  type PostThreadMessageResponse,
+} from '@agnetos/contracts';
 import { NO_PROJECT_SENTENCE, projectApiUrl } from '@/components/shell/useSearchIndex';
 import { API_BASE } from '../run/transport';
+import type { ComposableLevel } from '../threads/mailbox';
 import { normalizeAgentDoc, normalizeRuns } from './normalize';
 import type { AgentDoc, RunRow } from './types';
 
@@ -221,6 +226,41 @@ export async function postApproval(
     encodeURIComponent(runId),
   );
   await postJson(path, { decision, ...(note ? { note } : {}) });
+}
+
+/**
+ * `POST /api/p/:project/thread/:id/message` — **the one pipe** (`thread-model.md` §4.1).
+ *
+ * The path spelling is the contract's and not `Plan §12`'s `POST /api/thread/:id/message`,
+ * and the difference is load-bearing: ADR-015 puts the project in the path of every route
+ * that reads or writes one project's data, and a lookup-then-scope route would let a
+ * caller-supplied `:id` choose its own scope. Read from `RUNNER_ROUTES.threadMessage` for
+ * the same reason every other path in this file is — a literal is what let five paths go
+ * stale silently through M15.
+ *
+ * **`interrupt` is `ComposableLevel`, so `'steer'` does not compile here.** The runner
+ * answers every steer with `interrupt_not_deliverable` (409) in this build, and the honest
+ * shape of that is a control this app cannot construct — not a request it sends and then
+ * apologises for. There is deliberately no `catch` that retries as a note:
+ * `thread-model.md` invariant 7 forbids exactly that, because a human who steered and was
+ * silently queued believes they changed course and nothing did.
+ *
+ * **The body is free text a person typed** — `ops.message` is the highest-PII surface in
+ * this repo (§7). It goes into the request and nowhere else: it is not logged, not put
+ * into an error sentence, and not echoed into any string this UI later renders. A body
+ * inside an error string leaks past every key-based redactor, which is the flattening
+ * finding, and `postJson` above already discards the request body on failure.
+ */
+export async function postThreadMessage(
+  project: string | null,
+  threadId: string,
+  input: { body: string; interrupt: ComposableLevel },
+): Promise<PostThreadMessageResponse> {
+  const path = scopedPath(RUNNER_ROUTES.threadMessage.path, project).replace(
+    ':id',
+    encodeURIComponent(threadId),
+  );
+  return (await postJson(path, input)) as PostThreadMessageResponse;
 }
 
 /**

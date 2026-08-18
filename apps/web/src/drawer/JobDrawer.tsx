@@ -15,7 +15,14 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { DEFAULT_LOCALE, translate, type StringKey, type Vars } from '@/i18n';
 import { useProjectSegment } from '@/components/shell';
 import { useFocusTrap } from './a11y/useFocusTrap';
-import { ApiCallError, downloadUrl, fetchAgent, fetchRuns, postSchedule } from './data/client';
+import {
+  ApiCallError,
+  downloadUrl,
+  fetchAgent,
+  fetchRuns,
+  postSchedule,
+  postThreadMessage,
+} from './data/client';
 import { initialValues, toRunPayload, validateInputs, type InputValues } from './data/inputs';
 import { projectAgent, type DrawerModel } from './data/project';
 import { drawerProvenance, type DrawerProvenance } from './data/provenance';
@@ -34,6 +41,7 @@ import { Paragraph, QuoteBox, WiredIntoList } from './sections/Prose';
 import { RunConsole } from './sections/RunConsole';
 import { Section } from './sections/Section';
 import { SkillFileCard } from './sections/SkillFileCard';
+import type { Sender } from './threads/MailboxComposer';
 import s from './drawer.module.css';
 
 export type DrawerSide = 'left' | 'right';
@@ -165,6 +173,29 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
     setConsoleHeld(false);
   }, [run]);
 
+  /**
+   * The mailbox composer's address — `null`, and honestly so (`Plan §12`).
+   *
+   * Every run opens or continues a thread (`runService.ts` step 0b), but `SseStartData`
+   * does not carry its id: `runId`, `agent`, `agentRef`, `sourceRef`, `traceUrl`,
+   * `startedAt`, `tools`, `approvalRequired` — and no `threadId`. So the drawer watches a
+   * run and cannot name the conversation it belongs to, and the composer renders disabled
+   * with that reason rather than pretending to an address it does not have.
+   *
+   * This is not left as a comment. `threads/mailbox.ts` declares
+   * `RUN_STREAM_CARRIES_THREAD_ID = false` and `mailbox.test.ts` reads
+   * `packages/contracts/src/api.ts` — the moment `runner-engineer` adds `threadId` to
+   * `SseStartData`, that test goes red and this line has to become
+   * `run.state.threadId ?? null` before the tree is green again. A producer landing
+   * without its consumer is how the header read SOURCE UNKNOWN for all of M15.
+   */
+  const mailboxThreadId: string | null = null;
+
+  const sendMessage = useCallback<Sender>(
+    (threadId, input) => postThreadMessage(project, threadId, input),
+    [project],
+  );
+
   const model = agent.kind === 'ready' ? agent.model : null;
   /**
    * `Plan §23.6` — which library this agent came from.
@@ -276,6 +307,8 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
           <RunConsole
             state={run.state}
             open={consoleHeld}
+            threadId={mailboxThreadId}
+            sendMessage={sendMessage}
             onDecide={(decision) => void run.decide(decision)}
             onCancel={run.cancel}
             onDismiss={onDismissConsole}

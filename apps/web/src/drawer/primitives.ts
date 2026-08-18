@@ -25,6 +25,14 @@
 
 export { GlassPanel } from '@/components/primitives/GlassPanel';
 export { Pill } from '@/components/primitives/Pill';
+/**
+ * `InterruptBadge` — the eleventh primitive — and `STEER_DELIVERY` beside it, because
+ * the tokens contract §11.4a makes them required reading as a pair: the badge draws an
+ * interrupt level, and the constant is what says whether this build can deliver one.
+ * The drawer's mailbox composer derives its offered levels from the constant rather
+ * than declaring them, so a second copy of "steer is refused" cannot exist here.
+ */
+export { InterruptBadge, STEER_DELIVERY } from '@/components/primitives/InterruptBadge';
 export { Card } from '@/components/primitives/Card';
 export { Chip } from '@/components/primitives/Chip';
 export { Eyebrow } from '@/components/primitives/Eyebrow';

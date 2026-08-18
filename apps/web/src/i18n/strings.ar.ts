@@ -512,6 +512,60 @@ export const ar: Catalog = {
   'a11y.threads.interrupt.undeliverable':
     'لا يمكن توجيه عملية تشغيل جارية في هذه النسخة، فسيُرفض هذا بدل أن يُدرَج في الانتظار.',
 
+  /* The mailbox composer (`Plan §12`), added by `drawer-engineer`.
+   *
+   * WRITTEN, NOT `todo()`d — and the reason is a gate rather than a preference.
+   * The first draft filed all seventeen as `todo()`, which took the untranslated
+   * count from 3 to 20 against `i18n.test.ts`'s ceiling of 5. That test is right
+   * and the draft was wrong: a ceiling exists so that "it is temporary" cannot
+   * become how seventeen more untranslated strings arrive. Raising it to fit this
+   * surface would have been a gate widened to fit the debt, and deleting the copy
+   * to fit the gate would have deleted the honesty the surface is *for*.
+   *
+   * So the same line §10.7 and the register block above draw: these are ordinary
+   * declarative sentences about a delivery mechanism, with no metaphor and no
+   * English rhythm to lose — «سُلِّمت إلى عملية التشغيل الجارية» is what happened,
+   * not a figure of speech. That is the case the header's `todo()` rule does not
+   * cover, and it is a different act from guessing «fork».
+   *
+   * The register is `rtl-arabic-pdpl-specialist`'s and **all seventeen may be
+   * overwritten without a decision-request**; an `fyi` says so. The one thing that
+   * must survive any rewrite is the distinction in the two `disposition` lines: a
+   * note that waits in the mailbox and a note handed to a live run are different
+   * events, and one Arabic sentence for both is the silent downgrade this composer
+   * exists to refuse, arriving in translation instead of in code.
+   *
+   * There is deliberately no key here for the steer refusal's reason: the composer
+   * renders `a11y.threads.interrupt.undeliverable` above, already written. */
+  'threads.mailbox.bodyLabel': 'إرسال إلى هذه المحادثة',
+  'threads.mailbox.bodyPlaceholder': 'ما الذي ينبغي أن يعرفه الوكيل؟',
+  'threads.mailbox.levelLabel': 'طريقة الوصول',
+  'threads.mailbox.send': 'إرسال',
+  'threads.mailbox.sending': 'جارٍ الإرسال…',
+  'threads.mailbox.emptyBody': 'الرسالة تحتاج إلى نصّ. لم يُرسَل شيء.',
+  'threads.mailbox.noThread':
+    'لا يذكر بثّ التشغيل المحادثةَ التي تنتمي إليها هذه العملية، فلا صندوق بريد يُخاطَب من هنا بعد.',
+
+  /* The two sentences that carry the whole surface. «في انتظار الدور» is waiting
+   * in a queue; «سُلِّمت» is handed over and received. Keep them distinct. */
+  'threads.mailbox.disposition.queued':
+    'في انتظار الدور داخل صندوق البريد. لم يقرأها أحد بعد — تقرأها عملية التشغيل التالية لهذه المحادثة.',
+  'threads.mailbox.disposition.deliveredToRun':
+    'سُلِّمت إلى عملية التشغيل الجارية، وتقرأها عند أوّل استدعاء أداة مكتمل.',
+
+  /* Past tense throughout, exactly as in English: this is the state read *before*
+   * the message was written, and a present-tense rendering here would undo the
+   * `api-contracts.md` correction of 2026-08-18. */
+  'threads.mailbox.appendState.open': 'كانت المحادثة مفتوحة عند إضافة هذه الرسالة.',
+  'threads.mailbox.appendState.running': 'كانت المحادثة قيد التشغيل عند إضافة هذه الرسالة.',
+  'threads.mailbox.appendState.waiting': 'كانت المحادثة تنتظر جوابًا عن سؤال عند إضافة هذه الرسالة.',
+  'threads.mailbox.appendState.closed': 'كانت المحادثة مغلقة عند إضافة هذه الرسالة.',
+  'threads.mailbox.appendState.failed': 'كانت المحادثة قد تعطّلت عند إضافة هذه الرسالة.',
+  'threads.mailbox.appendStateCaveat':
+    'هذه هي الحالة المقروءة قبل كتابة الرسالة، لا الحالة بعدها.',
+  'threads.mailbox.haltNotYetMoved':
+    'الإيقاف لا ينقل المحادثة بنفسه. تقرؤه عملية التشغيل عند أوّل تفريغ لصندوق البريد، فتوقف الجلسة وتنقل المحادثة عندئذٍ.',
+
   'a11y.mapCanvas': 'مجرّة الوكلاء. استخدم مفاتيح الأسهم للتنقّل بين الأقسام.',
   'a11y.drawer': 'تفاصيل الوكيل',
   'a11y.carousel': 'مراكز القيادة',

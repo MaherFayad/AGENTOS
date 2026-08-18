@@ -17,6 +17,11 @@
  *    console stops claiming to stream, and the copper Allow / Deny cards appear. Nothing
  *    resumes until `POST /api/approvals/:runId` answers.
  *
+ * **It is no longer one-way** (M16, `Plan §12`). `MailboxComposer` sits below the log: a
+ * turn appended to the thread the run is having, at one of the two interrupt levels this
+ * build can deliver, with the third drawn as refused rather than offered. Allow/Deny is a
+ * gate the *runner* opened; the composer is the path a person can open themselves.
+ *
  * Owner: drawer-engineer
  */
 
@@ -24,6 +29,7 @@ import { useEffect, useRef } from 'react';
 import { Pill } from '../primitives';
 import { formatCost, formatDuration } from '../data/format';
 import type { ConsoleState } from '../run/console-model';
+import { MailboxComposer, type Sender } from '../threads/MailboxComposer';
 import s from '../drawer.module.css';
 
 /** How many lines are painted. The reducer's cap is the memory bound; this is the DOM bound. */
@@ -32,12 +38,17 @@ export const VISIBLE_LINES = 400;
 export function RunConsole({
   state,
   open,
+  threadId,
+  sendMessage,
   onDecide,
   onCancel,
   onDismiss,
 }: {
   state: ConsoleState;
   open: boolean;
+  /** The thread this run is a turn of. `null` until the stream says — see `mailbox.ts`. */
+  threadId: string | null;
+  sendMessage: Sender;
   onDecide: (decision: 'approve' | 'deny') => void;
   onCancel: () => void;
   onDismiss: () => void;
@@ -106,6 +117,8 @@ export function RunConsole({
           </div>
         ))}
       </div>
+
+      <MailboxComposer threadId={threadId} send={sendMessage} />
 
       <div className={s.consoleFoot}>
         <span>
