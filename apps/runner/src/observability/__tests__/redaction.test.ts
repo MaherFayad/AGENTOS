@@ -77,6 +77,9 @@ test('no PII reaches the Langfuse client or the ledger', async () => {
     trigger: 'manual',
     model: 'claude-opus-5',
     projectId: '11111111-1111-4111-8111-111111111111',
+    // Required as of `0009_run_thread_required.sql`. An id, so it carries no content — which
+    // is the point of this file: what a trace may hold is ids and counts.
+    threadId: '3f2a1c40-9d6b-4a21-8f0e-77c9b1d25e83',
     agentRef: 'agnetos/sales/account-enrichment',
     sourceRef: 'project:agents/sales/account-enrichment/SKILL.md@sha256:abc',
     inputs: {

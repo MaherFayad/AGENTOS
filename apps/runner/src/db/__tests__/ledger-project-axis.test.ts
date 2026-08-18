@@ -63,11 +63,12 @@ function record(overrides: Partial<RunRecord> = {}): RunRecord {
     model: 'claude-opus-4',
     trigger: 'manual',
     sessionId: null,
-    // `RunRecord.threadId` (M16). `null` is the honest fixture value and not a
-    // placeholder: nothing writes `ops.agent_runs.thread_id` yet — the column is nullable
-    // on purpose (`0008_threads.sql` §3) and naming it in the INSERT is `runner-engineer`'s
-    // line, filed as REQ-OBS-38.
-    threadId: null,
+    // `RunRecord.threadId`. A real id rather than `null` as of
+    // `0009_run_thread_required.sql`: the column is NOT NULL, the type is `string`, and a
+    // run that cannot name its thread is refused by `assertAttributed` before it reaches
+    // Postgres. `null` here was honest while the column was nullable; it is now a fixture
+    // for a row that cannot exist.
+    threadId: '00000000-0000-4000-8000-00000000dead',
     dryRun: false,
     status: 'ok',
     startedAt: new Date().toISOString(),

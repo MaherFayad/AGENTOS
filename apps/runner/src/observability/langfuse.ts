@@ -122,42 +122,31 @@ export type SpanScope = {
    * a guess about whose data this is, so the compiler refusing the call site is exactly
    * right.
    *
-   * `thread_id` is different, and the difference is in the schema rather than in taste.
-   * `ops.agent_runs.thread_id` ships **nullable on purpose** (`0008_threads.sql` §3): NULL
-   * means *"this run predates threads"*, which is a true statement about a real run.
+   * `thread_id` was different while the schema was different, and **the schema changed**:
+   * `0009_run_thread_required.sql` makes `ops.agent_runs.thread_id` NOT NULL, so this member
+   * loses its `?` in the same change. The reasoning below is kept rather than deleted,
+   * because it is what makes the *rule* checkable — the required set of `SpanScope` tracks
+   * the NOT NULL set of the ledger, and the rule outlives either state of the column.
    *
    * **The anchor is the ledger's NOT NULL set, not `RunInit`'s required set, and that
    * choice is load-bearing rather than incidental.** The job of a required member here is
    * to make an *unfileable* datum a compile error, and a datum is unfileable exactly when
    * the plane it lands in cannot represent its absence. `project_id` is NOT NULL on
    * `ops.agent_runs`, so a run with no project cannot be recorded at all — required. A run
-   * with no thread **can** be recorded, truthfully. Requiring it on the span while the
-   * ledger tolerates NULL would have the trace plane assert something the ledger does not,
-   * and when those two disagree the trace is the one that is lying: the ledger is what
-   * every rendered number reads (`comms/specs/observability.md` decision 1), and the trace
-   * only holds the narrative.
+   * with no thread used to be recordable, truthfully, which is why this was optional; as of
+   * 0009 it is not, so a span that could not name its thread would be asserting something
+   * the ledger will refuse. Requiring it while the column was nullable would have been the
+   * opposite error: a `NOT NULL` whose only satisfying value is a placeholder — the M15
+   * defect graded from the other side (`contracts/thread-model.md` §5.3: *a NOT NULL nobody
+   * can satisfy and one that holds are identical in a schema dump*).
    *
-   * That anchor is deliberately independent of whether `RunAttribution.threadId` is
-   * required — a producer discipline on `runner-engineer`'s side of the seam, which moved
-   * twice during M16 and settled optional for the same schema reason. Anchoring here to
-   * *their* type would have made this member move with a decision that is not about spans;
-   * anchoring to the migration means one fact moves one way, once, and takes both types
-   * with it. Were this required while the column stayed nullable it would be a `NOT NULL`
-   * whose only satisfying value is a placeholder — the M15 defect graded from the other
-   * side (`contracts/thread-model.md` §5.3: *a NOT NULL nobody can satisfy and one that
-   * holds are identical in a schema dump*).
-   *
-   * Optionality costs nothing at emit time: `attributes()` below drops `undefined`, so a
-   * run with no thread emits **no** `agnetos.thread.id` attribute at all rather than an
-   * empty string. "This run has no thread" and "this run's thread was not recorded" stay
-   * the same absence, which is honest, because today they are the same fact.
-   *
-   * **The coupling is mechanical, not a promise.** `thread-scope-tracks-ledger.test.ts`
-   * reads every migration: the day `ops.agent_runs.thread_id` becomes `NOT NULL`, that test
-   * requires this member to lose its `?`. The required set of `SpanScope` tracks the
-   * NOT NULL set of the ledger, and neither can move without the other going red.
+   * **The coupling is mechanical, not a promise**, and this is the change that exercised it.
+   * The last test in `observability/__tests__/threads-observability.test.ts` reads every
+   * migration: while none said `SET NOT NULL` it required the `?`, and now that 0009 does it
+   * requires its absence. Neither type nor column can move without the other going red — and
+   * the day this file is the one that changes first, that test is what says so.
    */
-  'agnetos.thread.id'?: string;
+  'agnetos.thread.id': string;
 };
 
 /** Span attributes: anything you like, **plus** the scope, which is not optional. */

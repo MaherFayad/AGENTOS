@@ -194,6 +194,9 @@ const ATTRIBUTION: RunAttribution = {
   projectId: '11111111-1111-4111-8111-111111111111',
   agentRef: 'agnetos/sales/account-enrichment',
   sourceRef: 'project:agents/sales/account-enrichment/SKILL.md@sha256:abc',
+  // Required as of `0009_run_thread_required.sql`. Edited by `runner-engineer` with that
+  // migration, which is the event the last test in this file was written to trigger on.
+  threadId: THREAD,
 };
 
 function harness() {
@@ -273,31 +276,51 @@ test('every span of a threaded run names its thread, and the trace names it once
   assert.equal(runs[0].threadId, THREAD, 'the ledger record carries it — see REQ-OBS-38 for the writer');
 });
 
-test('a run with no thread emits no thread attribute at all — not an empty one', async () => {
+/**
+ * **Replaces *"a run with no thread emits no thread attribute at all"*, and the replacement
+ * is the same assertion one layer up.**
+ *
+ * That test asserted the shape of an absence: a run with no thread emitted no thread key,
+ * rather than an empty one a filter could match by accident. It was the right test while
+ * `ops.agent_runs.thread_id` was nullable, because *"this run has no thread"* was then a
+ * legal row. `0009_run_thread_required.sql` deletes that row, so the behaviour it described
+ * is no longer reachable — and a test whose premise cannot be constructed is not a passing
+ * test, it is a vacuous one.
+ *
+ * So the absence moves from runtime to the compiler, which is strictly stronger: there is no
+ * emit path to check, because there is no call that omits a thread. Runner tests are inside
+ * `tsc --noEmit` (the runner's have always been — `apps/web`'s were the excluded suite), so
+ * `@ts-expect-error` here is a live gate: delete the `?`-removal from `RunInit.threadId` and
+ * this file fails to compile on an *unused* expectation.
+ */
+test('a run cannot be started without a thread — the absence is a compile error now', async () => {
   refreshEnvSecrets({});
   const { obs, sent, runs } = harness();
 
-  const trace = obs.startRun({
-    ...ATTRIBUTION,
+  const withoutThread = {
+    projectId: ATTRIBUTION.projectId,
+    agentRef: ATTRIBUTION.agentRef,
+    sourceRef: ATTRIBUTION.sourceRef,
     agent: 'sales/account-enrichment',
     department: 'sales',
     trigger: 'manual',
-  });
+  } as const;
+  // @ts-expect-error `RunInit.threadId` is required as of 0009: a run that cannot name its
+  // thread is a row `ops.agent_runs` refuses, and it would refuse it after the model was
+  // paid for. If this line ever compiles, the type and the migration have come apart.
+  void (() => obs.startRun(withoutThread));
+
+  // And the positive half, so this is not only a type assertion: the id that is supplied
+  // reaches both planes, and the record carries a string rather than a nullable.
+  const trace = obs.startRun({ ...ATTRIBUTION, agent: 'sales/account-enrichment', department: 'sales', trigger: 'manual' });
   trace.tool('exa.search').ok();
   await trace.finish({ status: 'ok' });
 
   for (const span of spansOf(sent[0])) {
-    assert.equal(
-      attrKeys(span).includes('agnetos.thread.id'),
-      false,
-      `span "${span.name}" carries an empty thread key — a filter could match it by accident`,
-    );
+    assert.equal(attrValue(span, 'agnetos.thread.id'), THREAD, `span "${span.name}" lost the thread`);
+    assert.equal(attrKeys(span).includes('agnetos.thread.id'), true);
   }
-  assert.equal(
-    attrKeys(spansOf(sent[0])[0]).includes('langfuse.trace.metadata.thread'),
-    false,
-  );
-  assert.equal(runs[0].threadId, null, 'the record says "no thread", not ""');
+  assert.equal(runs[0].threadId, THREAD, 'the record carries the id, and the type is no longer nullable');
 });
 
 test("the span scope's required set tracks the ledger's NOT NULL set", async () => {
@@ -413,10 +436,29 @@ test('the ledger writer names thread_id, so the read plane is reading something 
       'same silent gap as an unnamed one',
   );
 
-  // The null case is legal and needs no branch: the column is nullable (`0008` §3).
+  /**
+   * **The null case was legal under `0008` §3 and is refused under `0009`.**
+   *
+   * It used to assert that a run with no thread still records — correct while the column was
+   * nullable. `0009_run_thread_required.sql` makes it NOT NULL, so the same call now produces
+   * a row Postgres rejects with `23502`, **after the model has been paid for**. `recordRun`
+   * refuses it one process earlier and names the layer that forgot, which is the whole of
+   * M15's lesson expressed as a branch.
+   *
+   * Asserted through a cast, because the type already forbids it: this is the runtime half of
+   * a boundary the compiler covers, and the value it guards against arrives from a database
+   * read or a JSON body where `tsc` has nothing to check.
+   */
   statements.length = 0;
-  await createLedger(db).recordRun({ ...record, threadId: null }, []);
-  assert.equal(statements[0].params.includes(null), true, 'a run with no thread still records');
+  await assert.rejects(
+    () => createLedger(db).recordRun({ ...record, threadId: null } as unknown as typeof record, []),
+    (err: { code?: string; message?: string }) => {
+      assert.equal(err.code, 'run_unattributed');
+      assert.match(String(err.message), /threadId/);
+      return true;
+    },
+  );
+  assert.equal(statements.length, 0, 'and nothing reached the database — the refusal is before the INSERT');
 });
 
 /* -------------------------------------------------------------------------- *

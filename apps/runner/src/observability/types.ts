@@ -52,23 +52,22 @@ export type RunAttribution = {
   /**
    * `ops.thread.id` — **the thread this run is a turn of** (ADR-023, `Plan §12`).
    *
-   * Optional here, and it is the *column's* nullability that decides that, not taste:
-   * `ops.agent_runs.thread_id` ships nullable in `0008` because a `NOT NULL` its only writer
-   * cannot satisfy is M15's most expensive defect wearing a different column name.
+   * **Required as of `0009_run_thread_required.sql`**, and it is the *column's* nullability
+   * that decides that, not taste. It was optional while `ops.agent_runs.thread_id` was
+   * nullable, because a `NOT NULL` its only writer cannot satisfy is M15's most expensive
+   * defect wearing a different column name. 0009 grades it from both sides and lands the
+   * constraint; this is the type half of that change, and it is the half that makes the
+   * unsatisfiable case **not compile** rather than fail after the model was paid for.
    *
-   * **As of M16 the writer exists.** `runner-engineer`'s `startRun` opens a thread for every
-   * run and `recordRun` names the column, so the constraint is now *satisfiable* — but it is
-   * not landed in this change, and the reason is written down rather than left as a gap: this
-   * plane was being edited by `observability-engineer` in the same session, and
-   * `observability/__tests__/threads-observability.test.ts` already encodes the handshake for
-   * the day it lands (it reads every migration, and requires `SpanScope`'s
-   * `agnetos.thread.id` to lose its `?` the moment one says `SET NOT NULL`). Two agents
-   * editing one shape in one session is how a shape acquires two readings, which is the
-   * defect this board has now paid for four times. The trigger is theirs and it is armed.
+   * A caller with no thread has no truthful value to put here — `''` and a fabricated uuid
+   * are both a claim about a conversation that does not exist — so there is deliberately no
+   * fallback. `runner-engineer`'s `startRun` opens or continues a thread before the trace
+   * exists and refuses (`thread_store_unavailable`) if it somehow could not, before anything
+   * is spent.
    *
    * Consumer: `observability-engineer` — `thread_id` on the metrics endpoints and LAST RUNS.
    */
-  threadId?: string;
+  threadId: string;
   /** `ops.billing_account.id`, when the payer is known. */
   accountId?: string | null;
   /**
@@ -157,21 +156,22 @@ export type RunRecord = {
   trigger: RunTrigger;
   sessionId: string | null;
   /**
-   * `ops.agent_runs.thread_id`. `null` ⇒ this run belongs to no thread.
+   * `ops.agent_runs.thread_id`.
    *
-   * **Nullable because the column is, and that is the rule rather than a coincidence:
-   * this type is the shape of a row that was *read back*, not of a call that was made.**
-   * `ops.agent_runs.thread_id` is nullable (`0008_threads.sql` §3), so a NULL is a legal
-   * row, and a `RunRecord` typed `string` would be a claim about the database that the
-   * schema does not make. It becomes `string` in the same change as migration `0009`'s
-   * `SET NOT NULL` and not before — the same anchor `SpanScope` uses, for the same reason.
+   * **Non-null because the column is, and that is the rule rather than a coincidence: this
+   * type is the shape of a row that was *written*, and a `RunRecord` typed `string | null`
+   * would be a claim about the database that the schema no longer makes.**
+   * `0009_run_thread_required.sql` is that change — it says so in its own header, and the
+   * previous revision of this comment named it in advance: *"it becomes `string` in the same
+   * change as migration `0009`'s `SET NOT NULL` and not before."* This is that change. The
+   * same anchor moves `SpanScope`'s `agnetos.thread.id`, for the same reason.
    *
    * **Carried here because a writer cannot name a column the record does not hold.**
    * `db/ledger.ts`'s INSERT — `runner-engineer`'s, not this module's — names `thread_id`
-   * and binds this value as of M16 (REQ-OBS-38), so the chain from `RunInit` to the ledger
-   * is complete in source. **It has never carried a value: zero runs have executed.**
+   * and binds this value (REQ-OBS-38), so the chain from `RunInit` to the ledger is complete
+   * in source. **It has never carried a value: zero runs have executed.**
    */
-  threadId: string | null;
+  threadId: string;
   dryRun: boolean;
   status: RunStatus;
   startedAt: string;

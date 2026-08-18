@@ -520,25 +520,28 @@ test('the parser knows which columns are mandatory and which conflict targets ar
   assert.equal(message.required.has('delivered_at'), false, 'null means still in the mailbox');
 
   /**
-   * **`ops.agent_runs.thread_id` is nullable, and this assertion is the forcing function.**
+   * **`ops.agent_runs.thread_id` is mandatory as of `0009_run_thread_required.sql`, and this
+   * assertion is the forcing function that has now fired.**
    *
-   * `Plan §12` gives the run ledger a `thread_id`. It ships nullable in 0008 because
-   * `recordRun` does not name it yet and its writer is `runner-engineer`'s slice — and a NOT
-   * NULL its only writer cannot satisfy is exactly how M15's first paid run would have gone
-   * unrecorded. Shipping that on purpose, in the same table, would be the defect as policy.
+   * It read `false` while 0008 shipped the column nullable, with the reason: a `NOT NULL` its
+   * only writer cannot satisfy is exactly how M15's first paid run would have gone unrecorded.
+   * The forcing function was that the day `ALTER COLUMN thread_id SET NOT NULL` landed, this
+   * line would go red **and so would the main assertion below**, which demands every mandatory
+   * column be named by the insert — so the flip could not be made without the writer moving in
+   * the same commit, with no database, in milliseconds.
    *
-   * The day `ALTER COLUMN thread_id SET NOT NULL` lands, this line goes red **and so does the
-   * main assertion below**, which demands every mandatory column be named by the insert. So
-   * the flip cannot be made without the writer moving in the same commit — with no database,
-   * in milliseconds. That is the mechanism the migration's §3 comment points at; this is it.
+   * That is what happened: `recordRun` names the column, so the assertion below finds it
+   * already named and stays green. **The direction of this line is now the guard**: were 0009
+   * reverted while the writer kept naming the column, this goes red rather than the schema
+   * quietly widening under a writer nobody re-read.
    */
   assert.equal(
     runs.required.has('thread_id'),
-    false,
-    'nullable today. Making it NOT NULL without teaching recordRun to name it is the M15 defect ' +
-      'repeated on purpose — and the assertion below is what stops it.',
+    true,
+    'NOT NULL as of 0009. If this is red, either the migration was reverted or the parser stopped ' +
+      'reading `ALTER COLUMN … SET NOT NULL` — and the second one is the permissive failure.',
   );
-  assert.equal(runs.columns.has('thread_id'), true, 'but the column does exist (0008 §3)');
+  assert.equal(runs.columns.has('thread_id'), true, 'and the column exists (0008 §3)');
 });
 
 /**

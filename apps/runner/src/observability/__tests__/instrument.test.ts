@@ -15,13 +15,18 @@ import { refreshEnvSecrets } from '../redact.ts';
 import type { RunAttribution, RunRecord, ToolCallRecord } from '../types.ts';
 
 /**
- * Every `startRun` below spreads this, because there is no longer a way not to: the three
- * ids are required on `RunInit`. Written out once so the tests read about what they test.
+ * Every `startRun` below spreads this, because there is no longer a way not to: the ids are
+ * required on `RunInit`. Written out once so the tests read about what they test.
+ *
+ * `threadId` joined them with `0009_run_thread_required.sql` — `ops.agent_runs.thread_id` is
+ * NOT NULL, so a run with no thread is not a cheaper run, it is a row Postgres refuses after
+ * the model has been paid for. Edited by `runner-engineer` with that migration.
  */
 const ATTRIBUTION: RunAttribution = {
   projectId: '11111111-1111-4111-8111-111111111111',
   agentRef: 'agnetos/sales/account-enrichment',
   sourceRef: 'project:agents/sales/account-enrichment/SKILL.md@sha256:abc',
+  threadId: '3f2a1c40-9d6b-4a21-8f0e-77c9b1d25e83',
 };
 
 function harness() {
@@ -257,6 +262,9 @@ test('the OTLP payload is well formed', () => {
         'agnetos.run.id': 'r1',
         'agnetos.project.id': ATTRIBUTION.projectId,
         'agnetos.agent.ref': ATTRIBUTION.agentRef,
+        // Required on `SpanScope` as of 0009, for the same reason the other three are: the
+        // scope's required set tracks the ledger's NOT NULL set.
+        'agnetos.thread.id': ATTRIBUTION.threadId,
       },
     },
   ]) as Record<string, unknown>;

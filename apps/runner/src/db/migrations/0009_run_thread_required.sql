@@ -1,0 +1,78 @@
+-- 0009_run_thread_required.sql
+--
+-- `ALTER TABLE ops.agent_runs ALTER COLUMN thread_id SET NOT NULL` — the other half of the
+-- judgement `0008_threads.sql` §3 deliberately left open (ADR-023, `Plan §12`).
+--
+-- ## Why this file has a number nobody claimed, and why that was the risk
+--
+-- `apps/runner/src/db/migrations/` is a shared-integer namespace and it has been raced once
+-- already (`0006_ops_device.sql` and `0006_identity.sql`, same minute, same directory
+-- listing). **Four comms files called this migration `0009_` and two of them said "unclaimed
+-- as far as I can see"** — which is a race in progress rather than a free number. BOARD ruled
+-- it, with the reason: *the agent who must satisfy a constraint writes it.* `recordRun` is
+-- `runner-engineer`'s writer, so the `NOT NULL` is `runner-engineer`'s migration. M17's own
+-- migration is `0010_work_products.sql`, claimed on BOARD before either file existed.
+--
+-- ## Graded from both sides, which is the only way this column is allowed to move
+--
+-- BRIEF: *a `NOT NULL` nobody can satisfy and one that holds look identical in a schema
+-- dump.* 0005 made four columns mandatory on this exact table and `ledger.ts` named none of
+-- them; nothing was red, because `tsc` cannot see a column list inside a template literal and
+-- `PREPARE` plans without evaluating `NOT NULL`. The failure would have arrived **after the
+-- model was paid for**: the run happens, the money is spent, and the row that records it is
+-- refused. That is the most expensive shape of defect this repo has found.
+--
+-- So, both sides, stated as facts a reader can check rather than as a claim:
+--
+--   **Schema side.** The table holds **zero rows** — no migration in this directory has ever
+--   been applied to a Postgres. There is no backfill because there is nothing to backfill,
+--   and `SET NOT NULL` on an empty table cannot fail on existing data. If that ever stops
+--   being true, this statement fails loudly at migration time (23502) with nothing spent,
+--   which is the safe direction.
+--
+--   **Writer side.** `db/ledger.ts` names `thread_id` in the INSERT (0008 §3 asked for
+--   exactly that and `writer-schema-agreement.test.ts` asserts it with no database), and
+--   `lib/runService.ts` supplies it: `startRun` opens or continues a thread **before** the
+--   trace exists, so `RunInit.threadId` is populated on every run that can reach the ledger.
+--
+--   **The gap between those two sentences, named rather than glossed.** *"The writer exists"*
+--   and *"the writer has executed"* are different claims and only one of them is true here.
+--   **Zero agent runs have ever executed.** This constraint is therefore satisfiable in
+--   source and unexercised in fact, and the honest tier for it is `structural`, not `real`.
+--   What makes it safe to land anyway is that the unsatisfiable case is now unreachable by
+--   *construction* rather than by inspection — three mechanisms, each of which goes red on
+--   its own:
+--
+--     1. **Type.** `RunInit.threadId` and `RunRecord.threadId` are now required and non-null
+--        (`observability/types.ts`), so a caller that cannot name a thread does not compile.
+--        `SpanScope`'s `agnetos.thread.id` loses its `?` in the same change, which is the
+--        coupling `observability-engineer` armed in `threads-observability.test.ts` and wrote
+--        into their own type comments — *"it becomes `string` in the same change as migration
+--        0009's SET NOT NULL and not before."* That trigger is what fires here.
+--     2. **Refusal before spend.** `startRun` refuses with `thread_store_unavailable` when a
+--        ledger exists and a thread does not, **before** `assertCanStart` and before any
+--        session is spawned. The M15 failure mode was "pay, then fail to record"; this turns
+--        the only remaining shape of it into "refuse, having spent nothing".
+--     3. **Text.** `writer-schema-agreement.test.ts` reads this file, moves `thread_id` into
+--        the mandatory set, and then requires the INSERT to name it — with no Postgres.
+--
+-- ## What this does not claim
+--
+-- It does not claim a thread id has ever reached a database, a span, or a trace list. It does
+-- not make the metrics plane's `thread=` filter observed. It removes one state from the
+-- schema — *"this run predates threads"* — which was true of every row a database in this
+-- shape would ever hold, namely none.
+--
+-- ## Why not a CHECK, and why nothing is dropped
+--
+-- The nullable column, its composite FK (`agent_runs_thread_fk`, which pins the project) and
+-- its partial index all stay exactly as 0008 wrote them. The index's `WHERE thread_id IS NOT
+-- NULL` predicate becomes redundant rather than wrong; rewriting it would rebuild an index on
+-- a table nobody has queried, to save nothing. A redundant predicate is cheap. A migration
+-- that rewrites another migration's index for tidiness is a diff nobody can review.
+
+ALTER TABLE ops.agent_runs
+  ALTER COLUMN thread_id SET NOT NULL;
+
+COMMENT ON COLUMN ops.agent_runs.thread_id IS
+  'The thread this run is a turn of (Plan §12, ADR-023). NOT NULL as of 0009: startRun opens or continues a thread before the trace exists, so "this run predates threads" is not a state any new row can be in. Graded from both sides — the writer names it (db/ledger.ts) and startRun refuses before spending when it cannot. Satisfiable in source, unexercised in fact: zero runs have executed.';

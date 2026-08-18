@@ -33,7 +33,52 @@ import { loadConfig } from '../config.ts';
 import { mountedProject } from '../project.ts';
 import { createRunnerServices, startRun } from '../runService.ts';
 import type { Observability } from '../../observability/index.ts';
-import type { RunTrace } from '../../observability/types.ts';
+import type { DbClient, RunTrace } from '../../observability/types.ts';
+
+const THREAD = '00000000-0000-4000-8000-00000000cafe';
+
+/**
+ * A thread store, added with `0009_run_thread_required.sql`.
+ *
+ * Before 0009 this file's `Observability` double was `{ startRun }` and nothing else, cast
+ * through `unknown`. That shape is now refused by `startRun` (`thread_store_unavailable`)
+ * because `ops.agent_runs.thread_id` is NOT NULL: a runner that can write a ledger row and
+ * cannot name a thread would produce a row Postgres rejects **after the model was paid for**.
+ *
+ * Worth recording, because it is the finding this cast was hiding: `as unknown as
+ * Observability` let a double claim a plane it did not implement, and the missing member was
+ * the one the migration depends on. The double now answers the three statements a run makes
+ * against the thread store, which is a smaller lie than the one it was telling.
+ */
+function threadStore(): DbClient {
+  return {
+    async query(sql: string) {
+      if (/INSERT INTO ops\.thread/i.test(sql)) return { rows: [{ id: THREAD }] as never[] };
+      if (/SELECT[\s\S]*FROM ops\.thread/i.test(sql)) {
+        return {
+          rows: [
+            {
+              id: THREAD,
+              project_id: 'p',
+              kind: 'agent',
+              delivery: 'direct',
+              addressed_to: 'sales/invoice-chaser',
+              state: 'open',
+              parent_thread_id: null,
+              created_by: 'human:unattributed',
+              due_at: null,
+              account_id: null,
+              created_at: '2026-08-18T21:00:00.000Z',
+            },
+          ] as never[],
+        };
+      }
+      if (/UPDATE ops\.thread/i.test(sql)) return { rows: [{ id: THREAD }] as never[] };
+      if (/INSERT INTO ops\.message/i.test(sql)) return { rows: [{ id: 'm1', seq: 1 }] as never[] };
+      return { rows: [] as never[] };
+    },
+  };
+}
 
 /** Client data in the shapes this product actually collects. */
 const CLIENT_NAME = 'Fatima Al-Harbi';
@@ -94,7 +139,7 @@ test('the plan span is handed input keys, never the flattened summary', async ()
       withhold: () => true,
       finish: async () => ({}) as never,
     };
-    services.obs = { startRun: () => trace } as unknown as Observability;
+    services.obs = { startRun: () => trace, db: threadStore(), close: async () => {} } as unknown as Observability;
 
     const state = await startRun(services, mountedProject(services.config), {
       agent: 'sales/invoice-chaser',

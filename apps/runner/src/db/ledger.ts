@@ -36,8 +36,14 @@ function assertAttributed(run: RunRecord): asserts run is RunRecord & {
   projectId: string;
   agentRef: string;
   sourceRef: string;
+  threadId: string;
 } {
-  const missing = (['projectId', 'agentRef', 'sourceRef'] as const).filter((key) => !run[key]);
+  // `threadId` joins the three as of `0009_run_thread_required.sql`: the column is NOT NULL,
+  // so a record without one is a row Postgres refuses — and it refuses it *after* the model
+  // was paid for, naming a column and no layer. The same refusal, one process earlier, says
+  // which runner path forgot. It is a type error too; this is the runtime half, for the same
+  // reason the other three have one: `tsc` cannot see a value that arrives from a boundary.
+  const missing = (['projectId', 'agentRef', 'sourceRef', 'threadId'] as const).filter((key) => !run[key]);
   if (missing.length === 0) return;
   throw Object.assign(
     new Error(
@@ -91,24 +97,22 @@ export function createLedger(db: DbClient): RunLedger {
           run.activityEvent, run.activityDetail, run.error,
           run.projectId, run.agentRef, run.sourceRef, run.accountId, run.accountSource,
           /**
-           * **`thread_id` — the column `0008` left for this writer** (ADR-023, `Plan §12`).
+           * **`thread_id` — the column `0008` left for this writer, now `NOT NULL`**
+           * (ADR-023, `Plan §12`, `0009_run_thread_required.sql`).
            *
-           * `0008_threads.sql` §3 shipped it nullable and said why in full: `recordRun` is
-           * `runner-engineer`'s writer, and a `NOT NULL` its only writer cannot satisfy is
-           * indistinguishable in a schema dump from one that holds — the M15 defect, in the
-           * same table, six weeks later. This line is the other half of that judgement: the
-           * writer now names it, and `startRun` opens a thread for every run, so *"this run
-           * predates threads"* is a state no new row can be in.
+           * `0008` §3 shipped it nullable and said why in full: a `NOT NULL` its only writer
+           * cannot satisfy is indistinguishable in a schema dump from one that holds — the
+           * M15 defect, in the same table, six weeks later. `0009` is the other side of that
+           * grading, and this line is why it was allowed to land: the writer names the
+           * column, `startRun` opens or continues a thread before the trace exists, and
+           * `RunRecord.threadId` is `string` rather than `string | null`, so there is no
+           * `?? null` left for an unthreaded run to arrive through.
            *
-           * **`SET NOT NULL` is not in this change, and that is stated rather than implied.**
-           * It is now satisfiable — grading the constraint from both sides is what §3 asked
-           * for and both sides now pass. It is held because the trace half of this column is
-           * `observability-engineer`'s and was being edited in the same session;
-           * `threads-observability.test.ts` reads every migration and requires `SpanScope` to
-           * narrow the moment one says `SET NOT NULL`, so landing it here would have gone red
-           * in a file this agent does not own. Filed to them with the three edits it needs.
+           * The `assertAttributed` refusal above covers it, and the ordering matters: a
+           * missing thread here is a wiring fault that names itself in one sentence, rather
+           * than a Postgres `23502` arriving after the run has already been paid for.
            */
-          run.threadId ?? null,
+          run.threadId,
         ],
       );
 

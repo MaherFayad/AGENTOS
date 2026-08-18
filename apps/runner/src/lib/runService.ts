@@ -197,6 +197,29 @@ export async function startRun(
   const db = threadDb(services);
   const thread = db ? await openOrContinueThread(services, db, project, record.slug, request) : null;
 
+  /**
+   * **`0009_run_thread_required.sql`, graded from the writer's side, at the only point where
+   * the grading is still free.**
+   *
+   * `ops.agent_runs.thread_id` is now `NOT NULL`. A ledger row is written only when
+   * `services.obs` exists, and `Observability.db` is non-optional on that type — so
+   * `obs && !thread` is unreachable by construction, and this branch exists precisely
+   * because *unreachable by inspection* is what M15 believed about four other columns on
+   * this same table. There, the reachable-in-fact case surfaced **after the model was paid
+   * for**: the run happened, the money was spent, and the row recording it was refused by
+   * Postgres with `23502` naming a column.
+   *
+   * This converts the last shape of that into a refusal costing nothing — it is above
+   * `assertCanStart`, above `startRun`, and above any session. If it ever fires, the run did
+   * not happen, which is the only outcome worth having.
+   */
+  if (services.obs && !thread) {
+    throw new ApiError('thread_store_unavailable', 'This run has no thread to belong to, so it was not started.', {
+      hint: 'The runner has a ledger but no thread store, and every recorded run must name its thread (migration 0009). Nothing was spent. This is a wiring fault in the runner, not a bad request.',
+      retryable: false,
+    });
+  }
+
   // Billing (Part V). Checked before anything is spawned, and skipped for a dry run
   // because a dry run costs nothing — refusing it at the cap would deny someone the one
   // operation that can still tell them what is wired up.
@@ -206,7 +229,10 @@ export async function startRun(
   // `start` event all share one run id. Without Postgres (dev profile) we fall back to
   // the thin Langfuse sink, which is also how a missing ledger stays honest rather than
   // refusing the run.
-  const obsTrace: RunTrace | undefined = services.obs?.startRun({
+  // `services.obs && thread` rather than `services.obs?.` because `RunInit.threadId` is
+  // required as of 0009 and the compiler has to see the pair, not the guard above. The two
+  // are the same condition: the guard has already refused the case where they disagree.
+  const obsTrace: RunTrace | undefined = services.obs && thread ? services.obs.startRun({
     agent: record.slug,
     department: record.department,
     agentName: record.name,
@@ -227,11 +253,13 @@ export async function startRun(
     // payer in the ledger that nobody ever configured.
     accountId: null,
     accountSource: 'unattributed',
-    // The thread this run is a turn of. Absent only when this runner has no thread store
-    // at all (`--profile dev`), which is the same state in which there is no ledger row to
-    // put it in — so there is no configuration in which a recorded run lacks one.
-    ...(thread ? { threadId: thread.row.id } : {}),
-  });
+    // The thread this run is a turn of. Required as of `0009_run_thread_required.sql`:
+    // `ops.agent_runs.thread_id` is NOT NULL, so a recorded run without one is a row
+    // Postgres would refuse *after* the model was paid for. There is no configuration in
+    // which a recorded run lacks a thread — a runner with no thread store has no ledger
+    // either (`--profile dev`), and the guard above refuses the pair that disagrees.
+    threadId: thread.row.id,
+  }) : undefined;
 
   const state = store.create({
     ...(obsTrace ? { runId: obsTrace.runId } : {}),
