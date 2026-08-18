@@ -24,6 +24,8 @@ import {
   type PostThreadMessageRequest,
   type ScheduleRequest,
   type StatusResponse,
+  type WorkProductListResponse,
+  type WorkProductResponse,
 } from '@agnetos/contracts';
 import {
   createThreadFromLine,
@@ -35,6 +37,8 @@ import { sendApiError } from './http.ts';
 import { registerMetricsRoutes } from './register-metrics.ts';
 import { ApiError, badRequest } from '../lib/errors.ts';
 import { assertArtifactInProject } from '../lib/artifacts.ts';
+import { listWorkProducts, readWorkProduct } from '../db/workProducts.ts';
+import { readWorkProductDiff } from '../lib/workProductService.ts';
 import { toAgentDetail } from '../lib/agents.ts';
 import { listResolvedAgents, resolveForDispatch } from '../lib/cascade.ts';
 import {
@@ -427,6 +431,77 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
       const project = projectOf(ctx, request);
       const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
       return await readThreadDetail(db, project, threadIdParam(request));
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
+  /**
+   * Work products (M17, `Plan §13`, ADR-026, `comms/contracts/work-product.md` §4).
+   *
+   * The **read side of the M17 seam, and it has one author** — `drawer-engineer` renders these
+   * payloads and forks no type. Three shapes, and the differences between their absences are
+   * the whole design:
+   *
+   *   - a run in another project        → `run_not_found` (404), opaque. What is behind this
+   *                                       id is file paths and file contents.
+   *   - a run that touched no repo      → **200** with `workProduct: null` and a reason. On a
+   *                                       phone a 404 is indistinguishable from a typo.
+   *   - a work product whose tree is gone → `work_product_unavailable` (410) on the diff, never
+   *                                       an empty file list. *The tree was removed* and
+   *                                       *nothing changed* must not look alike.
+   *
+   * `requireThreadStore` fronts all three for the same reason the thread routes use it: these
+   * rows live in Postgres, `--profile dev` has none, and answering "no work products" without
+   * a database is a plausible zero.
+   */
+  app.get(RUNNER_ROUTES.workProducts.path, async (request, reply) => {
+    try {
+      const project = projectOf(ctx, request);
+      const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
+      const query = request.query as { limit?: string; review?: string };
+      const reviewQueue = query.review === 'true';
+      const body: WorkProductListResponse = {
+        workProducts: await listWorkProducts(db, project.id, {
+          ...(query.limit ? { limit: Number(query.limit) } : {}),
+          reviewQueue,
+        }),
+        reviewQueue,
+      };
+      return body;
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
+  app.get(RUNNER_ROUTES.workProduct.path, async (request, reply) => {
+    try {
+      const project = projectOf(ctx, request);
+      const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
+      const runId = runIdParam(request);
+      const workProduct = await readWorkProduct(db, project.id, runId);
+      const body: WorkProductResponse = {
+        runId,
+        workProduct,
+        // **A discriminated absence.** `no_repo` is the truthful reason in this build: no
+        // project has a checked-out repository, so no run can have produced one. It is not
+        // `not_finished` — that would claim a row is coming.
+        absent: workProduct ? null : 'no_repo',
+      };
+      return body;
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
+  app.get(RUNNER_ROUTES.workProductDiff.path, async (request, reply) => {
+    try {
+      const project = projectOf(ctx, request);
+      const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
+      return await readWorkProductDiff(db, project, runIdParam(request), request.query as {
+        cursor?: string;
+        files?: string;
+      });
     } catch (err) {
       return sendApiError(reply, err);
     }

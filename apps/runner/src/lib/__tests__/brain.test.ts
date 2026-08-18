@@ -288,6 +288,10 @@ async function secondProject(root: string) {
     companySourcesDir: join(dir, 'company', 'sources'),
     panelsDir: join(dir, 'panels'),
     graphFile: join(dir, 'graph.json'),
+    // M17: no project has a checked-out repository, which is the state every deployment is
+    // in. `null` here is the fixture agreeing with reality rather than opting out of it.
+    repoPath: null,
+    worktreeRoot: join(dir, 'worktrees'),
   };
 }
 

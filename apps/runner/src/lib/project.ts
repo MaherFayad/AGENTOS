@@ -116,6 +116,31 @@ export interface MountedProject {
    * outcome that is not available.
    */
   graphFile: string;
+  /**
+   * **The checked-out repository a run may work in, or `null` — and `null` is the state every
+   * project is in today** (M17, `Plan §13`, ADR-026).
+   *
+   * M17's frame named this as the *second* missing precondition, next to "zero runs have
+   * executed": **no project has a repo path a run could work in.** Two preconditions, not one.
+   * So this field is `null` unless `AGNETOS_PROJECT_REPO` is set, and with it `null` every
+   * repo-touching path in the runner is unreachable — which is stated rather than left for a
+   * reader to infer from an empty table.
+   *
+   * `null` is **not** an error and must never be conflated with "the repository could not be
+   * read". A project with no repository is a project whose agents write documents, which is
+   * every agent in this library. The other case — configured and not a git checkout — fails
+   * closed with `repo_unavailable` (`worktree.ts`).
+   */
+  repoPath: string | null;
+  /**
+   * Where this project's run worktrees are cut: `<worktreeRoot>/<slug>/<runId>`.
+   *
+   * Deliberately **outside** the repository, and `createWorktree` refuses a path inside it. A
+   * worktree nested in its own repo appears in the parent's `git status`, can be deleted by
+   * `git clean`, and gets staged by a `git add -A` up there — which is not isolation, it is a
+   * second copy of the tree inside the tree.
+   */
+  worktreeRoot: string;
 }
 
 /**
@@ -148,6 +173,11 @@ export function mountedProject(config: RunnerConfig): MountedProject {
     companySourcesDir: config.companySourcesDir,
     panelsDir: config.panelsDir,
     graphFile: config.graphFile,
+    // Both derived from config, both carrying the slug for the same reason the two roots above
+    // do: the segment is what stops a second mount from being a silent merge — and for a
+    // worktree root, a merge would mean two projects' runs cutting trees into one directory.
+    repoPath: config.projectRepoPath,
+    worktreeRoot: join(config.worktreeRoot, slug),
   };
 }
 

@@ -72,6 +72,16 @@ export interface RunnerConfig {
   graphFile: string;
   /** Per-run scratch workspaces are created under here and destroyed after extraction. */
   scratchRoot: string;
+  /**
+   * The checked-out repository runs may work in (`AGNETOS_PROJECT_REPO`), or `null`.
+   *
+   * **`null` today, on every deployment**, and that is M17's second missing precondition said
+   * out loud: no project has a repo path, so no run can produce a work product. Unset is a
+   * configuration, not a fault — the same shape as `globalLibraryDir`.
+   */
+  projectRepoPath: string | null;
+  /** Run worktrees are cut under here: `<worktreeRoot>/<slug>/<runId>` (M17, ADR-026). */
+  worktreeRoot: string;
   /** Saved artifacts (md/pdf/json) outlive the scratch workspace. */
   artifactsRoot: string;
   /** True when the runner's own API key is present. Never exposes the key itself. */
@@ -144,6 +154,17 @@ export function loadConfig(): RunnerConfig {
       : existsSync('/workspaces')
         ? '/workspaces'
         : join(repoRoot, '.runner', 'scratch'),
+    // Absent by default. A placeholder path would be worse than nothing here: `createWorktree`
+    // would refuse it with `repo_unavailable` on every run, which reads as a broken repository
+    // rather than as a product that has never been pointed at one.
+    projectRepoPath: process.env.AGNETOS_PROJECT_REPO?.trim()
+      ? resolve(process.env.AGNETOS_PROJECT_REPO.trim())
+      : null,
+    worktreeRoot: process.env.RUNNER_WORKTREE_ROOT
+      ? resolve(process.env.RUNNER_WORKTREE_ROOT)
+      : existsSync('/workspaces')
+        ? join('/workspaces', 'worktrees')
+        : join(repoRoot, '.runner', 'worktrees'),
     artifactsRoot: process.env.RUNNER_ARTIFACTS_ROOT
       ? resolve(process.env.RUNNER_ARTIFACTS_ROOT)
       : existsSync('/workspaces')

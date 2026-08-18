@@ -12,6 +12,13 @@
  * field, route or default whose safety depends on an auth layer that does not exist.
  */
 
+// Type-only, both of them, and from modules this file does not own the shape of: `ThreadState`
+// is `thread-model-engineer`'s (ADR-023) and `WorkProductSummary` is this file's owner's, but
+// it lives in `work-product.ts` because its prose contract does. Importing rather than
+// re-declaring is the rule that stops one shape acquiring two readings.
+import type { ThreadState } from './threads';
+import type { WorkProductSummary } from './work-product';
+
 // ---------------------------------------------------------------------------
 // Errors — uniform on every route
 // ---------------------------------------------------------------------------
@@ -111,6 +118,42 @@ export type ApiErrorCode =
    * Refusing is the same answer `run_unattributed` gives one layer up in the ledger.
    */
   | 'artifact_unattributed'
+  // work products and worktrees (M17, `Plan §13`, ADR-026)
+  /**
+   * This project has no checked-out repository on this host, or the path it names is not a git
+   * checkout. **503, not 404**: the caller did nothing wrong and the condition lifts the moment
+   * a repo is configured.
+   *
+   * It is the *second* missing precondition M17's frame named — zero runs have executed, and no
+   * project has a repo path a run could work in. Having its own code means "this product has
+   * never been pointed at a repository" cannot be read as "this run produced nothing".
+   */
+  | 'repo_unavailable'
+  /**
+   * The agent holds a connector whose writes this runner cannot bound, so it is **not given a
+   * worktree** (`worktree.ts`, `work-product.md` §3).
+   *
+   * A refusal, not a confinement claim. A worktree is a directory: a shell command string or an
+   * MCP server in another process leaves it in one step, and `isPathInsideRunRoots` can only
+   * check arguments that declare a path. 403 because the agent's own `wired_into` is what
+   * decides it, and the fix is in the file rather than in the request.
+   */
+  | 'worktree_unconfinable'
+  /**
+   * A diff page was requested with a cursor pinned to a `head_sha` the worktree no longer has.
+   *
+   * 409, and it is a **correctness** refusal rather than an ergonomic one: a worktree is a live
+   * directory, and serving page 2 from a tree that moved between pages shows a reviewer a diff
+   * that never existed as a whole — and then asks them to approve it.
+   */
+  | 'work_product_moved'
+  /**
+   * The work product exists and its worktree is gone, so its diff cannot be read.
+   *
+   * 410, because the distinction is the whole point: *"the tree was removed"* and *"this run
+   * changed nothing"* are the same empty file list and completely different news.
+   */
+  | 'work_product_unavailable'
   // scheduling (§3.2)
   | 'invalid_cron'
   | 'git_write_refused'
@@ -183,6 +226,10 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   question_unanswered: 409,
   thread_store_unavailable: 503,
   artifact_unattributed: 500,
+  repo_unavailable: 503,
+  worktree_unconfinable: 403,
+  work_product_moved: 409,
+  work_product_unavailable: 410,
   invalid_cron: 400,
   git_write_refused: 403,
   brain_write_refused: 403,
@@ -274,6 +321,22 @@ export interface SseStartData {
   tools: string[];
   /** True when frontmatter says `approval: required`; the run will pause at `plan`. */
   approvalRequired: boolean;
+  /**
+   * **`ops.thread.id` — the conversation this run is a turn of** (ADR-023, `Plan §12`).
+   *
+   * `null` only when this runner has no thread store at all (`--profile dev`), which is the
+   * same state in which there is no ledger row either. Every recorded run has one:
+   * `ops.agent_runs.thread_id` is NOT NULL as of `0009_run_thread_required.sql`.
+   *
+   * **Why it is on `start` and why it was missing.** Two surfaces need an address the moment
+   * the console opens, and neither could have one: the mailbox composer (M16 — shipped inert
+   * and pinned by `apps/web/src/drawer/threads/mailbox.test.ts` because this field did not
+   * exist) and M17's roster line, whose *"asked you something · 12m ago"* is a question in
+   * this thread. *A producer without a consumer is not a feature*, and this was its mirror —
+   * two consumers with no producer. Named here in the same commit as M17's schema so wave 2
+   * does not pin a second inert surface (`work-product.md` §7, hazard 7).
+   */
+  threadId: string | null;
 }
 
 export interface SseTokenData {
@@ -319,6 +382,30 @@ export interface SseDoneData {
   traceUrl: string | null;
   /** Present on `denied` — why a human said no. A denied run is data, not a discard. */
   denialNote?: string;
+  /**
+   * **The state the run left its thread in — and the only representation `blocked` has.**
+   *
+   * `Plan §13`'s fourth roster line is `● weekly-digest blocked · asked you something · 12m
+   * ago`, and before this field it was undrawable: `plan.awaitingApproval` covers the approval
+   * gate only, and a run that *asked a question* had no SSE representation at all. A question
+   * is a message kind inside a thread (ADR-023), and the thread state is where that fact
+   * already lives — so `blocked` is `threadState === 'waiting'` rather than a second flag that
+   * could disagree with the row.
+   *
+   * `null` when this runner has no thread store (`--profile dev`). Mapped from the run's
+   * outcome, never copied from it: a run status and a thread state answer different questions
+   * — *"how did this attempt end"* versus *"can this conversation take another turn"*.
+   */
+  threadState?: ThreadState | null;
+  /**
+   * What this run did to a repository, if anything (`Plan §13`, ADR-026).
+   *
+   * On the `done` frame so the roster line needs **no second fetch** for `fix/auth · 3
+   * commits`: a roster assembled from three routes is a spinner, and every part of it is
+   * individually correct so no test catches it. `null` when the run touched no repository,
+   * which is every run in this build — no project has a checked-out repo path.
+   */
+  workProduct?: WorkProductSummary | null;
 }
 
 export interface SseErrorData {
@@ -1008,6 +1095,31 @@ export const RUNNER_ROUTES = {
    * rather than merely quiet.
    */
   threadMessage: { method: 'POST', path: '/api/p/:project/thread/:id/message', scope: 'project' },
+
+  /**
+   * Work products (M17, `Plan §13`, ADR-026, `comms/contracts/work-product.md`).
+   *
+   * **Project-scoped, and the frame's shorthand `GET /api/work-product/:runId` is not the
+   * route.** `drawer-engineer` asked this in wave 0 and it is the M15 class: a run id is
+   * opaque across projects, and what sits behind this one is another project's **file paths and
+   * file contents**. A route that looks a run up in order to learn whose it is has let a
+   * caller-supplied id choose its own scope — the same argument as `threadMessage` above, with
+   * a bigger blast radius. The project is resolved from the path first, and the read carries
+   * `WHERE project_id = $1` on the statement that finds the row rather than after it.
+   *
+   *   `workProducts`     — the roster, and with `?review=true` the **review queue**, which is a
+   *                        query and not a table (hazard 4; there is no `ops.review`). One
+   *                        route for N runs: a roster assembled from N fetches is a spinner.
+   *   `workProduct`      — one run. 200 with `workProduct: null` and a stated `absent` reason
+   *                        when the run touched no repository; `run_not_found` (404) when it
+   *                        belongs to another project.
+   *   `workProductDiff`  — one page of the diff, pinned to `head_sha`. `?cursor=` and
+   *                        `?files=`. Refuses a cursor from another tree state with
+   *                        `work_product_moved` (409) rather than serving two trees as one.
+   */
+  workProducts: { method: 'GET', path: '/api/p/:project/work-products', scope: 'project' },
+  workProduct: { method: 'GET', path: '/api/p/:project/work-product/:runId', scope: 'project' },
+  workProductDiff: { method: 'GET', path: '/api/p/:project/work-product/:runId/diff', scope: 'project' },
 
   panels: { method: 'GET', path: '/api/p/:project/panels', scope: 'project' },
   panel: { method: 'GET', path: '/api/p/:project/panels/:id', scope: 'project' },

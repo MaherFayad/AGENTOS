@@ -19,13 +19,26 @@
  * from the winning file's bytes. There is deliberately no code path here that produces a
  * runnable agent without going through it.
  */
-import { messageSpanAttributes, type RunInputValue, type RunRequest } from '@agnetos/contracts';
+import {
+  messageSpanAttributes,
+  type RunInputValue,
+  type RunRequest,
+  type WorkProductSummary,
+} from '@agnetos/contracts';
 import { ApiError, toApiError } from './errors';
 import type { RunnerConfig } from './config';
 import { validateInputs, type AgentRecord } from './agents';
 import { resolveForDispatch } from './cascade';
 import type { MountedProject } from './project';
-import { isPathInsideScratch, isToolAllowed, unknownConnectorError } from './allowlist';
+import { isPathInsideRunRoots, isToolAllowed, unknownConnectorError } from './allowlist';
+import {
+  assertWorktreeConfinable,
+  createWorktree,
+  readWorktreeFacts,
+  removeWorktree,
+  type RunWorktree,
+} from './worktree';
+import { recordWorkProduct } from '../db/workProducts.ts';
 import { readCompanyBrain } from './brain';
 import { buildPlanSummary, buildPrompt } from './prompt';
 import { createScratch, destroyScratch, extractArtifact } from './artifacts';
@@ -287,6 +300,9 @@ export async function startRun(
     startedAt: state.startedAt,
     tools: record.allowlist.tools,
     approvalRequired: record.approvalRequired,
+    // The address the mailbox composer and the roster line both need, from the first frame.
+    // `null` only where there is no thread store at all (`--profile dev`).
+    threadId: thread ? thread.row.id : null,
   });
 
   // `project` and `dispatch.agentRef` travel into `execute` because the brain is read and
@@ -473,6 +489,122 @@ async function moveToRunning(db: DbClient, row: ThreadRow): Promise<void> {
   await setThreadState(db, row.id, from, 'running');
 }
 
+/**
+ * **The end of a run that had a worktree** (`Plan §13`, ADR-026): observe, record, tell, clean.
+ *
+ * Four things, in this order, and the order is the argument:
+ *
+ *   1. **Observe.** `readWorktreeFacts` asks git. Every number on the roster line comes from
+ *      here, including `push_state` *with the time it was observed at* — which is why there is
+ *      no code path that can write a state without one.
+ *   2. **Record.** One row, `ops.work_product`. Counts, paths and shas; **never a diff.** The
+ *      diff is read from the tree on demand by the review route and is not storable
+ *      (`work-product.md` §6) — a diff in a column is a diff in a backup and one interpolation
+ *      away from a span or a model prompt.
+ *   3. **Tell**, and only when there is something to tell. `push_state: local` on a finished
+ *      run is *"work that exists only on a machine that might get wiped"*, and this board
+ *      already ruled how it is delivered: **a message in the run's own thread** (hazard 3).
+ *      No `notification` entity, no second pipe, no new message kind — `system` is one ADR-023
+ *      already has, and it carries counts in an object rather than prose, because a flattened
+ *      sentence is how content gets past key-based redaction.
+ *   4. **Clean when unchanged**, which §13 asks for in those words. A tree with no commits and
+ *      no changed files is removed; a tree holding work is **kept**, because removing it would
+ *      destroy the thing the row is pointing at. That asymmetry is the whole of "cleaned when
+ *      unchanged" and it is the reason cleanup is here rather than in the `finally` beside the
+ *      scratch dir, which is destroyed unconditionally.
+ *
+ * Best-effort throughout: a failure here is logged and shown on the console, and never turns a
+ * finished run into a failed one. The run happened; the row is the record of that, not the
+ * event itself.
+ */
+async function settleWorkProduct(
+  services: RunnerServices,
+  project: MountedProject,
+  state: RunState,
+  thread: RunThread | null,
+  worktree: RunWorktree | null,
+  agentSlug: string,
+): Promise<WorkProductSummary | null> {
+  if (!worktree) return null;
+
+  try {
+    const facts = await readWorktreeFacts(worktree);
+    const unchanged = facts.commits === 0 && facts.filesChanged === 0;
+
+    if (thread) {
+      await recordWorkProduct(thread.db, {
+        runId: state.runId,
+        projectId: thread.row.projectId,
+        threadId: thread.row.id,
+        repoPath: worktree.repoPath,
+        worktreePath: worktree.path,
+        branch: facts.branch,
+        baseSha: facts.baseSha,
+        headSha: facts.headSha,
+        commits: facts.commits,
+        filesChanged: facts.filesChanged,
+        insertions: facts.insertions,
+        deletions: facts.deletions,
+        pushState: facts.pushState,
+        pushCheckedAt: facts.pushCheckedAt,
+      });
+
+      if (facts.pushState === 'local') {
+        await appendMessage(thread.db, {
+          threadId: thread.row.id,
+          kind: 'system',
+          author: 'system:runner',
+          body: `${facts.commits} commit${facts.commits === 1 ? '' : 's'} on ${facts.branch} exist only on this machine.`,
+          payload: {
+            runId: state.runId,
+            agent: agentSlug,
+            branch: facts.branch,
+            commits: facts.commits,
+            filesChanged: facts.filesChanged,
+            pushState: facts.pushState,
+            pushCheckedAt: facts.pushCheckedAt,
+          },
+        });
+      }
+    }
+
+    if (unchanged) {
+      await removeWorktree(worktree.repoPath, worktree.path);
+      return null;
+    }
+
+    return {
+      runId: state.runId,
+      agent: agentSlug,
+      threadId: thread ? thread.row.id : '',
+      branch: facts.branch,
+      baseSha: facts.baseSha,
+      headSha: facts.headSha,
+      commits: facts.commits,
+      filesChanged: facts.filesChanged,
+      insertions: facts.insertions,
+      deletions: facts.deletions,
+      pushState: facts.pushState,
+      pushCheckedAt: facts.pushCheckedAt,
+      // **Recorded, not produced.** Nothing in M17 opens a PR, reads CI or runs a test suite,
+      // so these are `null` — which means *nobody looked*, exactly as it does in the column.
+      prUrl: null,
+      prState: null,
+      ciState: null,
+      testsRun: null,
+      testsPassed: null,
+      diffAvailable: true,
+      createdAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    services.logger.warn({ err, runId: state.runId }, 'work product could not be recorded');
+    state.stream.emit('token', {
+      text: `[this run's work is in ${worktree.path}, but the work product could not be recorded — it will not appear on the roster]\n`,
+    });
+    return null;
+  }
+}
+
 function toObsStatus(status: 'ok' | 'error' | 'denied' | 'canceled'): 'ok' | 'error' | 'cancelled' {
   if (status === 'ok') return 'ok';
   if (status === 'error') return 'error';
@@ -497,6 +629,12 @@ async function execute(
   const toolsUsed: string[] = [];
   const openTools = new Map<string, ToolSpan[]>();
   let scratchDir: string | null = null;
+  /**
+   * This run's git worktree (M17, `Plan §13`), or `null` — which is **every run in this
+   * build**, because no project has a checked-out repo path. Held here rather than inside the
+   * session block so the `finally` can clean it on every path, exactly as the scratch dir is.
+   */
+  let worktree: RunWorktree | null = null;
   let brainInjected = false;
   let lastError: string | undefined;
   /** Set by the drain when a human's `halt` was read at a tool boundary. */
@@ -580,8 +718,9 @@ async function execute(
      * turn a finished run into a failed one — the run happened and the ledger row is the
      * record of that. The failure is logged and shown, never swallowed.
      */
+    const next = haltedBy ? 'waiting' : status === 'error' ? 'failed' : 'open';
+
     if (thread) {
-      const next = haltedBy ? 'waiting' : status === 'error' ? 'failed' : 'open';
       try {
         await appendAgentTurn(thread, state, status, haltedBy);
         await setThreadState(thread.db, thread.row.id, 'running', next);
@@ -591,12 +730,22 @@ async function execute(
       }
     }
 
+    // The work product, and the unpushed message. Best-effort for the same reason the thread
+    // turn is: a row that could not be written must not turn a finished run into a failed one.
+    const workProduct = await settleWorkProduct(services, project, state, thread, worktree, record.slug);
+
     state.stream.emit('done', {
       status,
       costUsd: state.costUsd,
       durationMs: state.durationMs,
       traceUrl: state.traceUrl,
       ...(extra.denialNote ? { denialNote: extra.denialNote } : {}),
+      // **The two fields §13's roster line could not be drawn without.** `threadState` is the
+      // only representation `blocked` has (`waiting` ⇒ the run asked a question and is waiting
+      // on a person); `workProduct` is `fix/auth · 3 commits · ⚠ UNPUSHED` without a second
+      // fetch. Both `null` where the plane genuinely does not exist, never an invented value.
+      threadState: thread ? next : null,
+      workProduct,
     });
     state.stream.end();
 
@@ -700,9 +849,33 @@ async function execute(
       state.status = 'running';
       // The **project's** scratch root, not the coordinator's — `<scratchRoot>/<slug>/<runId>`.
       scratchDir = await createScratch(project, state.runId);
+
+      /**
+       * **Worktree isolation, one per run** (`Plan §13`, ADR-026).
+       *
+       * Only when this project has a checked-out repository, which **no project does today** —
+       * that is M17's second missing precondition, and it is why this branch is not taken on
+       * any deployment. `assertWorktreeConfinable` comes first and refuses before a tree
+       * exists: a run holding a connector whose writes cannot be bounded is not given a
+       * repository, because a worktree is a directory and not a sandbox.
+       */
+      if (project.repoPath) {
+        assertWorktreeConfinable(record.allowlist, record.slug);
+        worktree = await createWorktree({
+          repoPath: project.repoPath,
+          worktreeRoot: project.worktreeRoot,
+          runId: state.runId,
+        });
+        state.stream.emit('token', {
+          text: `[working in ${worktree.branch}, cut from ${worktree.baseSha.slice(0, 8)}]\n`,
+        });
+      }
+
       // Captured as a const so the gate below cannot observe a later reassignment of the
-      // outer `scratchDir` (which the `finally` block nulls out on teardown).
-      const scratch = scratchDir;
+      // outer `scratchDir` (which the `finally` block nulls out on teardown). The worktree
+      // joins it as a second root — **the run's cwd is still the scratch dir**, so a relative
+      // path resolves where it always did.
+      const roots = worktree ? [scratchDir, worktree.path] : [scratchDir];
 
       const events = services.session({
         systemPrompt: prompt.system,
@@ -713,11 +886,11 @@ async function execute(
         signal: state.abort.signal,
         abortController: state.abort,
         // Two gates, both required. The name must be in `wired_into` (BOARD rule 4), AND
-        // any path it carries must resolve inside this run's scratch workspace. The second
-        // half used to be a comment in `allowlist.ts` rather than code, which is how twelve
-        // agents came to be widened to `workspace` on a boundary that did not exist.
+        // any path it carries must resolve inside one of this run's roots. The second half
+        // used to be a comment in `allowlist.ts` rather than code, which is how twelve agents
+        // came to be widened to `workspace` on a boundary that did not exist.
         isToolAllowed: (toolName, input) =>
-          isToolAllowed(record.allowlist, toolName) && isPathInsideScratch(scratch, input),
+          isToolAllowed(record.allowlist, toolName) && isPathInsideRunRoots(roots, input),
       });
 
       let sessionError: { message: string; retryable: boolean } | null = null;

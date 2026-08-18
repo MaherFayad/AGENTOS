@@ -25,6 +25,26 @@ export interface Connector {
    * how MCP servers expose a family of tools under one connector name.
    */
   tools: readonly string[];
+  /**
+   * **Can this runner see, and therefore bound, where this connector writes?** Required, and
+   * required for a reason worth the sentence: M17 gives repo-touching runs a git worktree, and
+   * *"a worktree is not a jail"* — `cwd` decides where a relative path resolves and nothing
+   * more. `isPathInsideRunRoots` bounds a tool whose arguments **declare** their paths; it
+   * cannot bound a shell command string, and it cannot bound an MCP server interpreting its
+   * own arguments in another process.
+   *
+   *   `gated`   — every write is a declared path argument, checked per call.
+   *   `none`    — writes nothing into this host's filesystem.
+   *   `ungated` — writes somewhere this process cannot check. A run holding one of these is
+   *               **refused a worktree** (`assertWorktreeConfinable`), which is a decision not
+   *               to hand it a repository rather than a claim to have jailed it.
+   *
+   * **This field is required so that the check is not an include-list.** *An include-list is a
+   * decision to be blind to everything unnamed* (BRIEF) — `CHROME_DIRS` was one, and it was
+   * blind to every directory that did not exist when it was written. A required field cannot
+   * be blind to the next connector: the next connector does not compile without answering.
+   */
+  writes: 'gated' | 'none' | 'ungated';
   /** Why it exists, so the next person deciding whether to add one has a precedent. */
   note?: string;
 }
@@ -39,10 +59,10 @@ export interface Connector {
  */
 export const CONNECTOR_REGISTRY: Readonly<Record<string, Connector>> = {
   // --- research / retrieval -------------------------------------------------
-  exa: { label: 'Exa', tools: ['mcp__exa__*'], note: 'Neural search MCP.' },
-  firecrawl: { label: 'Firecrawl', tools: ['mcp__firecrawl__*'], note: 'Page scraping MCP.' },
-  'web-search': { label: 'Web search', tools: ['WebSearch'] },
-  'web-fetch': { label: 'Web fetch', tools: ['WebFetch'] },
+  exa: { label: 'Exa', tools: ['mcp__exa__*'], writes: 'none', note: 'Neural search MCP.' },
+  firecrawl: { label: 'Firecrawl', tools: ['mcp__firecrawl__*'], writes: 'none', note: 'Page scraping MCP.' },
+  'web-search': { label: 'Web search', tools: ['WebSearch'], writes: 'none' },
+  'web-fetch': { label: 'Web fetch', tools: ['WebFetch'], writes: 'none' },
 
   // --- the scratch workspace ------------------------------------------------
   // Scoped to the per-run scratch cwd by the session's working directory, which is
@@ -51,23 +71,33 @@ export const CONNECTOR_REGISTRY: Readonly<Record<string, Connector>> = {
   workspace: {
     label: 'Scratch workspace',
     tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
-    // Enforced by `isPathInsideScratch` below, not by the cwd. The cwd only decides where
+    // Enforced by `isPathInsideRunRoots` below, not by the cwd. The cwd only decides where
     // a *relative* path resolves; these tools accept absolute paths, so before that gate
     // existed this note was a claim the code did not make.
-    note: 'Read/write inside the per-run scratch dir only (§3.2), enforced per path argument.',
+    writes: 'gated',
+    note: 'Read/write inside this run\'s roots only (§3.2), enforced per path argument.',
   },
   shell: {
     label: 'Shell',
     tools: ['Bash'],
+    // **The honest entry.** `Bash` takes `{command}`; `pathArgumentsOf` finds no path in a
+    // command string, so the gate returns `true` and one `cd ..` leaves any directory we set.
+    // No agent in the library declares this connector today, and a run that does is refused a
+    // worktree rather than given one we cannot bound (`worktree.ts`).
+    writes: 'ungated',
     note: 'Deliberately separate from `workspace`. Most agents must not have it.',
   },
 
   // --- delivery / data ------------------------------------------------------
-  slack: { label: 'Slack', tools: ['mcp__slack__*'] },
-  gmail: { label: 'Gmail', tools: ['mcp__gmail__*'], note: 'Draft and send; send is gated by approval: required.' },
-  hubspot: { label: 'HubSpot', tools: ['mcp__hubspot__*'], note: 'CRM system of record.' },
-  postgres: { label: 'Postgres', tools: ['mcp__postgres__*'], note: 'Agent output rows (§2.5).' },
-  langfuse: { label: 'Langfuse', tools: ['mcp__langfuse__*'], note: 'Read-only, for the auditor.' },
+  // `writes: 'none'` here means **nothing in this host's filesystem**, which is the question
+  // the worktree refusal asks. Each of these writes somewhere else — a channel, a mailbox, a
+  // CRM, a table — and those boundaries are governed elsewhere (`approval: required`,
+  // `writeOutput`'s single table, ADR-038 for anything leaving the tailnet).
+  slack: { label: 'Slack', tools: ['mcp__slack__*'], writes: 'none' },
+  gmail: { label: 'Gmail', tools: ['mcp__gmail__*'], writes: 'none', note: 'Draft and send; send is gated by approval: required.' },
+  hubspot: { label: 'HubSpot', tools: ['mcp__hubspot__*'], writes: 'none', note: 'CRM system of record.' },
+  postgres: { label: 'Postgres', tools: ['mcp__postgres__*'], writes: 'none', note: 'Agent output rows (§2.5).' },
+  langfuse: { label: 'Langfuse', tools: ['mcp__langfuse__*'], writes: 'none', note: 'Read-only, for the auditor.' },
 
   // --- version control ------------------------------------------------------
   // Grants the *tool*, not the write boundary. Which paths a commit may touch is decided
@@ -76,7 +106,13 @@ export const CONNECTOR_REGISTRY: Readonly<Record<string, Connector>> = {
   git: {
     label: 'Git',
     tools: ['mcp__git__*'],
-    note: 'Repo history. Write paths are bounded by the runner, not by this grant.',
+    // `ungated`, and the distinction is worth stating because the note below is easy to
+    // misread. The **runner's own** git writes are bounded by `assertInsideAgents` /
+    // `assertInsideCompany`. This connector grants an agent a git MCP *server*, which runs in
+    // another process and is bounded by nothing this file can check — so a run holding it is
+    // refused a worktree rather than handed one it could commit outside of.
+    writes: 'ungated',
+    note: 'Repo history. The runner\'s own write paths are bounded by the runner; this server\'s are not.',
   },
 
   // --- the second brain (§3.3) ---------------------------------------------
@@ -86,6 +122,11 @@ export const CONNECTOR_REGISTRY: Readonly<Record<string, Connector>> = {
   'company-brain': {
     label: 'Company brain',
     tools: ['mcp__company__*'],
+    // Writes `company/` by design (ADR-007) — outside any run's roots, on purpose. That is a
+    // deliberate second door, not an escape; it is `ungated` here because the worktree
+    // question is *"can this runner bound where it writes"*, and for this one the answer is no
+    // and the intent is that it writes elsewhere.
+    writes: 'ungated',
     note: 'Read/write company/COMPANY.md + sources. Interview agent only (§3.3).',
   },
 };
@@ -203,23 +244,45 @@ export function pathArgumentsOf(input: unknown): string[] {
 }
 
 /**
- * `true` when every path argument resolves inside `scratchDir`.
+ * `true` when every path argument resolves inside **one of** this run's roots.
  *
- * `scratchDir` empty (a dry run, or a session with no workspace) denies any path argument
- * outright: there is no directory to be inside of, so nothing can be.
+ * A run has one root today — its scratch workspace — and two when it is given a git worktree
+ * (M17, `Plan §13`): the scratch directory it writes its deliverable in, and the worktree it
+ * changes code in. Both are the run's; neither is anybody else's. Passing a *set* rather than
+ * threading a second parameter is what keeps that a property of the gate: a caller cannot add
+ * a root by editing a boolean, and `runService` names the roots in one place.
+ *
+ * An empty set (a dry run, or a session with no workspace) denies any path argument outright:
+ * there is no directory to be inside of, so nothing can be.
+ *
+ * **Relative paths resolve against the first root**, which is the session's cwd. This is the
+ * one place the two must agree, and the caller passes them in that order for exactly that
+ * reason.
  */
-export function isPathInsideScratch(scratchDir: string, input: unknown): boolean {
+export function isPathInsideRunRoots(roots: readonly string[], input: unknown): boolean {
   const paths = pathArgumentsOf(input);
   if (paths.length === 0) return true;
-  if (!scratchDir) return false;
+  const resolved = roots.filter((root) => root !== '').map((root) => resolve(root));
+  if (resolved.length === 0) return false;
+  const cwd = resolved[0] as string;
 
-  const root = resolve(scratchDir);
   return paths.every((candidate) => {
-    const abs = isAbsolute(candidate) ? resolve(candidate) : resolve(root, candidate);
-    if (abs === root) return true;
-    const rel = relative(root, abs);
-    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && !rel.split(sep).includes('..');
+    const abs = isAbsolute(candidate) ? resolve(candidate) : resolve(cwd, candidate);
+    return resolved.some((root) => {
+      if (abs === root) return true;
+      const rel = relative(root, abs);
+      return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && !rel.split(sep).includes('..');
+    });
   });
+}
+
+/**
+ * The single-root form, kept because it is the shape most call sites and every existing test
+ * mean: *this run has one directory.* It is a thin wrapper rather than a duplicate, so there is
+ * one containment algorithm and not two that agree until they do not.
+ */
+export function isPathInsideScratch(scratchDir: string, input: unknown): boolean {
+  return isPathInsideRunRoots([scratchDir], input);
 }
 
 /** Refusal for a `wired_into` name nobody wired. Names the fix and who owns it. */

@@ -62,6 +62,7 @@ import {
   markMessagesDelivered,
   setThreadState,
 } from '../threads.ts';
+import { recordWorkProduct } from '../workProducts.ts';
 import type { DbClient } from '../../observability/types.ts';
 import { projectIdForSlug } from '../../lib/project.ts';
 
@@ -214,6 +215,27 @@ async function readSchema(): Promise<Schema> {
         if (isRequired(definition)) table.required.add(name);
         if (/\bprimary\s+key\b/i.test(definition)) {
           addUnique(table, `constraint:${name}`, { columns: [name], partial: false, origin: 'PRIMARY KEY' });
+        }
+        /**
+         * **A column-level `UNIQUE`, which this parser could not see until 0010.**
+         *
+         * `ops.work_product.run_id` is `text NOT NULL UNIQUE` — a perfectly ordinary declaration
+         * that Postgres backs with a unique constraint `ON CONFLICT (run_id)` infers. The parser
+         * only knew inline `PRIMARY KEY` and table-level `UNIQUE (…)`, so it reported *"no unique
+         * index or constraint to infer"* against a schema that has one.
+         *
+         * That direction matters: this failure **cries wolf** rather than passing a broken
+         * writer, and a checker that cries wolf gets its assertion loosened within a week —
+         * which is how a gate stops catching the real thing. Found by 0010's own writer going
+         * red on a statement Postgres would have planned happily.
+         *
+         * String literals are stripped first for the same reason `isRequired` strips them: a
+         * `CHECK (kind IN ('unique', …))` on the column line would otherwise declare a
+         * constraint that does not exist, and *that* direction is the permissive one.
+         */
+        const withoutLiterals = definition.replace(/'[^']*'/g, "''");
+        if (/\bunique\b/i.test(withoutLiterals) && !/\bprimary\s+key\b/i.test(withoutLiterals)) {
+          addUnique(table, `constraint:unique:${name}`, { columns: [name], partial: false, origin: 'UNIQUE' });
         }
       }
     }
@@ -381,6 +403,38 @@ async function harvestWrites(): Promise<Statement[]> {
   label = 'setThreadState — the transition writer';
   await setThreadState(db, '00000000-0000-4000-8000-000000000000', 'open', 'running');
 
+  /**
+   * `ops.work_product` (M17, ADR-026, `0010_work_products.sql`).
+   *
+   * Thirteen NOT NULL columns with no default, on a table describing something that has never
+   * happened — no run has ever touched a repository, and no project has one to touch. So the
+   * *only* instrument that can catch a writer/schema disagreement here is this one, and it has
+   * to be pointed at the writer in the same commit as the migration. The alternative is that
+   * the first repo-touching run ever performed fails at the INSERT, after the model was paid
+   * for, which is M15 in a new table.
+   *
+   * `pushState`/`pushCheckedAt` are supplied as a **pair**, because the schema pins them with
+   * an equality CHECK: a state with no observation time is a declared value, which is the
+   * defect this whole entity is shaped around.
+   */
+  label = 'recordWorkProduct — ops.work_product';
+  await recordWorkProduct(db, {
+    runId: 'run_probe',
+    projectId: projectIdForSlug('agentos'),
+    threadId: '00000000-0000-4000-8000-00000000dead',
+    repoPath: '/repo',
+    worktreePath: '/worktrees/agentos/run_probe',
+    branch: 'agnetos/run/run_probe',
+    baseSha: '0'.repeat(40),
+    headSha: '1'.repeat(40),
+    commits: 1,
+    filesChanged: 2,
+    insertions: 3,
+    deletions: 4,
+    pushState: 'local',
+    pushCheckedAt: now,
+  });
+
   return statements;
 }
 
@@ -432,6 +486,50 @@ test('the migration parser reads real columns and refuses commented-out ones', a
   // thread assertions below vacuous.
   assert.ok(tables.get('ops.thread'), 'ops.thread is in the schema (0008)');
   assert.ok(tables.get('ops.message'), 'ops.message is in the schema (0008)');
+  // …and 0010's, for the same reason one migration further on.
+  assert.ok(tables.get('ops.work_product'), 'ops.work_product is in the schema (0010)');
+});
+
+/**
+ * **`ops.work_product`'s two representable absences, asserted in the schema** (M17, ADR-026).
+ *
+ * Both are nullable columns, and a nullable column is exactly what a parser reports when it has
+ * stopped reading — so they are asserted next to a positive control from the same table. The
+ * point of each is that a **NULL is a distinct answer**, not a missing one:
+ *
+ *   `push_state`      NULL ⇒ *nothing has ever looked*, which is not *nothing to push*.
+ *   `worktree_removed_at` NULL ⇒ the tree is there, so *the diff is gone* is not *no changes*.
+ */
+test('the work product schema keeps its two absences representable', async () => {
+  const { tables } = await readSchema();
+  const wp = tables.get('ops.work_product')!;
+
+  for (const column of ['run_id', 'project_id', 'thread_id', 'repo_path', 'worktree_path', 'branch', 'base_sha', 'head_sha', 'commits', 'files_changed', 'insertions', 'deletions']) {
+    assert.equal(wp.required.has(column), true, `ops.work_product.${column} is NOT NULL with no default`);
+  }
+  assert.equal(wp.required.has('created_at'), false, 'NOT NULL DEFAULT now()');
+  assert.equal(
+    wp.required.has('push_state'),
+    false,
+    'nullable on purpose: NULL means nothing has ever looked, and a default of none would tell ' +
+      'someone their work is safe when nothing examined it',
+  );
+  assert.equal(wp.required.has('push_checked_at'), false, 'moves with push_state, pinned by a CHECK');
+  assert.equal(wp.required.has('worktree_removed_at'), false, 'NULL means the tree is still there');
+  for (const outcome of ['pr_url', 'pr_state', 'ci_state', 'tests_run', 'tests_passed']) {
+    assert.equal(wp.required.has(outcome), false, `${outcome} is recorded, not produced — NULL means nobody looked`);
+  }
+
+  // **No diff column, and that is the mechanism rather than a rule.** A diff is a body; a body
+  // in a column is a body in a backup and one interpolation away from a span or a prompt.
+  for (const column of [...wp.columns]) {
+    assert.equal(
+      /diff|patch|contents?$/.test(column),
+      false,
+      `ops.work_product.${column} looks like it holds file content. The diff is read from the ` +
+        'worktree on demand and is deliberately not storable (work-product.md §6).',
+    );
+  }
 });
 
 /**
@@ -479,6 +577,18 @@ test('the parser knows which columns are mandatory and which conflict targets ar
   const targets = new Set([...outputs.uniques.values()].map((u) => key(u.columns)));
   assert.equal(targets.has(key(['kind', 'entity_key'])), false, "0002's target was dropped by 0005");
   assert.equal(targets.has(key(['kind', 'invented'])), false, 'and the map is not a wildcard');
+
+  /**
+   * The inline-`UNIQUE` control, positive and negative, on live text.
+   *
+   * `ops.work_product.run_id` is `text NOT NULL UNIQUE` and `recordWorkProduct` conflicts on it;
+   * `ops.work_product.branch` is not unique and must not read as though it were, or the parser
+   * would accept an `ON CONFLICT` Postgres refuses with 42P10.
+   */
+  const wp = tables.get('ops.work_product')!;
+  const wpTargets = new Set([...wp.uniques.values()].map((u) => key(u.columns)));
+  assert.equal(wpTargets.has(key(['run_id'])), true, 'a column-level UNIQUE is an inferable target');
+  assert.equal(wpTargets.has(key(['branch'])), false, 'and an ordinary column is not');
 
   const tools = tables.get('ops.agent_run_tools')!;
   assert.equal(

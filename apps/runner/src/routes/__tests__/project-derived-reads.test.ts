@@ -109,6 +109,8 @@ function projectAt(root: string, slug: string): MountedProject {
     companySourcesDir: join(root, 'company', 'sources'),
     panelsDir: join(root, 'panels'),
     graphFile: join(root, 'graph.json'),
+    repoPath: null,
+    worktreeRoot: join(root, 'worktrees'),
   };
 }
 

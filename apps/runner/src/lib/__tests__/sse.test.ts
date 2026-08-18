@@ -13,6 +13,9 @@ test('SSE ids are per-run sequence numbers starting at 1', () => {
     traceUrl: null,
     startedAt: new Date().toISOString(),
     tools: ['Read'],
+    // Required on `SseStartData` as of M17: the composer and the roster line both need an
+    // address from the first frame, and `null` is the honest value with no thread store.
+    threadId: null,
     approvalRequired: false,
   });
   const second = stream.emit('token', { text: 'hi' });

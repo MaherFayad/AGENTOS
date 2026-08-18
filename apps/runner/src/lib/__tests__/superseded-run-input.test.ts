@@ -124,6 +124,54 @@ test('no contract, route or client mentions the superseded run-input endpoint', 
   );
 });
 
+/**
+ * **M11 stays absorbed — the three tables that are never created** (M17 hazard 4, BOARD's
+ * amendments table, `Plan §13`/§19).
+ *
+ * Extending *this* file rather than writing a fourth paragraph about it, on the frame's own
+ * instruction: `M17 extends that test with the three refused table names rather than writing a
+ * fourth paragraph`. The reasoning is identical to the route above — an absence needs a gate,
+ * because a future reader who finds "three finished runs awaiting review" on a board and does
+ * not find this decision will add `ops.review`, and it will look like progress.
+ *
+ * §13 is exactly where it gets proposed: a review queue looks precisely like a task list. It is
+ * **a query, not a table** — `work_product WHERE push_state = 'local' OR pr_state = 'open'`,
+ * served by a partial index in `0010_work_products.sql`.
+ *
+ * Scoped to the migrations, deliberately. A blanket source scan would catch prose that
+ * *forbids* these tables (this file, the migration headers, the contract), and a checker that
+ * cannot tell a prohibition from a specification forces the prohibition to go unwritten. A
+ * `CREATE TABLE` is unambiguous.
+ */
+test('ops.task, ops.question and ops.review are never created by any migration', async () => {
+  const migrations = join(ROOT, 'apps', 'runner', 'src', 'db', 'migrations');
+  const files = (await readdir(migrations)).filter((f) => f.endsWith('.sql')).sort();
+  assert.ok(files.length >= 10, `only ${files.length} migrations read — the scan would be vacuous`);
+
+  const offenders: string[] = [];
+  let sawATable = false;
+  for (const file of files) {
+    const sql = (await readFile(join(migrations, file), 'utf8')).replace(/--[^\n]*/g, '');
+    for (const match of sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_]+\.[a-z_]+)/gi)) {
+      sawATable = true;
+      const table = (match[1] as string).toLowerCase();
+      if (['ops.task', 'ops.question', 'ops.review'].includes(table)) offenders.push(`${file}: ${table}`);
+    }
+  }
+
+  // The vacuity control: a scan that matched no `CREATE TABLE` at all would report success
+  // over a schema full of them.
+  assert.equal(sawATable, true, 'no CREATE TABLE was matched — the scanner is broken');
+  assert.deepEqual(
+    offenders,
+    [],
+    'A task IS a thread with a due date; a question IS a message kind; the review queue IS a ' +
+      'query over ops.work_product. M11\'s parallel entity model is absorbed, not built ' +
+      '(BOARD amendments, ADR-023, ADR-026). Creating one of these is an ADR, not a migration.\n\n' +
+      offenders.join('\n'),
+  );
+});
+
 test('the scanner would catch it — falsified against a planted line', () => {
   // A test that has never been red proves nothing. The regex is exercised here against the
   // exact string it exists to forbid, and against the session route it must not touch.
@@ -139,4 +187,20 @@ test('the scanner would catch it — falsified against a planted line', () => {
   assert.equal(FORBIDDEN.test(spec) && !PERMITTED_ON_A_LINE_THAT_SAYS_SO.test(spec), true, 'a spec is an offender');
   assert.equal(PERMITTED_ON_A_LINE_THAT_SAYS_SO.test(prohibition), true, 'a prohibition is not');
   assert.equal(FORBIDDEN.test('this line is never built and names no route'), false);
+});
+
+test('the table scanner would catch a planted CREATE TABLE — falsified in place', () => {
+  // Same discipline as above, on the pattern this time rather than on the corpus: the M11
+  // scan is worthless if its regex cannot see the statement it forbids.
+  const CREATE = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_]+\.[a-z_]+)/gi;
+  const found = (sql: string): string[] => [...sql.matchAll(CREATE)].map((m) => (m[1] as string).toLowerCase());
+
+  assert.deepEqual(found('CREATE TABLE IF NOT EXISTS ops.review (\n  id uuid\n);'), ['ops.review']);
+  assert.deepEqual(found('CREATE TABLE ops.task (id uuid);'), ['ops.task']);
+  assert.deepEqual(found('CREATE INDEX ops_task_idx ON ops.thread (due_at);'), [], 'an index is not a table');
+  // And the comment case, which is how the real scan reads the migrations: 0008's header
+  // discusses `ops.task` at length, and a scanner that read prose would fail on the file whose
+  // job is to forbid it.
+  const commented = '-- CREATE TABLE ops.task — never.\n'.replace(/--[^\n]*/g, '');
+  assert.deepEqual(found(commented), []);
 });

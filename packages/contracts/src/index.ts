@@ -25,6 +25,11 @@ export * from './threads';
 // `check-barrel-exports.mjs`, not assumed, because `export *` picks no winner and the last
 // duplicate this barrel carried white-screened every route while `next build` exited 0.
 export * from './scheduling';
+// `runner-engineer`, ADR-026 (M17, `Plan §13`). **Types only — it exports no runtime value at
+// all**, so it cannot collide with a starred module above in the way ADR-035 describes. Named
+// here rather than folded into `api.ts` because the diff payload has one author and one prose
+// contract (`comms/contracts/work-product.md`), and a shape with two homes acquires two.
+export * from './work-product';
 
 // ---------------------------------------------------------------------------
 // Ambiguity resolutions — and the one rule that governs them (ADR-035).

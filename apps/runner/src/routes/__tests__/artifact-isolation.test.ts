@@ -62,6 +62,8 @@ function projectAt(roots: { scratch: string; artifacts: string; library: string 
     companySourcesDir: join(roots.library, 'company', 'sources'),
     panelsDir: join(roots.library, 'panels'),
     graphFile: join(roots.library, 'graph.json'),
+    repoPath: null,
+    worktreeRoot: join(roots.library, 'worktrees'),
   };
 }
 
