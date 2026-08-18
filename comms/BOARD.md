@@ -1020,7 +1020,9 @@ now deliberately vacant** as the visible record of why this rule exists.
 
 | 037 | **Session threads get no mailbox** — `thread-model.md` §9.1 answered **no** for v1. `message_never_holds_session_content` stays, `envelope.ts`'s allowlist is untouched, and interrupting a relay session keeps travelling the relay's own client-encrypted control channel (which is what Allow / Deny already is). The load-bearing reason is not only rule 5: **the runner's mailbox drain has no reach into a CLI session**, so an `ops.message` row addressed to one would be a queue with no reader that still looks delivered | `sessions-relay-engineer` | **claimed 2026-08-18, before the file** — row first, per the rule above. Ruling already binding in `apps/web/src/threads/` and cited from four files |
 
-038+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
+| 038 | **Data egress — the three ways client words leave the tailnet, and what may be sent** (Part VII.4). *"Traces stay local"* answers for the observability plane and for nothing else. Three targets, not two: (a) a `deliver:` target outside the tailnet — Slack, email; (b) `library_remote`, an outbound fetch of agent definitions; (c) **the model endpoint**, which is new and is the largest — `dashboards/lib/prompt.ts` renders prior message bodies into the user prompt and this repo asserts **no processing region** for it, so COMPANY.md rule 11's cross-border rule has an exception rule 10 names and nothing settles. Filed `proposed`: (c) is a question for the human, not a decision an agent may take | `rtl-arabic-pdpl-specialist` | **claimed 2026-08-18, before the file** — row first, per the rule directly above. Checked against `comms/decisions/` at claim time: 038 is free there too, and no unregistered file was found this pass |
+
+039+ is claimed just-in-time at its own milestone. **Do not copy a number out of the plan** —
 translate it through `comms/decisions/README.md` first.
 
 **A file at a number this table does not list is the double-012 in slow motion.** 035 sat

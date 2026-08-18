@@ -52,6 +52,7 @@ import assert from 'node:assert/strict';
 import { createInstrumentation } from '../instrument.ts';
 import { redact, refreshEnvSecrets } from '../redact.ts';
 import { KEY_DENYLIST, normaliseKey } from '../redaction-rules.ts';
+import { createWithheld, MAX_LITERALS, MIN_LITERAL } from '../withhold.ts';
 import { messageSpanAttributes, type ThreadMessage } from '@agnetos/contracts';
 import type { RunRecord, ToolCallRecord } from '../types.ts';
 
@@ -301,7 +302,60 @@ test('an error STRING carrying a body leaks in full — found by this gate, not 
     true,
     'KNOWN GAP, asserted so it cannot be rediscovered a sixth time. No key rule can close ' +
       'this and no value rule should try — a name-shaped regex would redact every agent ' +
-      'display name in the product. It closes when RunTrace stops accepting free text that ' +
-      'came from a message, which is a type change in observability/types.ts.',
+      'display name in the product. THE REMEDY NAMED HERE UNTIL 2026-08-18 WAS WRONG: it ' +
+      'said "a type change in observability/types.ts", and it can never have been one — ' +
+      'interpolation produces a string and erases provenance before any signature sees the ' +
+      'value (observability-engineer, withhold.ts). What survives interpolation is the ' +
+      'CHARACTERS, so the mechanism is a literal register plus a call site that feeds it.',
   );
+});
+
+/* ---------------------------------------------------------------------------
+ * The literal register, graded from the other side.
+ *
+ * `withhold.ts` is `observability-engineer`'s and its "what it cannot see" list is
+ * good — text never registered, a fragment under WINDOW, a paraphrase, a string
+ * over MAX_SCAN. These two tests assert the things that list does NOT name, in the
+ * file that owns the PDPL claim, because a blind spot named nowhere is the exact
+ * shape this repo keeps paying for.
+ * ------------------------------------------------------------------------ */
+
+test('the register FAILS OPEN at its own bound — eviction is a redaction hole, not a memory limit', () => {
+  const withheld = createWithheld();
+
+  // `MAX_LITERALS` is documented as *"bounded so a long-running process cannot grow a
+  // register without limit. Oldest evicted."* That is a resource sentence for what is, in
+  // this file's terms, a leak: the 33rd registered body silently un-protects the 1st.
+  //
+  // Reachable, not theoretical. A thread's drain registers one literal per message; a
+  // thread with 33 messages is an ordinary thread, and the message that stops being
+  // withheld is the OLDEST — which in a long conversation is the one furthest from the
+  // author's attention and the most likely to name a third party (tier 3, ADR-036).
+  const first = 'Chase Fatima Al-Harbi about the Olaya lease in March.';
+  withheld.add(first);
+  for (let i = 0; i < MAX_LITERALS; i += 1) {
+    withheld.add(`filler literal number ${i} padded past MIN_LITERAL`);
+  }
+
+  assert.equal(withheld.size(), MAX_LITERALS, 'the bound holds, which is the half that works');
+  assert.equal(
+    withheld.scrub(`halted: ${first}`).out,
+    `halted: ${first}`,
+    'ASSERTED AS A KNOWN GAP. If this starts failing because eviction was replaced with a ' +
+      'refusal to register, or with a bound per THREAD rather than per RUN, delete this test ' +
+      'and say so — do not weaken it to keep it green.',
+  );
+});
+
+test('a body under MIN_LITERAL is never registered, so a short body has no backstop at all', () => {
+  const withheld = createWithheld();
+  const short = 'call Ali'; // 8 chars — a whole message, and a person's name.
+  assert.equal(short.length, MIN_LITERAL);
+  withheld.add(short.slice(0, MIN_LITERAL - 1));
+  assert.equal(withheld.size(), 0, 'under the floor, nothing is registered');
+
+  // Stated so the floor is read as what it is: a deliberate trade, where the cost is that
+  // the shortest bodies — which are not the least sensitive ones — get no backstop.
+  // The structural rule (never hand a body to the tracer) is what covers them, and it is
+  // why that rule stays primary rather than becoming a fallback for this one.
 });

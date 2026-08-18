@@ -114,6 +114,19 @@ interview may add to it; nothing may soften it (Part VII.4, §3.5).
      body, an agent summary, an artefact filename. **A delete verb does not fix this tier**,
      because erasure requires selection first and prose has nothing to select on. This is the
      tier that matters most in our market, because it is the client's customers.
+   Two things the tier table does **not** say, added 2026-08-18 while grading ADR-036,
+   because both are read wrongly by default and the wrong reading is the flattering one:
+   - **An author is not a data subject.** Tier two selects *what a person wrote*. A person's
+     personal data is also in what **other people wrote about them**, and that is tier three
+     for the same human being. So *"we can erase an author"* answers *"delete everything I
+     typed"*; it does not answer an erasure request from that person. A named author is
+     simultaneously tier two for their own rows and tier three for everyone else's.
+   - **A backup is a fourth store, and no `DELETE` reaches it.** Rule 2 requires encrypted
+     backups; an erasure that leaves the rows in last night's dump is not complete, by the
+     same standard tier three is judged against. Until a backup rotation shorter than our
+     erasure commitment is written down and observed, the honest statement is that erasure
+     covers the **live** planes only. Do not describe tier one as complete on the strength of
+     the live-plane list.
    The operative consequence, and the reason this is policy rather than a note: **the only
    defence for tier three is not accumulating it.** Minimise at the point of writing, keep
    free text out of every derived plane, and never create a second copy of a body.
@@ -135,7 +148,13 @@ interview may add to it; nothing may soften it (Part VII.4, §3.5).
    region for the model endpoint** — there is no region or base-URL configuration anywhere in
    it — so rule 11's *"if a connector's region is unclear it does not belong in `wired_into`"*
    currently has an exception that is unwritten. Naming it here rather than leaving it in the
-   gap between two rules; it is settled in the data-egress ADR, with the human.
+   gap between two rules. **[ADR-038](../comms/decisions/ADR-038-data-egress.md) is that
+   ADR, and it is `proposed`**: it rules on the two egress paths this repo may rule on
+   (`deliver:` carries references, never bodies; `library_remote` stays `NULL`) and files
+   this one as the human's, because a processing region is a fact to be told, not derived.
+   Until it is told, the sentence in front of a client is *"observability and storage are
+   self-hosted in-region; model inference is a third-party processor whose region we have
+   not asserted"* — never *"our data stays local"*.
 11. **Cross-border:** processing and storage stay in-region. An agent may not send client
    data to a tool whose processing location is unknown; if a connector's region is
    unclear, it does not belong in a `wired_into` list. See rule 10 for the one processor
