@@ -269,8 +269,32 @@ const USER_FACING_PROPS_TEMPLATE = new RegExp(
  * generic — `Promise<void>`, `Record<string, Resource>` — and reporting
  * "Promise" as untranslated copy trains people to ignore the checker, which is
  * worse than not running it.
+ *
+ * **AND A .tsx FILE DECLARES GENERICS TOO.** Reported by `drawer-engineer`,
+ * 2026-08-18, from the mailbox composer:
+ *
+ *     export type Sender = (
+ *       threadId: string,
+ *       input: { body: string; interrupt: ComposableLevel },
+ *     ) => Promise<PostThreadMessageResponse>;
+ *
+ * `=> Promise<` is a `>`, then text, then a `<` — so the arrow's own `>` opened a
+ * text node and `Promise` was reported as uncatalogued copy. Rule 3a's dropping of
+ * `\n` from the class is what made it reachable: the arrow only lands on its own
+ * line because Prettier wraps a wide signature, so the trigger is FORMATTING, and
+ * any `.tsx` declaring an async callback type wide enough to wrap will hit it.
+ *
+ * `JSX_ARROW` refuses a match whose `>` is the second half of `=>`. This is the
+ * narrower half of the pair the standing findings warn about: a checker that fires
+ * on something no reader will ever see costs a baseline raise, and a baseline
+ * raised for a word nobody reads is how a ratchet stops meaning anything. The
+ * reporter did not work around it — they moved the type to a `.ts` module, where it
+ * belonged — so this fix buys the NEXT person the honest fix instead of a contorted
+ * declaration.
  */
 const JSX_TEXT = />([^<>{}]{2,}?)</g;
+/** `=` immediately before the opening `>`: a fat arrow, never a closing tag. */
+const JSX_ARROW = /=$/;
 const JSX_FILE = /\.(tsx|jsx)$/;
 
 /** Two consecutive letters in either script — the bar for "this is copy". */
@@ -724,6 +748,8 @@ export function scanText(path, text) {
     let m;
     while ((m = JSX_TEXT.exec(stripped))) {
       const raw = m[1];
+      // `=> Promise<T>` is not a text node. See JSX_ARROW.
+      if (JSX_ARROW.test(stripped.slice(0, m.index ?? 0))) continue;
       const candidate = raw.replace(/\s+/g, ' ').trim();
       if (!candidate || !HAS_WORDS.test(candidate) || NOT_COPY.test(candidate)) continue;
       if (LOOKS_LIKE_CODE.test(candidate)) continue;

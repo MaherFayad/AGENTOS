@@ -47,6 +47,57 @@ describe('catalogue', () => {
     expect(missing).toEqual([]);
   });
 
+  /**
+   * A HARDCODED Latin run gets none of `t.ts`'s protection.
+   *
+   * The test below this one proves every *interpolated* value is isolated. A run
+   * typed into the Arabic catalogue is not interpolated, so nothing wraps it — and
+   * an addressing sigil is the worst case, because `@`, `#` and `@@` are bidi
+   * NEUTRALS. A neutral at the start of a Latin run inside an RTL paragraph takes
+   * the paragraph's direction, detaches from the word it belongs to, and renders at
+   * the far end of the run.
+   *
+   * Measured in Chrome per character before this was written, on the real string:
+   * `@sales/account-enrichment · #sales · @@sales — أو…` rendered as
+   * `… — sales/account-enrichment · #sales · @@sales@`. `@sales` lost its sigil and
+   * `@@sales` appeared to gain one, in the field where the sigil is the difference
+   * between one run and N (`Plan §23.8`, BOARD rule 7 on the composer).
+   *
+   * The rule, and it is narrow on purpose: a sigil immediately followed by a Latin
+   * letter must sit inside an isolate, or already be inside a Latin run (the second
+   * `@` of `@@`, which is not at a run boundary and cannot detach).
+   */
+  it('isolates a sigil that starts a Latin run, in every Arabic string', () => {
+    const FSI = '⁨';
+    const LRI = '⁦';
+    const PDI = '⁩';
+    // Every leaf string in the catalogue: a plain entry, or each CLDR class of a
+    // plural. `todo()` entries hold English and are counted elsewhere.
+    const values = Object.entries(ar).flatMap(([key, entry]): (readonly [string, string])[] => {
+      if (typeof entry === 'string') return [[key, entry] as const];
+      if (isTodo(entry)) return [];
+      return Object.values(entry)
+        .filter((v): v is string => typeof v === 'string')
+        .map((v) => [key, v] as const);
+    });
+
+    const bare: string[] = [];
+    for (const [key, value] of values) {
+      for (const match of value.matchAll(/[@#]+[A-Za-z]/g)) {
+        const before = value.slice(0, match.index);
+        // Inside an open isolate? Count initiators against pops; a closed pair
+        // before the match protects nothing after it.
+        const opened = (before.match(new RegExp(`[${FSI}${LRI}]`, 'g')) ?? []).length;
+        const popped = (before.match(new RegExp(PDI, 'g')) ?? []).length;
+        if (opened > popped) continue;
+        // Or already mid-Latin-run, where there is no boundary to detach at.
+        if (/[A-Za-z0-9]$/.test(before)) continue;
+        bare.push(`${key}: ${match[0]}`);
+      }
+    }
+    expect(bare).toEqual([]);
+  });
+
   it('uses plural objects, not "N item(s)"', () => {
     expect(isPlural(en['chart.row.jobCount'])).toBe(true);
     expect(isPlural(ar['chart.row.jobCount'])).toBe(true);

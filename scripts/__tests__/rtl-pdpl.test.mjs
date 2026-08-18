@@ -220,6 +220,25 @@ test('COMPANY.md states erasure by tier and does not claim it is executable', as
   assert.match(md, /Never put a human's message into a trace, a log, or a push payload/i);
   assert.match(md, /Do not flatten a structured payload before tracing or logging/i);
 
+  // The two readings the tier table invites and does not refuse, added 2026-08-18 while
+  // grading ADR-036. Both are the same defect in different clothes — a claim read as wider
+  // than its evidence — and both are pinned HERE rather than in the ADR, because this is the
+  // file §3.3 injects into every run: a compliance sentence an agent says out loud comes from
+  // COMPANY.md, not from a decision record nobody loads.
+  assert.match(
+    md,
+    /An author is not a data subject/i,
+    'tier 2 selects what a person WROTE. Their personal data is also in what others wrote ' +
+      'about them, which is tier 3 for the same human. Without this line, "author-level ' +
+      'erasure" reads as an answer to an erasure request, and it is not one.',
+  );
+  assert.match(
+    md,
+    /A backup is a fourth store, and no `DELETE` reaches it/i,
+    'rule 2 requires encrypted backups; erasure that leaves the rows in last night’s dump ' +
+      'is not complete, by the same standard tier 3 is judged against',
+  );
+
   // "Traces stay local" is true and is not the whole egress story. Pinned so the narrower
   // claim cannot quietly go back to doing the wider claim's work.
   assert.match(md, /The model is a processor/i);
@@ -285,6 +304,30 @@ test('JSX text on its own line is copy — the BrainEmptyState shape', () => {
   const found = copyFindings('apps/web/src/map/svg/BrainEmptyState.tsx', src);
   assert.equal(found.length, 1, found.map((f) => f.message).join(' | '));
   assert.match(found[0].message, /Second brain/);
+});
+
+test('a wrapped arrow return type is a generic, not a JSX text node', () => {
+  // `drawer-engineer`, 2026-08-18, from `drawer/threads/mailbox`. Rule 3a dropped
+  // `\n` from its class so Prettier-wrapped copy would be seen — and that made the
+  // `>` of `=>` an opening tag, so `=> Promise<T>` on its own line reported
+  // "Promise" as uncatalogued copy. The trigger is FORMATTING, not anything an
+  // author chose: Prettier only breaks the arrow out when the signature is wide.
+  //
+  // Why this is a fix and not a convenience: the honest response to a false
+  // positive is to raise the baseline, and a baseline raised for a word nobody
+  // reads is how a ratchet stops meaning anything.
+  const src = [
+    'export type Sender = (',
+    '  threadId: string,',
+    '  input: { body: string; interrupt: ComposableLevel },',
+    ') => Promise<PostThreadMessageResponse>;',
+  ].join('\n');
+  const found = copyFindings('apps/web/src/drawer/threads/MailboxComposer.tsx', src);
+  assert.deepEqual(found.map((f) => f.message), []);
+
+  // And the narrowing is narrow: a real closing tag one character away still fires.
+  const real = ['<span>', '  Send into this thread', '</span>'].join('\n');
+  assert.equal(copyFindings('apps/web/src/drawer/threads/MailboxComposer.tsx', real).length, 1);
 });
 
 test('a sentence Prettier wrapped across two lines is ONE finding, not two', () => {

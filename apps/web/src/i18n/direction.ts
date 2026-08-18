@@ -171,7 +171,14 @@ export const inlineSignFor = (locale: Locale): 1 | -1 => inlineSign(directionOf(
  * LTR.
  *
  * `dir="auto"` resolves per text run and cannot be computed here, so it reads as
- * `ltr` — stated rather than silently assumed. No surface in this app sets it.
+ * `ltr` — stated rather than silently assumed.
+ *
+ * **One surface sets it, as of M16:** `ThreadView`'s `<p>` for a message body, which
+ * is the only element in this app whose direction belongs to its content rather than
+ * to the reader. Nothing keyboard-driven lives inside it, so this function's `ltr`
+ * resolution is never consulted there — but the sentence above used to say *"no
+ * surface in this app sets it"*, and a claim about the whole app is exactly the kind
+ * that goes stale silently, so it is named here instead of re-derived later.
  */
 export function elementDirection(element: Element | null | undefined): Direction {
   const owner = element?.closest('[dir]');

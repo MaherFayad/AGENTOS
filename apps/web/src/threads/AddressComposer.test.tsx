@@ -202,6 +202,125 @@ describe('interrupt levels (thread-model §4.2)', () => {
 });
 
 /* -------------------------------------------------------------------------- *
+ * Arrow keys, in BOTH directions
+ *
+ * `MIRRORS['shell.segmentedControl']` — "tab order is reading order" — governs this
+ * row as much as the shell's. The same defect shipped twice in M15 (`DepartmentTabs`,
+ * `SegmentedControl`) and this group is the fourth site of the class; it had no key
+ * handling at all while its own comment argued from what arrow keys do to a
+ * `disabled` radio.
+ *
+ * The RTL half is the half that matters: an LTR-only pass is how the department bar
+ * ran backwards in Arabic for the whole life of the file. `elementDirection` reads
+ * `dir` off the rendered tree, so the wrapper below is the whole setup.
+ * -------------------------------------------------------------------------- */
+
+describe('interrupt levels — arrow keys follow reading order', () => {
+  const inDirection = (dir: 'ltr' | 'rtl') => {
+    render(
+      <div dir={dir}>
+        <I18nProvider locale={dir === 'rtl' ? 'ar' : 'en'}>
+          <AddressComposer roster={SALES} />
+        </I18nProvider>
+      </div>,
+    );
+    const radios = screen.getAllByRole('radio');
+    // Source order is INTERRUPT_LEVELS: note · steer · halt. The ROW reverses under
+    // dir="rtl" as a flex row; the DOM order does not, which is exactly why a fixed
+    // +1 on ArrowRight walks the wrong way.
+    return { note: radios[0], steer: radios[1], halt: radios[2] };
+  };
+
+  it('ArrowRight walks forward in LTR', () => {
+    const { note, steer } = inDirection('ltr');
+    note.focus();
+    fireEvent.keyDown(note, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(steer);
+  });
+
+  it('ArrowRight walks BACKWARD in RTL, because the row does', () => {
+    const { note, steer, halt } = inDirection('rtl');
+    note.focus();
+    // Backward from the first wraps to the last, which is what the reader sees
+    // immediately to the right of `note` once the row has mirrored.
+    fireEvent.keyDown(note, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(halt);
+    expect(document.activeElement).not.toBe(steer);
+  });
+
+  it('ArrowLeft walks forward in RTL', () => {
+    const { note, steer } = inDirection('rtl');
+    note.focus();
+    fireEvent.keyDown(note, { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(steer);
+  });
+
+  it('lands focus ON the refused rung without selecting it — in both directions', () => {
+    for (const dir of ['ltr', 'rtl'] as const) {
+      const { note, steer } = inDirection(dir);
+      note.focus();
+      fireEvent.keyDown(note, { key: dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight' });
+      // This is the whole reason `steer` is `aria-disabled` and not `disabled`.
+      // A `disabled` control is skipped, and the reason tied to it by
+      // `aria-describedby` is then announced to nobody.
+      //
+      // WHAT THIS ASSERTION CANNOT SEE, measured rather than assumed: planting
+      // `disabled={refused}` on the button leaves this test GREEN, because jsdom
+      // honours `.focus()` on a disabled element where a browser does not. So the
+      // direction half below is proved here (a fixed `+1` turns it red) and the
+      // `disabled` half is proved by "keeps the refused level focusable" above,
+      // which asserts the attribute. Neither test covers both; saying so is
+      // cheaper than a third one that also cannot.
+      expect(document.activeElement).toBe(steer);
+      expect(steer.getAttribute('aria-checked')).toBe('false');
+      expect(note.getAttribute('aria-checked')).toBe('true');
+      screen.getByRole('radiogroup').remove();
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('keeps one tab stop, so the group is entered once and walked with arrows', () => {
+    const { note, steer, halt } = inDirection('ltr');
+    expect(note.tabIndex).toBe(0);
+    expect(steer.tabIndex).toBe(-1);
+    expect(halt.tabIndex).toBe(-1);
+  });
+});
+
+/* -------------------------------------------------------------------------- *
+ * The `@@` confirm, keyed in Arabic
+ *
+ * The dismiss paths above are exercised LTR. They are re-run here because a
+ * keyboard check that has only ever been run in one of the two directions the
+ * product ships in is not a check — that sentence is `chart/model/direction.ts`'s,
+ * earned on a bug that lived for the whole life of a file.
+ * -------------------------------------------------------------------------- */
+
+describe('the fan-out confirm, in Arabic', () => {
+  it('is dismissable from the keyboard without firing, under dir="rtl"', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    render(
+      <div dir="rtl">
+        <I18nProvider locale="ar">
+          <AddressComposer roster={SALES} />
+        </I18nProvider>
+      </div>,
+    );
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: '@@sales look' } });
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+
+    const dialog = screen.getByRole('alertdialog');
+    // Cancel takes focus on open, so Enter and Space cancel rather than commit.
+    expect(document.activeElement).toBe(within(dialog).getAllByRole('button')[0]);
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+/* -------------------------------------------------------------------------- *
  * What the composer may print
  * -------------------------------------------------------------------------- */
 

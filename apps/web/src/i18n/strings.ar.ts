@@ -288,14 +288,39 @@ export const ar: Catalog = {
     'الناقص شيئان لا شيء واحد: المشغّل لا يقدّم مسارًا يسرد المحادثات، والجدول الذي كانت ستأتي منه لم يعمل قطّ على قاعدة بيانات حيّة. هذا غياب قراءة، لا عدد يساوي صفرًا.',
 
   'threads.compose.label': 'محادثة جديدة',
-  /* The three sigils are Latin punctuation against Arabic; they sit in their own
-     LTR run and the sentence after them is ordinary prose, so no isolation
-     character is needed inside the catalogue — the input is `dir="auto"` by
-     virtue of being a textarea the person types into. */
-  'threads.compose.placeholder': '@sales/account-enrichment · #sales · @@sales — أو اكتب من دون عنوان',
+  /* THE SIGIL RUN IS ISOLATED, AND THE PREVIOUS NOTE HERE WAS WRONG TWICE.
+   *
+   * It said no isolation was needed and that the field is `dir="auto"` "by virtue
+   * of being a textarea". A textarea is not `dir="auto"` by default, and with the
+   * root at `dir="rtl"` an empty field takes the parent's direction, so this
+   * placeholder is laid out in an RTL paragraph.
+   *
+   * MEASURED IN CHROME, per character, with `Range.getBoundingClientRect()` —
+   * not derived from UAX #9 and not assumed. Written bare, the visual line is:
+   *
+   *     … أو اكتب من دون عنوان — sales/account-enrichment · #sales · @@sales@
+   *
+   * The leading `@` is a bidi-NEUTRAL at the start of the paragraph (sor = R),
+   * so it takes the paragraph's own direction and detaches — it lands at the far
+   * end of the Latin block, where it reads as a trailing character on `@@sales`.
+   * `@sales` loses its sigil and `@@sales` appears to grow one, in the single
+   * field where `@` vs `#` vs `@@` is the entire grammar and the difference
+   * between one run and N. The same measurement with U+2068 … U+2069 returns
+   * the line intact.
+   *
+   * U+2068 FIRST STRONG ISOLATE / U+2069 POP, as `\u`-escapes rather than typed
+   * invisibles: the same pair `format.ts`'s `isolate()` puts around every
+   * interpolated value, so the product has one isolation idiom and not two. Typed
+   * invisibly they are the characters a later editor deletes without seeing.
+   * `i18n.test.ts` → "isolates a sigil that starts a Latin run" is the gate. */
+  'threads.compose.placeholder':
+    '\u2068@sales/account-enrichment · #sales · @@sales\u2069 — أو اكتب من دون عنوان',
   'threads.compose.send': 'إرسال',
   'threads.compose.review': 'مراجعة الإرسال الجماعي',
-  'threads.compose.levelLabel': 'كيف تصل هذه الرسالة',
+  /* Nominal, not interrogative (§1.4: MSA labels stay noun-form). Its sibling in
+     the mailbox composer is the same phrase, shortened the way English shortens
+     "How this message lands" to "How it lands". */
+  'threads.compose.levelLabel': 'كيفية وصول هذه الرسالة',
   'threads.compose.unknownDepartment':
     'لا يوجد في خريطة هذا المشروع قسم باسم {name}. الإرسال مسموح على أيّ حال — المشغّل هو من يحلّ العناوين، وهذه القائمة قد تكون قديمة.',
   'threads.compose.noProject':
@@ -334,7 +359,11 @@ export const ar: Catalog = {
     'هذا العنوان لا يسمّي مشروعًا، وكلّ محادثة تنتمي إلى مشروع. افتحها من مبدّل المشاريع.',
   'threads.one.emptyTitle': 'لا مداخلات بعد',
   'threads.one.empty': 'المحادثة موجودة ولم يُقَل فيها شيء.',
-  'threads.one.inMailbox': 'ما زالت في صندوق الوارد',
+  /* «صندوق البريد», not «صندوق الوارد». The mailbox is one object with one name,
+     and this row was the only place calling it an *inbox* — three other strings
+     (`a11y.threads.interrupt.note`, both mailbox dispositions) already say
+     البريد. Two names for one mechanism is the translated-not-made tell. */
+  'threads.one.inMailbox': 'ما زالت في صندوق البريد',
 
   'threads.state.open': 'مفتوحة',
   'threads.state.running': 'قيد التشغيل',
@@ -619,15 +648,35 @@ export const ar: Catalog = {
    * exists to refuse, arriving in translation instead of in code.
    *
    * There is deliberately no key here for the steer refusal's reason: the composer
-   * renders `a11y.threads.interrupt.undeliverable` above, already written. */
+   * renders `a11y.threads.interrupt.undeliverable` above, already written.
+   *
+   * REVIEWED 2026-08-18 by `rtl-arabic-pdpl-specialist`, §23.11 rule 6. Four of the
+   * seventeen changed, and the call to write them rather than file seventeen `todo()`s
+   * was the right one — none of the four was a guess, all four were a word choice, and
+   * a ceiling raised to admit seventeen placeholders would not have been recoverable.
+   * What changed and why is on each line: `levelLabel` (وصول reads as *access*),
+   * `emptyBody` (register), `noThread` (بثّ is the broadcast this file already
+   * rejected), `appendState.failed` (a different root from the state badge). The
+   * disposition pair is kept exactly as written — the distinction it draws is right
+   * and it is the load-bearing one. */
   'threads.mailbox.bodyLabel': 'إرسال إلى هذه المحادثة',
   'threads.mailbox.bodyPlaceholder': 'ما الذي ينبغي أن يعرفه الوكيل؟',
-  'threads.mailbox.levelLabel': 'طريقة الوصول',
+  /* Was «طريقة الوصول», which in an Arabic interface reads as *access method* —
+     وصول carries "access" at least as strongly as "arrival", and a label above a
+     permission-shaped control is exactly where a reader takes the wrong one.
+     Naming الرسالة disambiguates it, and it is now the same phrase as
+     `threads.compose.levelLabel`, shortened as the English pair is. */
+  'threads.mailbox.levelLabel': 'كيفية وصول الرسالة',
   'threads.mailbox.send': 'إرسال',
   'threads.mailbox.sending': 'جارٍ الإرسال…',
-  'threads.mailbox.emptyBody': 'الرسالة تحتاج إلى نصّ. لم يُرسَل شيء.',
+  /* Terser, and in the register the English keeps: a flat statement of a rule,
+     not a description of a particular message's needs. */
+  'threads.mailbox.emptyBody': 'لا رسالة بلا نصّ. لم يُرسَل شيء.',
+  /* «تدفّق التشغيل», not «بثّ التشغيل». This file's own THREADS header rejects
+     بثّ for exactly the reason it fails here — it reads as *broadcast*, one-to-many,
+     which is the fan-out sense and not a stream. تدفّق is the stream. */
   'threads.mailbox.noThread':
-    'لا يذكر بثّ التشغيل المحادثةَ التي تنتمي إليها هذه العملية، فلا صندوق بريد يُخاطَب من هنا بعد.',
+    'لا يذكر تدفّق التشغيل المحادثةَ التي تنتمي إليها هذه العملية، فلا صندوق بريد يُخاطَب من هنا بعد.',
 
   /* The two sentences that carry the whole surface. «في انتظار الدور» is waiting
    * in a queue; «سُلِّمت» is handed over and received. Keep them distinct. */
@@ -643,7 +692,11 @@ export const ar: Catalog = {
   'threads.mailbox.appendState.running': 'كانت المحادثة قيد التشغيل عند إضافة هذه الرسالة.',
   'threads.mailbox.appendState.waiting': 'كانت المحادثة تنتظر جوابًا عن سؤال عند إضافة هذه الرسالة.',
   'threads.mailbox.appendState.closed': 'كانت المحادثة مغلقة عند إضافة هذه الرسالة.',
-  'threads.mailbox.appendState.failed': 'كانت المحادثة قد تعطّلت عند إضافة هذه الرسالة.',
+  /* «فشلت», not «تعطّلت». The state a reader sees on the badge is
+     `threads.state.failed` = «فاشلة»; a sentence about that state has to use the
+     same root or it describes a different event (تعطّل is a breakdown, which is a
+     cause and not the state). */
+  'threads.mailbox.appendState.failed': 'كانت المحادثة قد فشلت عند إضافة هذه الرسالة.',
   'threads.mailbox.appendStateCaveat':
     'هذه هي الحالة المقروءة قبل كتابة الرسالة، لا الحالة بعدها.',
   'threads.mailbox.haltNotYetMoved':

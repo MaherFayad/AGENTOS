@@ -115,7 +115,11 @@ export function ThreadView({ threadId }: { threadId: string }): React.JSX.Elemen
             {feed.data.messages.map((message) => (
               <article key={message.id} className={s.message}>
                 <div className={s.messageHead}>
-                  <span>{message.author}</span>
+                  {/* An author is a slug (`sales/account-enrichment`) sitting in a
+                      row of translated chrome. `<bdi>` so the run resolves by its
+                      own first strong character instead of by its neighbour —
+                      the same answer `AddressBadge` and `ProvenanceBadge` give. */}
+                  <bdi>{message.author}</bdi>
                   <span className={s.sep} aria-hidden="true">
                     ·
                   </span>
@@ -125,7 +129,19 @@ export function ThreadView({ threadId }: { threadId: string }): React.JSX.Elemen
                     <span className={s.sep}>{t('threads.one.inMailbox')}</span>
                   )}
                 </div>
-                <p className={s.messageBody}>{message.body}</p>
+                {/* `dir="auto"` — THE ONE PLACE IN THIS APP THAT SETS IT, and the
+                    reason is that this is the only element whose direction is not
+                    the app's to decide. A message body is written by a person or by
+                    a model, in whatever language they used, and an English sentence
+                    laid out at the page's RTL base direction gets its full stop
+                    moved to the wrong end. `dir="auto"` resolves per element from
+                    its own first strong character, which is exactly the question
+                    being asked. `elementDirection()` reads `dir="auto"` as `ltr`
+                    and says so; nothing keyboard-driven lives inside this element,
+                    so that resolution is never consulted here. */}
+                <p className={s.messageBody} dir="auto">
+                  {message.body}
+                </p>
               </article>
             ))}
           </div>

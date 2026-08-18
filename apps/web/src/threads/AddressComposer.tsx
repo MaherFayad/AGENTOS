@@ -58,7 +58,7 @@ import {
 import { projectPath } from '@agnetos/contracts';
 import { AddressBadge, InterruptBadge } from '@/components/primitives';
 import { useProjectHref, useProjectSegment } from '@/components/shell';
-import { useT } from '@/i18n';
+import { elementDirection, inlineStep, useT } from '@/i18n';
 import { previewLine } from './lib/preview';
 import type { DepartmentRoster } from './lib/roster';
 import s from './threads.module.css';
@@ -207,7 +207,14 @@ export function AddressComposer({
           // two spellings that would have worked; rewriting it here would be a
           // second copy of a refusal whose wording is the contract's.
           <p className={s.refusal}>
-            <span className={s.token}>{preview.refusal.token}</span> {preview.refusal.hint}
+            {/* `<bdi>` for the same reason `AddressBadge` uses one, and it is the
+                stronger case: this is the token the parser REFUSED, so it is
+                whatever the person typed. `&sales` and `@@` lead with bidi-neutral
+                characters, and a neutral at the start of a run inside an RTL
+                paragraph takes the paragraph's direction — it detaches and renders
+                at the far end of the Latin run. Measured, not assumed; the same
+                reordering is what moved the `@` off `@sales` in the placeholder. */}
+            <bdi className={s.token}>{preview.refusal.token}</bdi> {preview.refusal.hint}
           </p>
         )}
         {preview.unknownDepartment !== null && (
@@ -259,6 +266,31 @@ export function AddressComposer({
  * The three levels — two offered, one refused
  * -------------------------------------------------------------------------- */
 
+/**
+ * **Arrow keys, and the reason they are here rather than assumed.**
+ *
+ * This is a `role="radiogroup"` of buttons, which is the one shape that owes its
+ * own key handling — the platform gives it nothing. It shipped with none, while
+ * the comment on `aria-disabled` below argued from what arrow keys do to a
+ * `disabled` radio. That is BOARD's *"a comment is not a mechanism"*: the reason
+ * the refusal is `aria-disabled` was sound, and the mechanism it was protecting
+ * did not exist, so `steer`'s stated reason was reachable by Tab only and by luck
+ * — every button was in the tab order because none had a roving `tabIndex`.
+ *
+ * The step comes from `inlineStep`, never from `+1` on ArrowRight.
+ * `MIRRORS['shell.segmentedControl']` — *"tab order is reading order"* — governs
+ * this row too: it is an `inline-flex` row, so `dir="rtl"` reverses it on its own
+ * and a fixed `+1` would walk toward the control on the reader's other side. That
+ * exact bug shipped twice in M15, in `DepartmentTabs` and in `SegmentedControl`,
+ * and this is the fourth site of the same class. `elementDirection` reads the
+ * direction off the rendered tree rather than off the locale, so a composer inside
+ * one of §2.5's or §3.1's LTR islands still keys LTR on an RTL page.
+ *
+ * **Arrows land on the refused rung and do not select it.** That is the whole
+ * point of `aria-disabled`: focus reaches it, `aria-describedby` announces why it
+ * is refused, and nothing is chosen. Skipping it would put the reason back out of
+ * reach, which is the state this comment used to describe as if it were fixed.
+ */
 function InterruptLevels({
   level,
   onPick,
@@ -271,9 +303,24 @@ function InterruptLevels({
   disabled: boolean;
 }): React.JSX.Element {
   const t = useT();
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    // The step is along the LIST and the wrap with it — never along the screen.
+    const delta = inlineStep(event.key, elementDirection(event.currentTarget));
+    if (delta === 0) return;
+    event.preventDefault();
+    const next = (index + delta + INTERRUPT_LEVELS.length) % INTERRUPT_LEVELS.length;
+    refs.current[next]?.focus();
+    const candidate = INTERRUPT_LEVELS[next];
+    // Focus moves onto a refused rung; selection does not follow it there.
+    if (candidate === 'steer' || disabled) return;
+    onPick(candidate);
+  };
+
   return (
     <div className={s.levels} role="radiogroup" aria-label={t('threads.compose.levelLabel')}>
-      {INTERRUPT_LEVELS.map((candidate) => {
+      {INTERRUPT_LEVELS.map((candidate, index) => {
         // `STEER_DELIVERY.supported` is `false` and `SteerDeliverable` narrows
         // `deliverable` to the literal `false`, so this is the only form that
         // compiles. Not a hardcoded pessimism: the register reads the runner's
@@ -282,6 +329,9 @@ function InterruptLevels({
         return (
           <button
             key={candidate}
+            ref={(element) => {
+              refs.current[index] = element;
+            }}
             type="button"
             role="radio"
             className={s.level}
@@ -291,6 +341,11 @@ function InterruptLevels({
             // reachable, says why it is refused, and does nothing when pressed.
             aria-disabled={refused || disabled}
             aria-describedby={refused ? reasonId : undefined}
+            // Roving: Tab enters the group once, arrows move within it. The
+            // refused rung is never the selected one, so it is never the tab
+            // stop — arrows are what reach it, which is why they had to exist.
+            tabIndex={level === candidate ? 0 : -1}
+            onKeyDown={(event) => onKeyDown(event, index)}
             onClick={() => {
               if (refused || disabled) return;
               onPick(candidate);
