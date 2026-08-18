@@ -1,65 +1,72 @@
 # status — fidelity-qa-reviewer
 
-**Updated:** 2026-08-18T21:50
-**Milestone:** M16 acceptance pass — queue drained, seven answered
+**Updated:** 2026-08-18T22:55
+**Milestone:** M16 re-gate — all three FAIL items cleared
 **State:** review
 
 ## Now
 
-**Inbox empty. Seven verdicts filed: 5 PASS, 2 FAIL (3 items total). M16 does not flip.**
+**All three M16 FAIL items PASS. Plus three claims graded: the `steer` proof holds, the
+`withhold.ts` fail-open is closed with its residual stated at real width, and the deleted
+known-gap test was the right call with a sufficient tombstone.**
 
-- **FAIL** — `sessions-relay-engineer` THREADS view (2: `--ink-3` on a delivery fact;
-  a `role="radiogroup"` with no arrow keys, justified by three comments describing the
-  mechanism it lacks) · `observability-engineer` erasure spec (1: two sentences where
-  *selectable* became *executed*, against the same page's own "Executable today? **no**").
-- **PASS** — drawer mailbox composer · THREADS tab slot · ADR-028 + `thread-feed` ·
-  design-system-guardian items 1 & 2. `thread-model-engineer` closed my foundation FAIL.
-- Verdict handoff: `comms/handoffs/M16-fidelity-qa-reviewer-m16-acceptance-pass.md`.
+- **PASS** — `ThreadView` `--ink-3` (fixed by deletion; the new gate
+  `threads-contrast.test.ts` reads its class set from the CSS and its file list from the
+  directory, and fails loudly rather than skipping) · `AddressComposer` radiogroup (fixed by
+  `rtl-arabic-pdpl-specialist` at `306039e`, graded as theirs) · the erasure spec's verbs
+  (four, not the three I counted).
+- Verdict handoff: `comms/handoffs/M16-fidelity-qa-reviewer-m16-re-gate.md`.
   **`comms/verdicts/` still does not exist and I still have not created it.**
 
-**Gated on a still tree at `db19006`, 21:35–21:44 +03:00**, after `rm -rf apps/web/.next`.
-`verify` 0 · `typecheck:tests` 0 · rtl gate **holding 308** · `smoke:browser` **PASS** ·
-tokens `scanned at 2026-08-18 21:36 +03:00 · db19006 · clean`, 0 violations / 5 exemptions.
-**That browser green carries its own NOTE — 66 backend absences, the runner was down for
-the whole run.** It says the client renders without a backend and nothing more. Three of my
-PASSes are on surfaces that have never been exercised in their working state.
+**M16 does not flip, and the blocker is my queue, not anyone's code.**
+`rtl-arabic-pdpl-specialist`'s rule-6 review-request (`20260818-2225`) is **open and
+ungraded**, its `re:` is an `M16-` handoff, and BRIEF line 14 counts that sweep inside M16.
+One dispatch, mine. If the orchestrator scopes it out of M16, M16 flips on my verdict and I
+will not argue — but that call is made out loud, not by my silence.
 
-**The 1440px side-by-side has still never been run, on any milestone.** Every verdict says
-so. It needs reference frames — the only remaining half of the Part VI bar, still with the
-user.
+**Gated on a still tree at `4337eb6`, 22:41–22:52 +03:00**, after `rm -rf apps/web/.next`.
+`verify` 0 · `typecheck:tests` 0 · rtl gate **holding 308** · `smoke:browser` exit 0 ·
+tokens `scanned at 2026-08-18 22:42 +03:00 · 4337eb6 · clean`, 0 violations / **15**
+exemptions — 5→15 because `drawer/` and `sessions/` are now **scanned** (`90167f4` closed my
+expired-PROVISIONAL follow-up; I was not the instrument this round).
+**The browser green printed its NOTE: 66 backend absences across 12 routes.** Client renders
+without a backend; nothing more.
+
+**The 1440px side-by-side has still never been run, on any milestone.** Reference frames are
+with the user — the only remaining half of the Part VI bar.
 
 ## Blocked on
 
-Nothing of mine. Tree stopped being still at 21:44 (`rtl-arabic-pdpl-specialist` in
-`AddressComposer.tsx`, `ThreadView.tsx`, both catalogues) — an **uncommitted, ungated** fix
-for my item 2 is in their tree; I did not grade it.
+Nothing. Tree still and clean throughout.
 
-## The three findings worth carrying
+## The four findings worth carrying
 
-1. **A falsification needs its own falsification.** Third instance in seven days, three
-   agents. A plant that silently fails to apply is indistinguishable from a gate catching
-   it. Verify it is on disk before believing the red.
-2. **A provisional blind spot with no expiry becomes a permanent one.** Both PROVISIONAL
-   `check-tokens` entries outlived their condition; `apps/web/src/drawer/` was unscanned on
-   the night M16's composer landed there. A date is not an enforcer — ruling filed.
-3. **Stale reasons outlive their conditions in every kind of string**, not just `a11y.*`.
-   Two catalogue entries and two test assertion messages this week. Any sentence explaining
-   *why* is a claim with an expiry date, and the ones read aloud or printed on a red build
-   mislead hardest.
+1. **When a finding is "this claims a derivation it does not have", make the derivation and
+   read what stops compiling.** I named one `=== 'steer'` literal by reading; the flip found
+   two, and the second was in the keyboard path that had just become load-bearing.
+2. **A bound that drops protection is not a bound.** `size() <= 32` was true and graded the
+   resource while the protection failed open under it. Ask of every ceiling: when it is
+   reached, what is lost, and who is told?
+3. **A known-gap test should carry its own closing instruction.** *"Delete this and say so —
+   do not weaken it to keep it green"* made the right action cheap and the wrong one
+   visibly wrong.
+4. **The absence of a constraint deserves the same evidence as its presence.** *"No length
+   `CHECK` on `ops.message.body`, no `LIMIT` on `readMailbox`"* was checked before a residual
+   was written — *grade a constraint from both sides*, in the direction nobody uses.
 
 ## Last handoff
 
-`comms/handoffs/M16-fidelity-qa-reviewer-m16-acceptance-pass.md`
+`comms/handoffs/M16-fidelity-qa-reviewer-m16-re-gate.md`
 
 ## Next
 
-1. **Re-gate on re-file**, both FAILs. Item 2 only for the THREADS slice; item 1 is a
-   one-line deletion I can confirm from source.
+1. **`rtl-arabic-pdpl-specialist`'s rule-6 pass** (`20260818-2225`) — the only thing between
+   M16 and a flip. Arabic register, `<bdi>`/LRI-PDI, ADR-038 (`proposed`, not to be graded
+   as accepted), two PDPL items.
 2. **`shell-navigation-engineer`'s two M15 messages** (`tablist-rtl-arrow-keys`,
-   `m15-coverage-gate-review`) are the oldest open thing I owe.
-3. **Fold into `cc-fidelity-check`:** the new standard's three-part text, the inert-type-
-   assertion rule (now discharged — `typecheck:tests` is live and I re-measured it), the
-   worktree method for grading a ratchet raise, and **read the `smoke:browser` NOTE before
-   citing the green**.
-4. **Add to BRIEF:** the three findings above, plus `sessions-relay-engineer`'s second
-   instance of the `git add` + bare `git commit` trap.
+   `m15-coverage-gate-review`) — still the oldest open thing I owe.
+3. **Fold into `cc-fidelity-check`:** read the `smoke:browser` NOTE before citing the green ·
+   the worktree method for grading a ratchet raise · findings 1 and 2 above.
+4. **Add to BRIEF:** finding 1 (make the derivation, read the compiler) and finding 3
+   (a known-gap test carries its own closing instruction), plus
+   `sessions-relay-engineer`'s second instance of the `git add` + bare `git commit` trap.

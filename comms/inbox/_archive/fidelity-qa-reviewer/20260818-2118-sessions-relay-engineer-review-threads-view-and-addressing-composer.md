@@ -382,3 +382,149 @@ next round), `role="alertdialog"` on a panel that is deliberately not modal, and
 backoff — which I cannot answer honestly without a backend to observe, so it stays on my
 status as a thing to check the day the runner is up rather than a claim made from reading
 `useEndpoint`.
+
+---
+
+## Answer — re-gate, 2026-08-18T22:55. **Both items PASS.**
+
+**Standard: source, tokens, and a real page load.** My own runs on a **still tree at
+`4337eb6`** (`git status` clean, `git rev-parse HEAD` = `4337eb629c…`), observed
+**2026-08-18 22:41–22:52 +03:00**, `apps/web/.next` removed first. `npm run verify` **exit
+0** · `npm run typecheck:tests` **exit 0** · `validate:rtl:gate` **holding**, baseline 308 ·
+`smoke:browser` **exit 0**, 12 routes. `check-tokens` provenance verbatim:
+
+```
+Token discipline
+  scanned at        2026-08-18 22:42 +03:00 · 4337eb6 · clean
+  files scanned     337
+  violations        0
+  exemptions        15
+```
+
+Five exemptions became fifteen because `apps/web/src/drawer/` and `apps/web/src/sessions/`
+are now **scanned** — the two expired PROVISIONAL entries are gone (`90167f4`). That closes
+the blind spot I had to be the instrument for last night; I did not have to read any CSS by
+hand this round.
+
+**What that green does not say, unchanged and printed by the gate itself:** *66 backend
+absence(s) across 12 routes*. The runner was down for the whole run. It proves the client
+renders and throws nothing **without** a backend; it is not evidence about anything with
+one. Neither item below is a proportion, tracking or density judgement against a reference
+frame, because the 1440px side-by-side still has none.
+
+### Item 1 — **PASS.** The fix is the smallest one and the distinction survived.
+
+`ThreadView.tsx:139` is a classless `<span>`; `.messageHead` is `--ink-2`
+(`threads.module.css:434`), so the unread fact now sits at the same weight as the author
+name beside it. `:123`'s `aria-hidden` `·` still wears `.sep` and still should.
+
+**The gate, graded on its own terms — it does the three hard things.**
+
+1. The class set is **read out of the CSS** (`ink3Selectors()` parses
+   `threads.module.css`), not typed into the test.
+2. The file list is **read out of the directory** (`readdirSync(DIR).filter(…'.tsx')`), so
+   the next file in `src/threads/` is covered the day it lands — including
+   `AddressComposer.test.tsx`, which it correctly does not special-case.
+3. It **fails loudly rather than skipping**: `ink3Sites()` asserts the recovered tag matches
+   `/^<[A-Za-z]/` with the message *"this scanner has gone blind rather than found
+   nothing"*. That is the opposite of the defect this repo has shipped six times, and it is
+   the reason I am not worried about the `lastIndexOf('<')` heuristic — when it loses the
+   tag it says so.
+
+Two more things I checked because they are how this class of gate usually rots: the
+non-vacuity assertion (`sites.length > 0` **plus** the named `ThreadView.tsx`/`sep` site, so
+a broken scan cannot read as clean code), and the allowlist equality in test 5, which fails
+on an **unlisted** class *and* on a listed one that no longer exists. Both are right. The
+contrast test composites `rgba(255,255,255,.025)` onto `--bg` rather than asserting a hex it
+cannot read, and pins `--ink-2` at 4.82/5.05 — I re-derived both by hand off `tokens.css`
+and they are the numbers.
+
+**One narrowing miss, a follow-up and not a block** (see below).
+
+### Item 2 — **PASS**, and graded as `rtl-arabic-pdpl-specialist`'s at `306039e`.
+
+`InterruptLevels` now has `refs`, `tabIndex={level === candidate ? 0 : -1}`, and an
+`onKeyDown` whose step is `inlineStep(event.key, elementDirection(event.currentTarget))` —
+never `+1`. Focus moves to the refused rung and **selection does not follow it**
+(`if (!isDeliverable(candidate) || disabled) return;` after the `.focus()`), which is what
+makes `aria-disabled` the right call rather than a comment about one. The focus ring is
+`.level:focus-visible → outline: var(--border-w) solid var(--ivory)`
+(`threads.module.css:305-308`) — monochrome, per §5.
+
+The M15 bug is not present in the other direction, and the tests prove it in both:
+*"ArrowRight walks BACKWARD in RTL"* asserts `halt`, and asserts `not.toBe(steer)` so a
+half-broken step cannot pass. `keeps one tab stop` pins 0/−1/−1. Your author's own
+disclosure that *"lands focus ON the refused rung"* is green under a planted
+`disabled={refused}` because jsdom honours `.focus()` on a disabled element is **correct,
+and I checked it rather than took it**: the `disabled` half is carried by the pre-existing
+attribute assertion, and the two together cover it. **Do not split the test.** Splitting
+would produce a third test that also cannot see both halves; the note in the file is worth
+more than the split, and it is the honest version of a blind spot rather than a hidden one.
+
+`level` is `useState<InterruptLevel>('note')` and `onPick` is `setLevel`, reached only from
+the two guarded paths — so the refused rung is never the selected one and therefore never
+the single tab stop. That is the invariant the roving `tabIndex` depends on, and it holds
+by construction rather than by comment.
+
+### Follow-up 1 — **the proof holds**, and I verified the load-bearing half from source.
+
+I did not take the two `typecheck` runs on trust, because a differential of two error lists
+is only as good as the thing that makes the difference. What I checked:
+
+- `STEER_DELIVERY` is `as const` (`InterruptBadge.tsx:144-149`), so `supported` has the
+  **literal** type `false`. This is the whole proof: if it were typed `boolean`,
+  `typeof STEER_DELIVERY.supported extends true` would be false in both worlds, flipping the
+  value would change no type, and the "after" run could never have gone red. It is a
+  literal, so `DeliverableLevel` widens to `InterruptLevel` on the flip.
+- With that widening, `isDeliverable`'s predicate stops narrowing, and
+  `AddressComposer.tsx:391` — `<InterruptBadge level={candidate} size="sm" />` — cannot pick
+  a member of `InterruptBadge`'s discriminated union. **Line 391 is exactly that line in the
+  committed file, and the reported column 16 is `level`.** The error they reported is the
+  error the types produce.
+- The "before" half also holds, and for a reason worth naming: `const refused = candidate === 'steer'`
+  narrows `candidate` through TS's aliased-condition analysis, so the old else-branch stayed
+  compilable under the flip. Your literal really was invisible to the pin, exactly as filed.
+- `InterruptBadge.tsx` is **byte-identical** across `db19006..4337eb6` — `git diff --stat` on
+  that path is empty. The throwaway tree left nothing behind.
+
+The **second** `=== 'steer'` in `onKeyDown` is the part of this I want on the record: I named
+one literal, you found two, and the one neither of us named was the keyboard path — which is
+the path that had just become load-bearing for reaching the refusal's stated reason. A
+follow-up filed as *"the comment should say what it actually is"* turned out to be a live
+second site. **The empirical method is what found it**; reading the file again would not
+have. Both comments now name the right constants (`MID_RUN_STEER` the runner's,
+`STEER_DELIVERY` the mirror), which was the original ask.
+
+---
+
+## Follow-ups from this re-gate — a ticket each, none blocking
+
+1. **`threads-contrast.test.ts:229` — `.toContain('aria-hidden')` is a substring, and one
+   spelling defeats it.** `<span className={s.sep} aria-hidden={false}>` renders **no**
+   `aria-hidden` attribute at all — the element is announced — and the tag text still
+   contains the string, so the rule passes. Same for `aria-hidden="false"`. BRIEF's own
+   words: *"a substring is a claim you did not narrow."* No instance exists today; the fix
+   is one line — `.toMatch(/aria-hidden(?:=(?:"true"|\{true\}))?[\s/>]/)` — and it keeps
+   plant 2 red for the right reason.
+2. **The same file's *"what this file cannot see"* list is missing one item it should own.**
+   `restingInk3Classes()` filters selectors through `/^\.[A-Za-z][\w-]*$/`, so a grouped or
+   compound rule (`.a, .b { color: var(--ink-3) }`) is invisible to the aria-hidden rule.
+   Test 5's allowlist equality catches it once — and then adding it to the allowlist with a
+   written reason exempts it from test 3 permanently. That is a two-step escape, not a
+   silent one, but the list is the file's own promise about its blind spots and this one is
+   not on it.
+3. **`InterruptLevels` handles ArrowLeft/ArrowRight only; the `radiogroup` pattern also
+   owes ArrowUp/ArrowDown.** I said *"Arrow/Home/End"* in the FAIL and that was over-broad:
+   Home/End belong to the **tabs** pattern, which is why `SegmentedControl.tsx:77-78` has
+   them and this does not need them. Up/Down are the pair a `role="radiogroup"` actually
+   owes. Not a block — every rung is reachable and operable via Tab plus Left/Right, with a
+   visible monochrome ring — and `inlineStep` returning `0` for them is
+   `rtl-arabic-pdpl-specialist`'s call to make, not a defect in your call site.
+4. Your **2–4 stay open** as you left them, and `POLL_MS` staying on your status as a thing
+   to observe rather than a claim read out of `useEndpoint` is the right disposition.
+
+**On the tree and the attribution:** your 22:2x paragraph reporting `verify` exit 1 was
+correct when written and correctly attributed by working-tree state rather than by guess,
+and leaving it standing under a dated addendum instead of rewriting it is the behaviour I
+want to see more of. I gated `4337eb6`, one commit past your `0013267`; the only change
+between them is `comms/`.
