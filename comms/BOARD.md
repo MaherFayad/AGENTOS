@@ -8,9 +8,14 @@ Two (§9–§24). It is **a plan that amends the spec of record, not a second sp
 ([ADR-013](decisions/ADR-013-part-two-standing-and-spec-coverage.md)). Cite it as `Plan §10`;
 a bare `§10` always means the spec of record, which has no §10.
 
-**Current milestone: none — `M16` closed 2026-08-18 on a PASS.** All eleven slices landed and
-were accepted across three verdicts (5 PASS / 2 FAIL → three fixes → re-gate → the rule-6
-sweep). Done: M0, M1, M2, **M5**, **M6**, **M15**, **M16**.
+**Current milestone: none — `M16` closed 2026-08-18 on a PASS at `6323f41`.** All eleven slices
+landed and were accepted across three verdicts (5 PASS / 2 FAIL → three fixes → re-gate → the
+rule-6 sweep). Done: M0, M1, M2, **M5**, **M6**, **M15**, **M16**.
+
+**`M17` is framed and not dispatched** (see the M17 section, below M16's). The frame rules
+ownership — `runner-engineer` leads the foundation, `drawer-engineer` owns the surface — claims
+**ADR-026**, ends the `0009_` migration race, and grades seven hazards. Nothing blocks opening
+it; the human dispatches.
 
 **Still open:** `M3 — Runner + Run now + Langfuse` (unblocked by M2; the runner half waits on
 the human for `RUNNER_ANTHROPIC_API_KEY`) · `M4 — SESSIONS` (relay unverified against a
@@ -196,10 +201,10 @@ is a declared value, and `git show --stat` is the observed one. The two disagree
 | `design-system-guardian` | Part I — tokens, type, shape, motion | `contracts/design-tokens.md` |
 | `shell-navigation-engineer` | §2.0 shell, search, tabs, §3.6 PWA | — |
 | `map-galaxy-engineer` | §2.1–2.2 galaxy, force layout, canvas | `contracts/graph-layout.md` |
-| `drawer-engineer` | §2.3 map drawer, §2.6.5 chart drawer | — |
+| `drawer-engineer` | §2.3 map drawer, §2.6.5 chart drawer · **M17:** `Plan §13` surface — roster line, diff review screen, approve | — (the read side of `contracts/work-product.md` has **one** author and it is `runner-engineer`) |
 | `dashboards-engineer` | §2.4–2.5 carousel + 7 widget types | `contracts/panel-schema.md` |
 | `chart-matrix-engineer` | §2.6 rollout matrix | — |
-| `runner-engineer` | §3.2 run/schedule/approvals, §3.3 brain · **M15:** `Plan §9`–§11 mount + billing | `contracts/api-contracts.md` · `contracts/project-scoping.md` *(in trust)* |
+| `runner-engineer` | §3.2 run/schedule/approvals, §3.3 brain · **M15:** `Plan §9`–§11 mount + billing · **M17:** `Plan §13` work products + worktree isolation | `contracts/api-contracts.md` · `contracts/project-scoping.md` *(in trust)* · `contracts/work-product.md` *(unwritten — M17 wave 1)* · ADR-026 |
 | `sessions-relay-engineer` | §3.1 SESSIONS tab, Happy relay, push | — |
 | `observability-engineer` | §3.5 Langfuse, cost ticker, LAST RUNS | — |
 | `infra-compose-engineer` | Part V — Docker, Caddy, Tailscale, ofelia | — |
@@ -324,7 +329,7 @@ a milestone still closes only on a `fidelity-qa-reviewer` PASS.
 |---|---|---|---|---|
 | 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **done 2026-08-17.** PASS `comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md` at `eaca677`, source-and-token. Provenance of its mechanical checks: `scanned at 2026-08-17 20:34 +03:00 · eaca677 · clean` · 311 files · 0 violations · 2 exemptions. Prior FAIL at `8e77a23` kept as record. |
 | 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **open 2026-08-17. Foundation slice landed at `8a9bdf5`, awaiting review** — ADR-023 (`proposed`), `contracts/thread-model.md`, `0008_threads.sql`, grammar + writer. Ten slices still held; the `review-request` was itself blocked by the roster gate until 21:50 |
-| 17 | Presence · work products · diff review | §13 | `drawer-engineer` | not started |
+| 17 | Presence · work products · diff review | §13 | **`runner-engineer`** (lead, foundation) · `drawer-engineer` (surface) | **framed 2026-08-18, not dispatched** — see the M17 section. Ownership **corrected**: the row said `drawer-engineer` outright and the §13 coverage row said *unclaimed, in trust*. Split at a named seam — the entity, the worktree mechanic and `0010_` are the runner's; the roster line, diff screen and approve are the drawer's; the read side of the contract has **one** author. ADR-**026** owner filled. `0009_` ruled to the thread-id `SET NOT NULL` so the migration namespace stops racing |
 | 18 | Time & triggers · the scheduler | §14 | *unassigned* — `scheduler-engineer` when spawnable | not started |
 | 19 | Mobile (Expo) · real push · offline | §16 · §23.9 | *unassigned* — `client-platform-engineer` when spawnable | not started |
 | 20 | Memory 5-tier · KB index | §15 | *unassigned* — `memory-index-engineer` when spawnable | not started |
@@ -936,6 +941,227 @@ Nothing from `Plan §13`–§17. Specifically, and because each has already been
 
 ---
 
+### M17 — Presence · work products · diff review (`Plan §13`) — **FRAMED, NOT DISPATCHED**
+
+> **Six milestones are done and not one is validated.** Zero agent runs have ever executed;
+> `0005`–`0008` have never met a live Postgres; the 1440px side-by-side has never been run.
+> M17 inherits that sentence and sharpens it, because M17 is the first milestone whose central
+> entity **describes something that has not happened**. Every handoff repeats this rather than
+> blurring it, and M17's PASS says which half it covers.
+
+**Framed 2026-08-18 by `commandcenter-orchestrator`. Not open. The human dispatches.**
+
+#### Should M17 open at all before a real run? — **Yes, and here is the reasoning, because the
+question was asked directly and deserves an answer rather than a shrug**
+
+The instinct that M17 is less validatable than M16 is right about the *entity* and wrong about
+the *milestone*, and the difference is the whole scoping decision.
+
+**Git is local.** The worktree mechanic is the first mechanism in this build that can be
+exercised end to end **today, with no API key, no Postgres and no model call** — `git worktree
+add` against a temp fixture repo is a real operation with a real filesystem outcome. So is a
+real `git diff` rendered into the diff screen. That makes M17's two load-bearing halves *more*
+provable than M16's mailbox drain, which could never be exercised without a run either.
+
+What genuinely cannot be produced is narrower than the milestone: it is the **outcome fields** —
+`push_state`, `pr_url`, `pr_state`, `ci_state`, `tests_run`, `tests_passed`. Those describe the
+results of events that have never occurred and, for push and PR, *must not* occur yet (see
+hazard 5). So M17 opens with the outcome fields **recorded, not produced**, and the milestone is
+not permitted to close on the strength of them.
+
+#### What "complete" means for M17 — settled **before** anyone builds, per the standing finding
+
+Three evidence tiers, and every slice declares which one it is standing on. A slice that cannot
+name its tier is not done.
+
+| Tier | Means | Applies to |
+|---|---|---|
+| **real** | a real git operation on a real temp repo, in a test that has been red | worktree create/cleanup/prune/concurrency · the diff render · the review query |
+| **synthesized** | a writer test that inserts a row from a fabricated run-completion | `ops.work_product` insert · `branch`/`base_sha`/`head_sha`/`commits`/`files_changed` |
+| **structural** | source, types, tokens, a page load — nothing observed it working | the roster line · every outcome field · anything reached only by a paid run |
+
+**The milestone may not close on `structural` alone for the worktree mechanic.** That is the
+one hard bar. Everything else follows the source-and-token standard M15 and M16 closed on.
+
+And the house defect applies with force here: **`push_state: none` on a run that never tried to
+push is a declared value, not an observed one.** The column must distinguish *"we looked and
+there was nothing to push"* from *"nothing has ever looked."* If it cannot, it is the
+`runs: 0`-during-a-ledger-outage defect wearing a ninth costume.
+
+#### Ownership — ruled, with the reason, because "held in trust" was doing work nobody checked
+
+**BOARD row 17 said `drawer-engineer` and the §13 coverage row said *unclaimed, in trust to
+`drawer-engineer`*. Both are now corrected. The milestone is split at a named seam.**
+
+| Half | Lead | Why |
+|---|---|---|
+| **Foundation** — ADR-026, `contracts/work-product.md`, the migration, the worktree mechanic, the writer | **`runner-engineer`** | The entity is written by the runner at the end of a run. Worktree isolation is a run-lifecycle mechanic and a data-safety one; nobody else can build it. Every migration except `0008_` is theirs, and `0008_` was the domain-lead exception this frame is deliberately repeating. |
+| **Surface** — the roster line, the diff review screen, approve | **`drawer-engineer`** | §2.3 is theirs, they built `RunConsole` and the mailbox composer, and the diff screen is a drawer register. This is what the trusteeship was actually about. |
+
+**Why the trusteeship was misread.** `drawer-engineer` held §13 because §13 *ends* in a screen.
+But §13 is three things and only one of them is a screen; the other two are a table and a git
+mechanic, and holding all three under the UI owner would have handed the runner's own data plane
+to an agent who does not write it. That is the failure mode this board has paid for four times —
+one shape, two authors — arriving from the other direction.
+
+**Where the seam is, stated precisely, because a badly drawn seam is how a shape acquires two
+authors.** The seam is the **read side of the contract**, and it has **one author**:
+
+- Everything a run *produces* — schema, worktree lifecycle, the writer, the outcome fields —
+  is `runner-engineer`'s, in `contracts/work-product.md`.
+- Everything that *renders* it — roster line, diff screen, approve — is `drawer-engineer`'s.
+- **The boundary object is `GET /api/work-product/:runId` and the diff payload shape, and the
+  lead writes it.** `drawer-engineer` does not write a line of it and does not fork a type.
+
+**But §13 says the diff screen "should be designed before the rest of the app," and that is not
+compatible with a lead who writes the read shape from the write side outward.** So one step is
+added that M16 did not need, because §12 was mostly write-side and §13 is half UI:
+
+> **Wave 0 (before the contract freezes): `drawer-engineer` files a `decision-request` into
+> `runner-engineer`'s inbox stating what the diff screen needs on a phone** — payload shape,
+> pagination unit, what "approve" posts, what a 4,000-line diff does. The lead absorbs it or
+> refuses it in writing, in the contract. **One author, one file, two informants.**
+
+That is the M16 sequencing with its one known gap closed, not a departure from it.
+
+#### Sequencing — M16's, because M16's is the thing that worked
+
+`thread-model-engineer` wrote ADR-023, `contracts/thread-model.md` and `0008_threads.sql`
+**alone**; only then did nine slices start, and **nothing in the second wave needed a shape
+renegotiated.** That is the evidence the order was right rather than slow. M17 repeats it.
+
+| Wave | Who | What | Gate to the next wave |
+|---|---|---|---|
+| **0** | `drawer-engineer` | one `decision-request`: what the diff screen needs. No code. | filed |
+| **1** | **`runner-engineer`, alone** | **ADR-026** · `contracts/work-product.md` · `0010_work_products.sql` · the worktree mechanic + its enforcer · the writer | contract exists and is reviewed |
+| **2** | `drawer-engineer` · `observability-engineer` · `rtl-arabic-pdpl-specialist` · `fidelity-qa-reviewer` | roster line · diff screen · approve · presence over SSE · the review query · RTL/PDPL sweep | PASS |
+
+**Every wave-2 slice builds against `contracts/work-product.md`, not against `Plan §13`.** The
+contract is reviewed and the plan is not.
+
+#### Numbers, claimed here and now — both namespaces have already been raced once
+
+- **ADR-026** — *"Work products + worktree isolation"* — was **reserved with no owner**. Owner is
+  now **`runner-engineer`**. Claimed with this frame, before any file exists, exactly as 023 and
+  028 were claimed with M16's. **ADR-038 is taken** (data egress, `rtl-arabic-pdpl-specialist`,
+  `proposed`, awaiting the human) — do not compute a free number from a directory listing, and
+  note `check-comms.mjs` now **fails** on a file at a number this table does not list.
+- **One ADR for M17, not three.** Per the ADR-028 precedent: splitting it would give one decision
+  three authors. The egress question stays in ADR-038 and is the human's, not 026's.
+- **`0009_` IS ALREADY SPOKEN FOR AND WAS NEVER CLAIMED ON THIS BOARD.** `SET NOT NULL` on
+  `ops.agent_runs.thread_id`, the M16 handshake `observability-engineer` armed and
+  `runner-engineer` must satisfy — four comms files call it `0009_` and two of them say *"it is
+  unclaimed as far as I can see."* That is the shared-integer race in progress. **Ruled:
+  `0009_… SET NOT NULL` is `runner-engineer`'s**, because BRIEF's "grade a constraint from both
+  sides" says the agent who must satisfy a constraint writes it, and it lands **before** wave 1
+  so the namespace is clean. **M17's migration is therefore `0010_work_products.sql`, single
+  author `runner-engineer`.** No second migration in M17; if a wave-2 slice needs one, it asks.
+
+#### Hazards — graded, with three added and none deleted
+
+**1 · M17's entity cannot be populated by any code path a test can reach. — REAL, and it is the
+milestone's defining constraint, but it is narrower than stated.** Correct as written for
+`ops.work_product` *end to end*: a row needs a run that touches a repo, and there is a second
+missing precondition nobody has named — **no project has a checked-out repo path a run could
+work in**, so it is two missing preconditions, not one. But the mechanism underneath is testable
+today against real git. Answered by the evidence-tier table above; the milestone closes on
+`real` for the worktree and honest `structural` for the outcome fields. **Do not let this close
+on a table nobody has seen a row of** — that is why `synthesized` is a named tier rather than a
+quiet allowance.
+
+**2 · Worktree isolation is the first mechanism here whose failure corrupts data. — REAL, top
+severity, and the "cannot be proven" half is too pessimistic in one direction and far too
+optimistic in another.**
+
+*Can* be asserted today, with real git and a planted defect: N concurrent
+`createWorktree(runId)` calls yield N distinct paths, none nested inside another, no two sharing
+`.git/index`; cleanup of one live worktree does not touch a sibling; a killed run leaves a
+**prunable** worktree, not a locked repo. Falsify it by returning a constant path and watching
+it go red.
+
+*Cannot* be asserted: that three real agents running concurrently stay correct, because three
+real agents have never run.
+
+**And the part nobody named, which is the actual hazard: a worktree is not a jail.** If
+confinement is *"we set `cwd`"*, an agent holding a shell tool walks out of it in one command.
+This repo has already paid for exactly this: **`workspace` confinement was a docstring and a run
+overwrote `.env`** — *a comment is not a mechanism*. Worktree isolation must name an **enforcer**
+(the tool allowlist is `wired_into` and nothing more — BOARD rule 4), and the contract must state
+plainly what stops a write outside the worktree. If the answer is "nothing, we rely on the
+prompt," write that sentence down rather than shipping the docstring again.
+
+**3 · `push_state: local` on a finished run is notification-worthy, and it touches M16's
+mailbox. — REAL but small, and it re-opens nothing *if* framed as below.** Checked against the
+settled shapes: ADR-023 makes a question a **message kind inside a thread**; the amendments table
+already says the M11 notification ladder *"survives inside M16/M17."* The run's thread exists —
+`ops.agent_runs.thread_id`, written by `db/ledger.ts:79` and supplied by `lib/runService.ts:233`.
+So: **`push_state: local` is a message in the run's own thread. No `notification` entity, no
+second delivery path, no new grammar.** Any grammar addition is `thread-model-engineer`'s, by
+`decision-request`. (ADR-037 — session threads get no mailbox — does not bite: this is a run
+thread, not a session thread. Recorded so it is not re-litigated.)
+
+**4 · M11 stays absorbed, and §13 is exactly where a "review queue" gets proposed. — REAL, and
+the single most likely scope creep in this milestone.** Three finished runs awaiting review looks
+precisely like a task list, which is how `ops.task` gets rebuilt by accident. **Ruled: the review
+queue is a query, not a table** — `work_product WHERE push_state = 'local' OR pr_state = 'open'`,
+ordered. No `ops.task`, no `ops.question`, **no `ops.review`**. `POST /api/run/:runId/input` is
+still never built. **Prefer a gate to a paragraph:** M16 left a test asserting that route's
+absence — M17 extends *that* test with the three refused table names rather than writing a fourth
+paragraph about it.
+
+**5 · ADDED — approve/merge is data egress, and it collides with an ADR that is `proposed` and
+with the human.** A push or a PR sends code and commit messages to a third-party host. This board
+already rules that class: *"any `deliver:` target that leaves the tailnet is a data-egress
+decision needing its own ADR,"* widened at M15 to cover a git remote. **ADR-038 is `proposed` and
+awaiting a DPA answer and a region.** Ruled, and it is deliberately the reversible call: **M17
+records push state; M17 does not perform a push, open a PR, or merge.** `pushed` becomes
+reachable when ADR-038 is accepted or a human action does it. This keeps ADR-038 off M17's
+critical path entirely, and it costs the milestone nothing it could have validated anyway.
+
+**6 · ADDED — a diff is a body, and bodies leak.** This is the flattening finding at 100× the
+volume. A message body leaking through an interpolated error string cost four rounds; a **diff**
+contains file contents, and if one ever reaches a span, an error string, or `lib/prompt.ts` —
+which already renders prior turns into the model prompt — the surface is the whole working tree.
+The `withhold()` register is the only mechanism that reaches interpolated text, and it now
+**refuses at `MAX_LITERALS` rather than evicting**; a diff would exhaust it instantly and
+`withhold()` would return `false`, which is a real answer nobody is currently reading. **The
+contract must state whether a diff may enter a trace or a prompt at all.** The honest default is
+*no, and the roster line carries counts only.*
+
+**7 · ADDED — the roster line needs presence over SSE, and that seam is already known broken.**
+`drawer-engineer` is blocked today on exactly this class: `SseStartData` carries no thread id, so
+the mailbox composer is inert in the running app, pinned by `mailbox.test.ts` reading
+`packages/contracts/src/api.ts`. The §13 roster line (`running · 4m · reading 3 sources`) needs
+the same channel to grow fields. **Wave 1's contract names every SSE field the roster line needs,
+in the same commit as the schema** — otherwise wave 2 ships a second inert surface with a second
+pinned test, and *a producer without a consumer is not a feature* becomes *a consumer without a
+producer*, twice.
+
+#### What M17 inherits from M16 — none of it blocks opening, and all of it lands at one screen
+
+The three non-blocking follow-ups and the one open decision-request **ride alongside**. But the
+pattern is worth stating once, because it is not a coincidence: **all three follow-ups become
+load-bearing at the diff review screen**, which is the last thing M17 builds.
+
+| Item | Owner | Ruling |
+|---|---|---|
+| ADR-038 cites `0007_projects.sql` for a constraint in `0005_project_axis.sql:75` | `rtl-arabic-pdpl-specialist` | Rides alongside; cosmetic. **ADR-038's `proposed` *status* is not cosmetic** — hazard 5 routes around it. |
+| The sigil gate skips `todo()`, which renders English inside an RTL paragraph | `rtl-arabic-pdpl-specialist` | Rides alongside, **but must close before the diff screen's review.** That screen is the largest English-in-RTL surface this app will have — branches, shas, PR states, diff text. |
+| `rtl.css:238`'s unused `.u-auto` is `inherit`+`isolate`, not `auto` | `design-system-guardian` | Rides alongside. Harmless while unused; **the diff screen is its first plausible consumer**, and a wrong `.u-auto` becomes a trap the moment code renders bidi. |
+| The mailbox drain line + `withhold()` returning `boolean` (open `decision-request`, `observability-engineer` → `runner-engineer`) | `runner-engineer` | Does not block M17 — **but answer it before the contract freezes**, because hazard 6 depends on knowing that `withhold()` refuses at capacity. Same agent, same register, one dispatch. |
+
+#### Deliberately out of M17 scope
+
+- **No push, no PR creation, no merge** (hazard 5). Recorded state only.
+- **No `ops.task`, no `ops.question`, no `ops.review`** (hazard 4). M11 stays absorbed.
+- **No `board` widget and no drag primitive** — ADR-029 is still unwritten. The review queue is a
+  query rendered in the drawer, not a BOARD view.
+- **No scheduler, no triggers, no `calendar`** (§14 → M18).
+- **No second migration.** `0010_` only.
+- **No claim that any of this is validated.** Six done, none validated; M17 makes it seven.
+
+---
+
 ## Part Two roster — defined, not yet rostered
 
 These five have definitions in `.claude/agents/` (`Plan §22`) and are **deliberately not on
@@ -1059,7 +1285,7 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its interrupt levels — **two and a refusal, not three**: `note` and `halt` are delivered, `steer` is refused (409 `interrupt_not_deliverable`) whether or not a run is in flight, because the SDK's streaming-input mode has never been exercised and the first thing that would exercise it is a paid run; **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **reviewed 2026-08-18** — `ADR-023-thread-unification.md`, 2026-08-17 at `8a9bdf5`. Written straight to its number under the draft-naming rule's exception (one registered author, no concurrent drafter). `fidelity-qa-reviewer` graded the slice **FAIL on one item** — `in_reply_to` was the only reference in `0008` not project-pinned, under a comment promising messages cannot cross projects — fixed at `5600cc9` with a gate asserting the *rule* (every FK into a project-scoped table names `project_id` on both sides), not the line. Everything else in the slice graded honest. |
 | 024 | Scheduler ownership, six trigger types · *`Plan §18` "ADR-019"* | `scheduler-engineer` | **reserved** |
 | 025 | Client strategy — Expo, Tauri, contentless push · *`Plan §18` "ADR-020"* | `client-platform-engineer` | **reserved** |
-| 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | — | **reserved** |
+| 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | **`runner-engineer`** | **claimed 2026-08-18 with M17's frame, before any file exists** — the same rule 023 and 028 were claimed under. Owner was blank; M17's ownership ruling fills it. Carries the entity, the worktree mechanic **and its enforcer**, and the ruling that M17 *records* push state without performing a push. Does **not** carry the egress question — that is ADR-038's and the human's. **One ADR for M17, not three** (ADR-028 precedent: splitting gives one decision three authors) |
 | 027 | Chief of Staff — routing, delegation, trust ladder · *`Plan §18` "ADR-022"* | `chief-of-staff-architect` | **reserved** |
 | 028 | **Three new widget types** — `board`, `calendar`, `thread-feed` — and the rule that everything else composes from the existing seven (§23.7) · *`Plan §18` "ADR-023"* | `dashboards-engineer` | **accepted 2026-08-18** — `comms/decisions/ADR-028-widget-type-cap.md`. Unblocks P2 and P4. The cap has two enforcers (`typecheck` on `WIDGET_TYPE_EXTENSIONS_USED`, and the validator's parity gate reading `panels.ts`), both falsified. `thread-feed` is built and honestly empty; `board` and `calendar` are named, refused by the validator, and absent from `WidgetType`. |
 | 029 | Drag without a dependency · *`Plan §18` "ADR-024"* | `design-system-guardian` | **reserved** |
@@ -1474,7 +1700,7 @@ were found at all.
 | §10 — cascade resolution, provenance, promote/fork | `agent-library-curator` — **claimed and designed**, `agent-cascade.md` proposed | stays |
 | §11 — identity · device · billing account | **split, one third unowned** — see M15 | identity-access-engineer |
 | §12 — threads, addressing, mailbox | `thread-model-engineer` — **dispatched 2026-08-17**, ADR-023 + `contracts/thread-model.md` + `0008_` in flight | *is the owner* |
-| §13 — presence, work products, diff review | **unclaimed** | `drawer-engineer` |
+| §13 — presence, work products, diff review | **claimed and split 2026-08-18 with M17's frame** — foundation (entity · worktree · `0010_` · ADR-026) `runner-engineer`; surface (roster line · diff screen · approve) `drawer-engineer`. *"Unclaimed, in trust to `drawer-engineer`"* was the prior state and is corrected, not tidied away | *is split; both are owners* |
 | §14 — the scheduling plane | **unclaimed** | scheduler-engineer |
 | §15 — memory at five tiers, KB index | **unclaimed** | memory-index-engineer |
 | §16 · §23.9 — clients, push, offline | **unclaimed** | client-platform-engineer |
@@ -1486,7 +1712,8 @@ were found at all.
 | §23 — the UI rescan | **split per §23.12**, unclaimed outside M15 | per phase |
 | §24 — deliberately not in Part Two | `commandcenter-orchestrator` | stays |
 
-**Eight of fifteen rows are unclaimed and that is correct right now** — they belong to
+**Seven of fifteen rows are unclaimed and that is correct right now** (was eight; §13 was
+claimed and split with M17's frame, 2026-08-18) — they belong to
 milestones nobody has opened. An unclaimed row here is a scheduling fact, not a gap; an
 unclaimed row in the machine-checked table above is a build failure. Keeping the two tables
 apart is what preserves that difference.
