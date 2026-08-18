@@ -213,6 +213,7 @@ is a declared value, and `git show --stat` is the observed one. The two disagree
 | `fidelity-qa-reviewer` | Part VI acceptance, a11y, perf, review gate | — |
 | `identity-access-engineer` | `Plan §11` — identity · device · billing account, scopes, device handoff | `contracts/identity.md` *(unwritten)* · ADR-016 |
 | `thread-model-engineer` | `Plan §12` — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` · ADR-023 |
+| `scheduler-engineer` | `Plan §14` — the coordinator clock, six trigger types, the fire ledger | `contracts/scheduling.md` · ADR-024 |
 
 `commandcenter-orchestrator` sweeps status/, resolves cross-agent conflicts, and
 advances the milestone. It does not write feature code.
@@ -330,7 +331,7 @@ a milestone still closes only on a `fidelity-qa-reviewer` PASS.
 | 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **done 2026-08-17.** PASS `comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md` at `eaca677`, source-and-token. Provenance of its mechanical checks: `scanned at 2026-08-17 20:34 +03:00 · eaca677 · clean` · 311 files · 0 violations · 2 exemptions. Prior FAIL at `8e77a23` kept as record. |
 | 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **open 2026-08-17. Foundation slice landed at `8a9bdf5`, awaiting review** — ADR-023 (`proposed`), `contracts/thread-model.md`, `0008_threads.sql`, grammar + writer. Ten slices still held; the `review-request` was itself blocked by the roster gate until 21:50 |
 | 17 | Presence · work products · diff review | §13 | **`runner-engineer`** (lead, foundation) · `drawer-engineer` (surface) | **framed 2026-08-18, not dispatched** — see the M17 section. Ownership **corrected**: the row said `drawer-engineer` outright and the §13 coverage row said *unclaimed, in trust*. Split at a named seam — the entity, the worktree mechanic and `0010_` are the runner's; the roster line, diff screen and approve are the drawer's; the read side of the contract has **one** author. ADR-**026** owner filled. `0009_` ruled to the thread-id `SET NOT NULL` so the migration namespace stops racing |
-| 18 | Time & triggers · the scheduler | §14 | *unassigned* — `scheduler-engineer` when spawnable | not started |
+| 18 | Time & triggers · the scheduler | §14 | **`scheduler-engineer`** | **open 2026-08-18, foundation slice only** — ADR-024 · `contracts/scheduling.md` · `0011_scheduling.sql` · `packages/contracts/src/scheduling.ts`. No UI, no `calendar`, no ofelia removal, no fan-out. **The migration number is `0011_`, not the `0010_` the dispatch assigned** — see the M18 block; `0010_` is M17's on this board and a collision is the race, not a tidy-up |
 | 19 | Mobile (Expo) · real push · offline | §16 · §23.9 | *unassigned* — `client-platform-engineer` when spawnable | not started |
 | 20 | Memory 5-tier · KB index | §15 | *unassigned* — `memory-index-engineer` when spawnable | not started |
 | 21 | Tauri desktop · host daemon · sessions | §16 | *unassigned* — `client-platform-engineer` when spawnable | not started |
@@ -1162,6 +1163,57 @@ load-bearing at the diff review screen**, which is the last thing M17 builds.
 
 ---
 
+## M18 — time and triggers (`Plan §14`), opened 2026-08-18
+
+**Foundation slice only, dispatched to `scheduler-engineer` alone**, on M16's sequencing: one
+agent writes the ADR, the contract and the migration before anything else starts, because six
+agents reading `Plan §14` produce six readings of one shape and the disagreement surfaces a week
+later as two contracts. Landed: ADR-024 · `contracts/scheduling.md` · `0011_scheduling.sql` ·
+`packages/contracts/src/scheduling.ts` + its pinning test.
+
+### The migration number — a live collision, resolved *away* from the collision
+
+**`scheduler-engineer` was dispatched with "`0010_` is yours and is assigned; `0009_` belongs to
+M17". This board says otherwise, in writing, in the M17 block above:** `0009_` is the
+`ops.agent_runs.thread_id` `SET NOT NULL`, and *"M17's migration is therefore
+`0010_work_products.sql`, single author `runner-engineer`"* — plus *"No second migration.
+`0010_` only."* Two claimants on one integer is the exact failure this board has recorded twice
+(`0006`, the double-ADR-012).
+
+**And it stopped being hypothetical mid-slice.** At 2026-08-18 23:38 +03:00, `git status`
+showed `?? apps/runner/src/db/migrations/0010_work_products.sql` untracked on this disk, with
+`0009_` committed an hour earlier at `2d2d7cf`. **`runner-engineer` was writing `0010_` while M18
+was being told `0010_` was free.** Taking it would have put two `0010_` files in the tree and
+failed `repo-conformance.test.mjs` for both agents — the third instance of a race this board has
+already recorded twice.
+
+**Ruled by the claimant that arrived second, in the only direction that cannot be wrong: M18
+takes `0011_scheduling.sql`.** `0011_` collides with nothing under either reading; taking
+`0010_` would have collided under one of them, and `repo-conformance.test.mjs` would have failed
+the build for both agents rather than one. This is **not** "next free from a directory listing" —
+that method yields `0009_` and is what the rule forbids. It is *above every claim written on this
+board*, which is a different method and the safe one. A gap at `0010_` if M17's frame later
+changes is harmless: `client.ts` applies in filename order and records by filename, and nothing
+requires the integers be dense. Filed to `commandcenter-orchestrator` as a `decision-request`
+with `runner-engineer` told separately; if the ruling comes back the other way, no migration in
+this repo has ever met a Postgres, so a rename is a `git mv` and a grep.
+
+### Deliberately out of M18's foundation slice
+
+- **No coordinator clock.** Nothing computes an occurrence, nothing writes a fire row, nothing
+  fires. The tables and the refusals are structural.
+- **No ofelia removal** — `infra/compose.yaml:389` is `infra-compose-engineer`'s, and spec §3.2
+  still specifies ofelia. ADR-024 records the amendment; it does not perform it.
+- **No `calendar` widget** — `dashboards-engineer`'s, and ADR-028 already caps the vocabulary at
+  three new types ever. M18 writes no second widget ADR.
+- **No schedule editor, no "next up" strip, no natural-language cron, no next-ten preview.**
+- **No money figure anywhere.** Projected spend is typed `null` for the same reason
+  `TurnCost.estimatedUsd` is: zero runs have completed, so there is nothing to average.
+- **No claim that budget refusal works.** `ops.project.budget_monthly` has never refused
+  anything and `toProjectSummary` still hardcodes `budgetMonthlyUsd: null`.
+
+---
+
 ## Part Two roster — defined, not yet rostered
 
 These five have definitions in `.claude/agents/` (`Plan §22`) and are **deliberately not on
@@ -1189,7 +1241,7 @@ been treating them as one.
 | platform-projects-engineer | §9 · §10 — `ops.project`, cascade mount, library sync, project switching | `contracts/project-scoping.md` | `runner-engineer` |
 | *(cascade resolution)* | §10 — resolution, resolved identity, promote/fork | `contracts/agent-cascade.md` | `agent-library-curator` — **stays with them**, per ADR-013 |
 | ~~thread-model-engineer~~ | §12 — threads, addressing grammar, mailbox, interrupt levels | `contracts/thread-model.md` | **graduated 2026-08-17T21:50 — now in the roster table above, messageable, owns its contract outright. This row is kept struck rather than deleted, as the record of what the admission rule cost and bought** |
-| scheduler-engineer | §14 — coordinator clock, six trigger types, fire ledger, calendar widget | `contracts/scheduling.md` | not yet written |
+| ~~scheduler-engineer~~ | §14 — coordinator clock, six trigger types, fire ledger, calendar widget | `contracts/scheduling.md` | **graduated 2026-08-18 — now in the roster table above, messageable, owns its contract outright.** It wrote its own first `comms/status/scheduler-engineer.md` in the same act, exactly as the rule specifies; no placeholder heartbeat was written and the condition was not waived. The `calendar` widget stays `dashboards-engineer`'s under ADR-028 — this row's wording predates that cap and is kept unedited as the record |
 | client-platform-engineer | §16 · §23.9 — Expo mobile, Tauri desktop, push, offline replica | `contracts/client-sync.md` | not yet written |
 | chief-of-staff-architect | §17 — routing, delegation limits, standups, trust ladder, Morning Briefing | `contracts/orchestration.md` | not yet written |
 
@@ -1283,7 +1335,7 @@ now deliberately vacant** as the visible record of why this rule exists.
 | 021 | Auth exists in v2 — accounts inside the tailnet · *`Plan §3` calls this "ADR-013"* | `identity-access-engineer` | **reserved, unwritten** |
 | 022 | Foundry token-budget policy · *`Plan §3` calls this "ADR-014"* | `agent-foundry-architect` *(undefined)* | **reserved, unwritten** |
 | 023 | **Thread unification** — runs, sessions and tasks become threads; the addressing grammar (`@agent` · `#department` · `@@fan-out` · bare = Chief of Staff); the mailbox and its interrupt levels — **two and a refusal, not three**: `note` and `halt` are delivered, `steer` is refused (409 `interrupt_not_deliverable`) whether or not a run is in flight, because the SDK's streaming-input mode has never been exercised and the first thing that would exercise it is a paid run; **supersedes M12's `POST /api/run/:runId/input`, which is never built** · *`Plan §18` "ADR-018"* | `thread-model-engineer` | **reviewed 2026-08-18** — `ADR-023-thread-unification.md`, 2026-08-17 at `8a9bdf5`. Written straight to its number under the draft-naming rule's exception (one registered author, no concurrent drafter). `fidelity-qa-reviewer` graded the slice **FAIL on one item** — `in_reply_to` was the only reference in `0008` not project-pinned, under a comment promising messages cannot cross projects — fixed at `5600cc9` with a gate asserting the *rule* (every FK into a project-scoped table names `project_id` on both sides), not the line. Everything else in the slice graded honest. |
-| 024 | Scheduler ownership, six trigger types · *`Plan §18` "ADR-019"* | `scheduler-engineer` | **reserved** |
+| 024 | **Scheduler ownership, six trigger types** — the coordinator owns the clock; the frontmatter/ops split is preserved as one table with two authorities (`source: library` read-only, `source: ops` ad-hoc); fire-before-run with `(schedule_id, occurrence_time)` as the idempotency key; missed-run and overlap policies mandatory with **no default**; budget refusal is a *declared* path that has never refused anything · *`Plan §18` "ADR-019"* | `scheduler-engineer` | **claimed 2026-08-18, before the file** — row first, per the rule below. Checked against `comms/decisions/` at claim time: 024 is free there too and no unregistered file was found this pass |
 | 025 | Client strategy — Expo, Tauri, contentless push · *`Plan §18` "ADR-020"* | `client-platform-engineer` | **reserved** |
 | 026 | Work products + worktree isolation · *`Plan §18` "ADR-021"* | **`runner-engineer`** | **claimed 2026-08-18 with M17's frame, before any file exists** — the same rule 023 and 028 were claimed under. Owner was blank; M17's ownership ruling fills it. Carries the entity, the worktree mechanic **and its enforcer**, and the ruling that M17 *records* push state without performing a push. Does **not** carry the egress question — that is ADR-038's and the human's. **One ADR for M17, not three** (ADR-028 precedent: splitting gives one decision three authors) |
 | 027 | Chief of Staff — routing, delegation, trust ladder · *`Plan §18` "ADR-022"* | `chief-of-staff-architect` | **reserved** |
@@ -1701,7 +1753,7 @@ were found at all.
 | §11 — identity · device · billing account | **split, one third unowned** — see M15 | identity-access-engineer |
 | §12 — threads, addressing, mailbox | `thread-model-engineer` — **dispatched 2026-08-17**, ADR-023 + `contracts/thread-model.md` + `0008_` in flight | *is the owner* |
 | §13 — presence, work products, diff review | **claimed and split 2026-08-18 with M17's frame** — foundation (entity · worktree · `0010_` · ADR-026) `runner-engineer`; surface (roster line · diff screen · approve) `drawer-engineer`. *"Unclaimed, in trust to `drawer-engineer`"* was the prior state and is corrected, not tidied away | *is split; both are owners* |
-| §14 — the scheduling plane | **unclaimed** | scheduler-engineer |
+| §14 — the scheduling plane | **claimed 2026-08-18** — `scheduler-engineer`, `contracts/scheduling.md` + ADR-024 + `0011_scheduling.sql`. Foundation only: the clock, the surfaces and the ofelia removal are unbuilt and named as such | *is the owner* |
 | §15 — memory at five tiers, KB index | **unclaimed** | memory-index-engineer |
 | §16 · §23.9 — clients, push, offline | **unclaimed** | client-platform-engineer |
 | §17 — Chief of Staff, swarm behaviours | **unclaimed** | chief-of-staff-architect |

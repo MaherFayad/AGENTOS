@@ -21,6 +21,10 @@ export * from './project';
 // `thread-model-engineer`, ADR-023. Exports nothing that any module above declares — checked
 // rather than assumed, because `export *` does not pick a winner and a collision is TS2308.
 export * from './threads';
+// `scheduler-engineer`, ADR-024. Declares no runtime name any module above declares — checked by
+// `check-barrel-exports.mjs`, not assumed, because `export *` picks no winner and the last
+// duplicate this barrel carried white-screened every route while `next build` exited 0.
+export * from './scheduling';
 
 // ---------------------------------------------------------------------------
 // Ambiguity resolutions — and the one rule that governs them (ADR-035).
