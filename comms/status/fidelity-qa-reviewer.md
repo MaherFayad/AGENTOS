@@ -1,72 +1,78 @@
 # status — fidelity-qa-reviewer
 
-**Updated:** 2026-08-18T22:55
-**Milestone:** M16 re-gate — all three FAIL items cleared
+**Updated:** 2026-08-18T23:05
+**Milestone:** M16 — the §23.11 rule-6 pass graded **PASS**
 **State:** review
 
 ## Now
 
-**All three M16 FAIL items PASS. Plus three claims graded: the `steer` proof holds, the
-`withhold.ts` fail-open is closed with its residual stated at real width, and the deleted
-known-gap test was the right call with a sufficient tombstone.**
+**M16's last open item is graded and M16 flips.** `rtl-arabic-pdpl-specialist`'s rule-6 pass
+(`20260818-2225`) is **PASS** — answered and archived. It was **not** scoped out: §23.11 rule
+6, `Plan §22` and §21.8 put it inside the milestone and M15 set the separate-artefact
+precedent.
 
-- **PASS** — `ThreadView` `--ink-3` (fixed by deletion; the new gate
-  `threads-contrast.test.ts` reads its class set from the CSS and its file list from the
-  directory, and fails loudly rather than skipping) · `AddressComposer` radiogroup (fixed by
-  `rtl-arabic-pdpl-specialist` at `306039e`, graded as theirs) · the erasure spec's verbs
-  (four, not the three I counted).
-- Verdict handoff: `comms/handoffs/M16-fidelity-qa-reviewer-m16-re-gate.md`.
-  **`comms/verdicts/` still does not exist and I still have not created it.**
+- Verdict: `comms/handoffs/M16-fidelity-qa-reviewer-the-rule-6-pass-verdict.md`.
+  **`comms/verdicts/` still does not exist — four verdicts now cite it.**
+- **The bidi placeholder fix is the strongest artefact in M16.** I derived it rather than
+  taking the measurement: UAX #9 **N2** moves the leading `@` (neutral, R→L, at `sor`=R);
+  **N1** leaves the interior `·`/`#`/`@@` (L→L) alone. One sigil detaches, the others cannot —
+  which is exactly why the two misread tokens are the two that mean different money. The gate
+  scans the whole catalogue (`Object.entries(ar)`), so later strings are covered.
+- **The jsdom ruling holds: do not split the test.** Re-declared, not re-graded. The
+  `AddressComposer` keyboard work stays graded at `0351add`, not re-graded here.
+- **ADR-038 graded as `proposed`**, and its **refusal of option D is the better half** — in
+  the options table, by name, reasoned as the house defect, so a later agent must overturn it
+  in writing rather than fill a blank.
 
-**M16 does not flip, and the blocker is my queue, not anyone's code.**
-`rtl-arabic-pdpl-specialist`'s rule-6 review-request (`20260818-2225`) is **open and
-ungraded**, its `re:` is an `M16-` handoff, and BRIEF line 14 counts that sweep inside M16.
-One dispatch, mine. If the orchestrator scopes it out of M16, M16 flips on my verdict and I
-will not argue — but that call is made out loud, not by my silence.
+**Three follow-ups, none blocking:** (1) ADR-038 cites `0007_projects.sql`; the constraint is
+`0005_project_axis.sql:75` and 24 citations across 20 comms files say so — fix before a human
+reads the ADR. (2) `i18n.test.ts:78` skips `todo()` entries, which render **English inside the
+RTL paragraph**; four current todos are clean but `threads.address.default` is one. (3)
+`rtl.css:238`'s `.u-auto` is unused and its name claims `dir="auto"` semantics (`plaintext`)
+that `inherit`+`isolate` does not have — the same class as the comment just corrected.
 
-**Gated on a still tree at `4337eb6`, 22:41–22:52 +03:00**, after `rm -rf apps/web/.next`.
-`verify` 0 · `typecheck:tests` 0 · rtl gate **holding 308** · `smoke:browser` exit 0 ·
-tokens `scanned at 2026-08-18 22:42 +03:00 · 4337eb6 · clean`, 0 violations / **15**
-exemptions — 5→15 because `drawer/` and `sessions/` are now **scanned** (`90167f4` closed my
-expired-PROVISIONAL follow-up; I was not the instrument this round).
-**The browser green printed its NOTE: 66 backend absences across 12 routes.** Client renders
-without a backend; nothing more.
+**Gated by me on a still tree at `d808fb2`, 22:55–23:00 +03:00.** `validate:tokens` 0
+violations, banner `scanned at 2026-08-18 22:57 +03:00 · d808fb2 · clean`, 337 files ·
+`validate:rtl:gate` **holding 308** · `test:web` both halves green. I did **not** re-run
+`verify`/`smoke`/`smoke:browser` — run twice at `4337eb6` by the author and the orchestrator,
+and the browser green **printed its NOTE: 66 backend absences**, which is why none of it is
+evidence about a running backend.
 
 **The 1440px side-by-side has still never been run, on any milestone.** Reference frames are
-with the user — the only remaining half of the Part VI bar.
+with the user — still the only remaining half of the Part VI bar. This dispatch's commits
+touch **no CSS at all**, so nothing about proportion, tracking or density moved.
 
 ## Blocked on
 
 Nothing. Tree still and clean throughout.
 
-## The four findings worth carrying
+## The findings worth carrying
 
-1. **When a finding is "this claims a derivation it does not have", make the derivation and
-   read what stops compiling.** I named one `=== 'steer'` literal by reading; the flip found
-   two, and the second was in the keyboard path that had just become load-bearing.
-2. **A bound that drops protection is not a bound.** `size() <= 32` was true and graded the
-   resource while the protection failed open under it. Ask of every ceiling: when it is
-   reached, what is lost, and who is told?
-3. **A known-gap test should carry its own closing instruction.** *"Delete this and say so —
-   do not weaken it to keep it green"* made the right action cheap and the wrong one
-   visibly wrong.
-4. **The absence of a constraint deserves the same evidence as its presence.** *"No length
-   `CHECK` on `ops.message.body`, no `LIMIT` on `readMailbox`"* was checked before a residual
-   was written — *grade a constraint from both sides*, in the direction nobody uses.
+1. **A falsification whose baseline was never green proves nothing** — the inverse of *"a test
+   that has never been red proves nothing"*, and the half we had not written down. Found by
+   an author catching their own harness (`node --test` on a suite needing `tsx`).
+2. **Derive the measurement, don't just trust it.** The bidi claim was checkable against UAX
+   #9 N1/N2 in five minutes, and deriving it is what proved the *reason* right, not just the
+   patch — which is what the next person copies.
+3. **A name is a claim too.** `.u-auto` asserts platform behaviour it does not implement, in
+   the same file as the comment that was just corrected for doing exactly that.
+4. **A wrong citation is not automatically a block.** ADR-038 names the wrong file *and*
+   quotes the constraint's unique name verbatim in the same sentence, so a reader recovers by
+   grep. Gate on whether the error is recoverable from what is beside it — not on whether it
+   is annoying.
 
 ## Last handoff
 
-`comms/handoffs/M16-fidelity-qa-reviewer-m16-re-gate.md`
+`comms/handoffs/M16-fidelity-qa-reviewer-the-rule-6-pass-verdict.md`
 
 ## Next
 
-1. **`rtl-arabic-pdpl-specialist`'s rule-6 pass** (`20260818-2225`) — the only thing between
-   M16 and a flip. Arabic register, `<bdi>`/LRI-PDI, ADR-038 (`proposed`, not to be graded
-   as accepted), two PDPL items.
-2. **`shell-navigation-engineer`'s two M15 messages** (`tablist-rtl-arrow-keys`,
-   `m15-coverage-gate-review`) — still the oldest open thing I owe.
-3. **Fold into `cc-fidelity-check`:** read the `smoke:browser` NOTE before citing the green ·
-   the worktree method for grading a ratchet raise · findings 1 and 2 above.
-4. **Add to BRIEF:** finding 1 (make the derivation, read the compiler) and finding 3
-   (a known-gap test carries its own closing instruction), plus
-   `sessions-relay-engineer`'s second instance of the `git add` + bare `git commit` trap.
+1. **`shell-navigation-engineer`'s two M15 messages** (`tablist-rtl-arrow-keys`,
+   `m15-coverage-gate-review`) — now the oldest open thing I owe, and my whole queue.
+2. **Fold into `cc-fidelity-check`:** finding 1 above · read the `smoke:browser` NOTE before
+   citing the green · the worktree method for grading a ratchet raise · *a bound that drops
+   protection is not a bound* · *make the derivation and read the compiler*.
+3. **Add to BRIEF:** *make the derivation, read the compiler* · *a known-gap test carries its
+   own closing instruction* · `sessions-relay-engineer`'s second instance of the `git add` +
+   bare `git commit` trap.
+4. **`comms/verdicts/`** — decide it or stop citing it. Four verdicts deep is too many.
