@@ -1,21 +1,17 @@
 # BRIEF — read this, not the whole board
 
-**This file is rule 1's target and it is capped at 150 lines.** `BOARD.md` is the full
-record: consult the section you need, do not ingest it. It is over 1,300 lines, and when
-every dispatch read it end to end the reading cost exceeded the work.
-
-If something here disagrees with BOARD, **BOARD wins** and this file is stale — say so.
-
----
+**Rule 1's target, capped at 150 lines and gated.** `BOARD.md` is the full record — consult
+the section you need, never ingest it; at 1,300+ lines, reading it per dispatch cost more
+than the work. If this disagrees with BOARD, **BOARD wins** and this file is stale — say so.
 
 ## Where the build is
 
-- **Done:** M0, M1, M2, M5 · **M15** (Projects · cascade · identity) — PASSED 2026-08-17.
-- **Open: M16** — Threads · addressing · mailbox (`Plan §12`). Landed: ADR-023 + ADR-028,
-  `contracts/thread-model.md`, `0008_threads.sql`, thread routes and mailbox drain,
-  `thread_id` on metrics, both registers, `thread-feed`, THREADS in the tab slot.
-- **Not started:** the THREADS view and the mailbox composer. Read the sections you consume of
-  `thread-model.md` **and `design-tokens.md` §11** — the two thread badges already exist.
+- **Done:** M0, M1, M2, **M5**, **M6** · **M15** (Projects · cascade · identity) — PASSED.
+- **M16** (Threads · addressing · mailbox, `Plan §12`) — **all eleven slices built**: ADR-023,
+  028, 036, 037 · `thread-model.md` · `0008_threads.sql` · thread routes + mailbox drain ·
+  both registers · `thread-feed` · THREADS in the tab slot (`/sessions` redirects) · THREADS
+  view + addressing composer · mailbox composer · the erasure ruling. **Awaiting the final
+  acceptance pass**; the Arabic/RTL + PDPL sweep of the new surfaces is still owed.
 - **Phase 0 is still open**, and it blocks *validation* of everything, not construction.
 
 > **Completed is not validated.** Zero agent runs have ever executed. `runnerConfigured` is
@@ -70,9 +66,12 @@ assertion had *never once read the table it named* — a planted email scored 9/
 `check-rtl` could not see 190 strings. A coverage gate never resolved half its table. A
 smoke marker matched the tab names in `<meta name="description">`, so it passed against a
 shell with **no tab bar at all**. `CHROME_DIRS` was an include-list, blind to any directory
-that did not exist when it was written. **An include-list is a decision to be blind to
+that did not exist when it was written; the browser gate excused an absent backend over HTTP
+and failed the same one over WebSocket. **An include-list is a decision to be blind to
 everything unnamed; a substring is a claim you did not narrow.** Ask what your instrument
-*cannot* see, write it down, and prefer a marker only the real thing can satisfy.
+*cannot* see, write it down, and prefer a marker only the real thing can satisfy. Related:
+**a gate narrower than its authors' vocabulary silently edits them** — the coverage gate
+rejected `Plan §n` and two agents quietly rewrote their citations to pass.
 
 **A test excluded from typecheck makes every type assertion inside it decorative.**
 `apps/web/tsconfig.json` excluded the suite and vitest does not typecheck, so six
@@ -80,10 +79,6 @@ everything unnamed; a substring is a claim you did not narrow.** Ask what your i
 runner's were always live. `npm run typecheck:tests` closes it. Related: **`typecheck`
 green and `test:runner` red is reachable** — `tsc` and esbuild are different parsers, so a
 file that does not parse shows up as `TransformError` in files that never import it.
-
-**A gate narrower than the vocabulary its authors must use will silently edit them.** The
-coverage gate rejected `Plan §n`, so two agents quietly rewrote their citations to pass.
-The evidence lands in the claims, not in the gate.
 
 **Flattening defeats key-based redaction.** As an object, four keys redact; flattened into
 prose, four of five leak. Found four times — approvals `summary`, the plan span, the
@@ -97,17 +92,17 @@ text cannot be selected at all, which is what makes minimisation load-bearing.
 
 **A producer without a consumer is not a feature.** A required `sourceRef` shipped on the
 runner while the drawer's type dropped it; the header read UNKNOWN for every agent, nothing
-red. It hides in test files too — one built a `start` event without the fields M15 made
-required, forty lines above one that had been updated. **`unknown` is not `zero`**, and an
-aggregate over a failed read is unknown: a failed load dimmed seven CHART tabs, and dimming
-is a claim.
+red. It hides in tests too — one built a `start` event without fields M15 made required,
+forty lines above one that had been updated. **`unknown` is not `zero`**: a failed load
+dimmed seven CHART tabs, and dimming is a claim.
 
 **A gate loads a page now — it did not, and that is how a dead app passed everything.**
 `tsc`, three suites, every validator *and* `next build` were green while the app
-white-screened. `validate:barrel` and `smoke` observe the artifact; **`smoke:browser`
-(`check-page-errors.mjs`) runs it in Chrome** and fails on any uncaught throw, `console.error`
-or browser error. Our own `/api/` 5xx is reported, not fatal — the ledger is honestly absent.
-The 1440px side-by-side is still not runnable: it needs **reference frames**, not a browser.
+white-screened. `validate:barrel` + `smoke` observe the artifact; **`smoke:browser` runs it in
+Chrome**, failing on any uncaught throw, `console.error` or browser error. Our own absent
+backend (`/api/` 5xx, the `/ws/` handshake) is reported, not fatal. Before believing a red,
+`rm -rf apps/web/.next` — a stale build has faked a 404 on an untouched route. The 1440px
+side-by-side still needs **reference frames**, not a browser.
 
 ---
 
@@ -135,8 +130,12 @@ each other. Read narrowly, write narrowly.
   handoff is read once. Ask whether what you found can fail a build.
 - **Stay in your files.** Concurrent agents are normal. If a fix belongs to someone else,
   file it with the diagnosis to the **owner's inbox** — not into a code comment, which once
-  reached nobody for a week. Commit with `git commit -- <paths>`; **never `git add -A`**,
-  which has swept another agent's in-flight work into an unrelated commit.
+  reached nobody for a week.
+- **`git commit -- <paths>`, always.** `git add -A` is the obvious trap; the subtle one is
+  `git add <paths>` then a **bare `git commit`**, which commits the *whole index* including
+  whatever another agent staged. That swept a `git rm` into an unrelated commit, so
+  `git log -- <file>` now answers with someone else's subject. **A move is two paths.** Where
+  two agents share a file, stage **by hunk**.
 
 ## Gates
 

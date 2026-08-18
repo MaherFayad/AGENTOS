@@ -627,6 +627,25 @@ async function main() {
         `  no uncaught exceptions, no console.error, no browser-level errors` +
         (backendGaps.length ? ` · ${backendGaps.length} backend absence(s) above` : ''),
     );
+    // Say what the green covers when the backend was absent throughout.
+    //
+    // A run against a dead runner produced **66** absences across 12 routes and still printed
+    // a pass, which is correct and easy to misread: it proves the client renders *without* a
+    // backend, not that it works *with* one. Leaving that inference to the reader is the
+    // house defect in the shape this gate is least likely to be forgiven for — a declared
+    // pass read as an observed one. The threshold is per-route rather than absolute so it
+    // tracks "most pages could not reach it" instead of a number that grows with the route
+    // list.
+    if (backendGaps.length >= routesChecked) {
+      console.log(
+        `\n  NOTE — the backend was absent for essentially this whole run ` +
+          `(${backendGaps.length} absences across ${routesChecked} routes).\n` +
+          `  This pass means the client renders and throws nothing WITHOUT a backend. It is\n` +
+          `  not evidence that anything works WITH one, and it cannot see a defect that only\n` +
+          `  appears once real data arrives. Start the runner and re-run before citing this\n` +
+          `  in a verdict.`,
+      );
+    }
     process.exit(0);
   }
   console.error(`Page errors — FAIL  ${base}  [${browser.label}]\n`);
