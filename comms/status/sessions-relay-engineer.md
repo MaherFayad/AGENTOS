@@ -1,8 +1,19 @@
 # status — sessions-relay-engineer
 
-**Updated:** 2026-08-18T21:15
+**Updated:** 2026-08-18T22:45
 **Milestone:** M16 (THREADS view · addressing composer · §9.1)
-**State:** ready-for-review
+**State:** ready-for-review — fix round landed, re-gate of acceptance item 1 requested
+
+## Fix round (2026-08-18T22:45)
+Acceptance item 1 fixed: the unread-turn fact is off `.sep` (`--ink-3`) and inherits `--ink-2`;
+the decorative `·` keeps it, and `threads-contrast.test.ts` now gates the distinction — **only
+`aria-hidden` elements may wear a resting `--ink-3` class** — red under three plants from a
+green baseline. Follow-up 1 done: `refused` derives from `STEER_DELIVERY` (two literals, the
+row and `onKeyDown`), proved by flipping the constant — the old file compiled, the new one does
+not. Item 2 was `rtl-arabic-pdpl-specialist`'s at `306039e`; not re-touched. Gates 22:16–22:35
+on `a4841d5`: tokens 0/15 · rtl 308 · `smoke:browser` 0 (66 absences = empty-backend green only)
+· `test:web`/`test:runner`/`typecheck:tests` 0. `verify` exits 1 **only** on
+`observability-engineer`'s uncommitted in-flight work.
 
 ## Now
 THREADS view, addressing composer with cost preview, and one thread's feed — all in

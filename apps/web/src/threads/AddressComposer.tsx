@@ -36,7 +36,9 @@
  * 3. `steer` IS REFUSED, ALWAYS, AND IS PRESENTED AS REFUSED WITH A STATED REASON.
  *    Three equally-available levels would be a lie: the runner answers every steer
  *    with 409 `interrupt_not_deliverable`, in flight or not
- *    (`MID_RUN_STEER.supported === false`). So the third control is `aria-disabled`
+ *    (`MID_RUN_STEER.supported === false` on the runner, mirrored into the web
+ *    bundle as `STEER_DELIVERY.supported`, which is the constant this file reads
+ *    and the only one it can). So the third control is `aria-disabled`
  *    and **still focusable** — a `disabled` radio is skipped by arrow keys and the
  *    reason would then be announced to nobody — and the reason is visible text,
  *    not a tooltip, tied to the control by `aria-describedby`.
@@ -56,7 +58,7 @@ import {
   type InterruptLevel,
 } from '@agnetos/contracts';
 import { projectPath } from '@agnetos/contracts';
-import { AddressBadge, InterruptBadge } from '@/components/primitives';
+import { AddressBadge, InterruptBadge, STEER_DELIVERY } from '@/components/primitives';
 import { useProjectHref, useProjectSegment } from '@/components/shell';
 import { elementDirection, inlineStep, useT } from '@/i18n';
 import { previewLine } from './lib/preview';
@@ -267,6 +269,37 @@ export function AddressComposer({
  * -------------------------------------------------------------------------- */
 
 /**
+ * **Which levels this build can actually deliver — derived, not typed out.**
+ *
+ * What stood here was `const refused = candidate === 'steer'` under a comment
+ * claiming *"the register reads the runner's own constant and its test fails if the
+ * two disagree"*. The claim was true of the sibling composer
+ * (`drawer/threads/mailbox.ts:65-70`, `isComposable`) and false of this file, which
+ * imported neither constant — so the day a steer becomes deliverable, one composer
+ * would follow and the other would keep drawing a refusal forever with nothing red.
+ * BOARD's *"a comment is not a mechanism"*, in its quietest form: the mechanism
+ * existed, one file away. (fidelity-qa-reviewer, M16 acceptance, follow-up 1.)
+ *
+ * `STEER_DELIVERY.supported` is the one fact, and it is not a free-floating
+ * pessimism: `InterruptBadge.test.tsx` reads `apps/runner/src/lib/mailbox.ts` and
+ * fails if `MID_RUN_STEER.supported` and this constant disagree.
+ *
+ * **Lifting the refusal is a compile error in this file**, which is the property the
+ * literal did not have. With `supported: true`, `DeliverableLevel` widens to
+ * `InterruptLevel`, `isDeliverable` stops narrowing `steer` out of the offered
+ * branch, and `<InterruptBadge level={candidate} />` there no longer compiles —
+ * because `InterruptBadge`'s props make a caller offering `steer` answer *"is a run
+ * in flight?"*. A new-thread composer has to answer that explicitly rather than
+ * inherit it, and now it must.
+ */
+type DeliverableLevel = typeof STEER_DELIVERY.supported extends true
+  ? InterruptLevel
+  : Exclude<InterruptLevel, 'steer'>;
+
+const isDeliverable = (level: InterruptLevel): level is DeliverableLevel =>
+  level !== 'steer' || STEER_DELIVERY.supported;
+
+/**
  * **Arrow keys, and the reason they are here rather than assumed.**
  *
  * This is a `role="radiogroup"` of buttons, which is the one shape that owes its
@@ -313,19 +346,19 @@ function InterruptLevels({
     const next = (index + delta + INTERRUPT_LEVELS.length) % INTERRUPT_LEVELS.length;
     refs.current[next]?.focus();
     const candidate = INTERRUPT_LEVELS[next];
-    // Focus moves onto a refused rung; selection does not follow it there.
-    if (candidate === 'steer' || disabled) return;
+    // Focus moves onto a refused rung; selection does not follow it there. Same
+    // derivation as the row below — a second `=== 'steer'` here would be the same
+    // defect in the keyboard path, where it is harder to see.
+    if (!isDeliverable(candidate) || disabled) return;
     onPick(candidate);
   };
 
   return (
     <div className={s.levels} role="radiogroup" aria-label={t('threads.compose.levelLabel')}>
       {INTERRUPT_LEVELS.map((candidate, index) => {
-        // `STEER_DELIVERY.supported` is `false` and `SteerDeliverable` narrows
-        // `deliverable` to the literal `false`, so this is the only form that
-        // compiles. Not a hardcoded pessimism: the register reads the runner's
-        // own constant and its test fails if the two disagree.
-        const refused = candidate === 'steer';
+        // Derived from `STEER_DELIVERY`, never from the level's name — see
+        // `isDeliverable` above for why that distinction is the finding.
+        const refused = !isDeliverable(candidate);
         return (
           <button
             key={candidate}
@@ -351,10 +384,13 @@ function InterruptLevels({
               onPick(candidate);
             }}
           >
-            {refused ? (
-              <InterruptBadge level="steer" deliverable={false} size="sm" />
-            ) : (
+            {/* The predicate is called here rather than reading `refused`, because
+                the narrowing is the gate: this is the line that stops compiling on
+                the day `STEER_DELIVERY.supported` flips. */}
+            {isDeliverable(candidate) ? (
               <InterruptBadge level={candidate} size="sm" />
+            ) : (
+              <InterruptBadge level="steer" deliverable={false} size="sm" />
             )}
             <span>{t(LEVEL_LABEL[candidate])}</span>
           </button>

@@ -126,7 +126,17 @@ export function ThreadView({ threadId }: { threadId: string }): React.JSX.Elemen
                   <span>{t(KIND_KEY[message.kind])}</span>
                   {message.interrupt !== null && <Level level={message.interrupt} />}
                   {message.deliveredAt === null && (
-                    <span className={s.sep}>{t('threads.one.inMailbox')}</span>
+                    /* NOT `.sep`, and the difference is the whole of §9.3. The `·`
+                       six lines up is a decorative glyph that repeats structure and
+                       is `aria-hidden`; `--ink-3` is its sanctioned home. This span
+                       is the only thing on the row that says the turn has not been
+                       read yet — `deliveredAt` is drawn nowhere else — so it is the
+                       NEVER column verbatim: *"any sentence… anything with no second
+                       copy on screen"*. Classless, it inherits `--ink-2` from
+                       `.messageHead`, which is where a delivery fact belongs and
+                       where the author name beside it already sits.
+                       (fidelity-qa-reviewer, M16 acceptance, item 1.) */
+                    <span>{t('threads.one.inMailbox')}</span>
                   )}
                 </div>
                 {/* `dir="auto"` — THE ONE PLACE IN THIS APP THAT SETS IT, and the
