@@ -242,8 +242,15 @@ export type RunTrace = {
    * more importantly no type reaches the case that matters: `` `halted: ${message.body}` ``
    * is a `string` by the time any signature sees it. Interpolation erases provenance, so the
    * only handle left is the characters, which is what this registers.
+   *
+   * **Returns whether the run can now withhold that text.** `false` means it cannot — the
+   * string is under `MIN_LITERAL`, or the register is at capacity — and a caller holding a
+   * body that came back `false` is holding text this run will emit if it interpolates it.
+   * Refusals for capacity are counted onto the root span as `withheld_refused`. Before
+   * 2026-08-18 this returned `void` and the register evicted its oldest literal to make room,
+   * so exhaustion silently *reduced* protection; see `withhold.ts`, *The bound refuses*.
    */
-  withhold(text: string): void;
+  withhold(text: string): boolean;
   /** Close the run. Flushes the trace and writes the ledger row. */
   finish(outcome: RunOutcome): Promise<RunRecord>;
 };

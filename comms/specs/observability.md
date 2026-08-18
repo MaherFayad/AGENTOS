@@ -193,6 +193,7 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
 | REQ-OBS-41 | §3.5 | An `ops.message` body never becomes a span attribute — the projection is a type with no field it could arrive in, and the redactor is demonstrably **not** a fallback for free text | `packages/contracts/src/threads.ts` *(`messageSpanAttributes`, `thread-model-engineer`'s — consumed, not owned)* | `apps/runner/src/observability/__tests__/threads-observability.test.ts` · `apps/runner/src/observability/__tests__/message-body-never-traced.test.ts` *(`rtl-arabic-pdpl-specialist`'s — the projection was **opt-in** until it existed)* |
 | REQ-OBS-42 | §3.5 | Text a run is told to withhold is scrubbed from **every** string it emits — span attribute, ledger column, activity line and **error message** — whole or in a 32-character window, because §9.3 refuses truncation by name | `apps/runner/src/observability/withhold.ts` · `apps/runner/src/observability/redact.ts` · `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/withheld-text-never-traced.test.ts` |
 | REQ-OBS-43 | §3.5 | A body seen once under a denylisted key is withheld for the rest of that run, whatever container it arrives in next — and the register is **per-run**, so one client's text never scrubs another's trace | `apps/runner/src/observability/redact.ts` · `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/withheld-text-never-traced.test.ts` |
+| REQ-OBS-44 | §3.5 | Exhausting the withheld register never **un**-withholds a literal it already holds: the bound refuses the newest, `size()` is monotonic, `add()` returns `false` so the call site learns the text is unprotected, and the refusal count reaches the root span as `withheld_refused` | `apps/runner/src/observability/withhold.ts` · `apps/runner/src/observability/instrument.ts` · `apps/runner/src/observability/types.ts` | `apps/runner/src/observability/__tests__/withheld-text-never-traced.test.ts` *(§4 — red on the old `literals.shift()` shape)* |
 
 ## Interfaces we expose
 
@@ -387,9 +388,20 @@ answers two of them:
 
 | Tier | Unit | Selectable today? | Executable today? | Does a delete verb fix it? |
 |---|---|---|---|---|
-| **1** | a **project** | **yes** — `project_id` NOT NULL and FK-pinned on every table, `metadata.project` on every trace, one directory on disk | no | **yes.** One `DELETE` per table, one API call, one `rm -rf` |
-| **2** | an **author's own words** — `ops.message.author = 'human:{identity}'`, plus `thread_id` and `message.id` | **yes** — `author` is NOT NULL and its grammar is fixed (`0008` §4), so *"everything Maher wrote"* is a `WHERE` clause | no | **yes.** Same verb, a different predicate |
+| **1** | a **project** | **yes** — `project_id` NOT NULL and FK-pinned on every table, `metadata.project` on every trace, one directory on disk | no | **yes, in the live planes.** One `DELETE` per table, one API call, one `rm -rf` — and **a backup is a fourth store none of them reaches** |
+| **2** | an **author's own words** — `ops.message.author = 'human:{identity}'`, plus `thread_id` and `message.id` | **yes** — `author` is NOT NULL and its grammar is fixed (`0008` §4), so *"everything Maher wrote"* is a `WHERE` clause | no | **yes for what that author wrote** — which is *"delete everything I typed"*, and **not** an erasure request from that person |
 | **3** | a **third party named inside a body** | **no, at any price** | no | **no** |
+
+*(Both qualifications in the last column were added 2026-08-18, graded by
+`rtl-arabic-pdpl-specialist` while grading ADR-036. The **normative text for both is
+`company/COMPANY.md` rule 7**, deliberately, because that file is injected into every run of
+every project and this page is read by whoever opens it; cite it, do not re-derive it. In
+short: a single natural person is tier 2 for their own rows and **tier 3 for everything others
+wrote about them**, so the three tiers are not three populations and author-scoped deletion
+does not discharge that person's Art. 18 request; and rule 2's encrypted backups are a fourth
+store, so a tier-1 erasure that leaves the rows in last night's dump is not complete by this
+page's own standard. Neither narrows tier 3 — both **widen** the population minimisation is the
+only mechanism for.)*
 
 **Tier 3 is the ruling and it is why this table is written as a limit rather than a roadmap.**
 *"Chase Fatima Al-Harbi about the Olaya lease"* is a data subject who never touched this
@@ -406,8 +418,9 @@ contentless push, and `messageSpanAttributes` having no `body` field. Each was a
 grounds; each is now doing PDPL work, and each is minimisation — which is the only tier-3
 mechanism there is.
 
-**v1 ships tier 1, stated rather than gapped.** Tier 2 is buildable from the same verb and is
-not in v1 because no row exists to delete. Tier 3 ships as a written position.
+**v1's erasure scope is tier 1, and none of it is written** — stated rather than gapped, and
+in the same tense as the table's *Executable today? no*. Tier 2 is buildable from the same verb
+and is not in v1 because no row exists to delete. Tier 3 ships as a written position.
 
 ### The trace plane, and what its "by construction" argument now rests on
 
@@ -438,7 +451,22 @@ that was never told a literal is client text still emits it. It is a register, n
 classifier. The automatic half needs no call site (a body seen once under a denylisted key is
 remembered for the rest of that run); the sanctioned mailbox path never shows the body to the
 redactor at all, so it needs one `trace.withhold(message.body)` at the drain — filed to
-`runner-engineer`, **not landed**.
+`runner-engineer`, **not landed as of 2026-08-18 22:40** (`grep withhold apps/runner/src/lib/`
+returns two test doubles and no call site).
+
+**Its bound refuses rather than forgets, corrected 2026-08-18.** The register was capped at 32
+literals and evicted the oldest, which `rtl-arabic-pdpl-specialist` graded as a **fail-open**
+while grading ADR-036: the 33rd registered body silently un-protected the 1st, in an ordinary
+33-message thread, on the mechanism whose whole job is this. It now refuses the newest literal
+at a 1 MiB character budget (512 entries as a second ceiling on scrub cost), never evicts —
+`size()` is monotonic — returns `false` so the call site learns the text is unprotected, and
+puts the refusal count on the run's root span as `langfuse.trace.metadata.withheld_refused`,
+absent when zero. **The residual is stated, not closed:** a full register still cannot withhold
+what it refused, and neither bound is unreachable by construction, because `ops.message.body`
+has no length CHECK and `readMailbox` has no `LIMIT`. What changed is that exhaustion now costs
+the *newest* body — the one whose caller is still on the stack — and says so, instead of
+costing the oldest and saying nothing. **REQ-OBS-44.** Gated by
+`withheld-text-never-traced.test.ts` §4, red on the old shape (falsified three ways).
 
 **Owners:** the PDPL ruling is `rtl-arabic-pdpl-specialist`'s (`thread-model.md` §9.3); this
 table is mine. **A delete verb gets its own ADR before its first line of code** — erasure is
@@ -448,11 +476,18 @@ ADR is **[ADR-036](../decisions/ADR-036-erasure-and-retention.md)**, claimed on 
 the file was written, and it carries the retention horizon in the same document for the reason
 given there.
 
-So the only erasure unit this architecture can actually execute is **the project** — erase
-everything for that client, or demonstrate the subject's data was never in the trace store.
-That terminates: it is bounded by one project's traces, one `DELETE` per table, and one
-directory. Tier 2 terminates the same way once the verb exists. Tier 3 does not terminate and
-no attribute added later fixes it.
+So the only erasure unit this architecture **could execute, once a verb exists**, is the
+project — erase everything for that client, or demonstrate the subject's data was never in the
+trace store. **That would terminate:** it is bounded by one project's traces, one `DELETE` per
+table, and one directory. Tier 2 would terminate the same way once the verb exists. Tier 3 does
+not terminate and no attribute added later fixes it.
+
+*(The three verbs above were present tense until 2026-08-18 — "can actually execute", "that
+terminates" — twelve lines below this section's own table reading **Executable today? no**, and
+four lines above a *What is missing* list whose item 3 is the tier-1 `DELETE`. ADR-036 kept the
+distinction in its Context; the spec lost it in the mood of a verb, which is the same house
+defect as the RLS row above and is harder to see because no mechanism is misnamed. Found by
+`fidelity-qa-reviewer` as the single item of a FAIL.)*
 
 **What is missing, in the order it should land:**
 
@@ -474,6 +509,12 @@ no attribute added later fixes it.
    more predicate, and deliberately *after* tier 1 rather than alongside it. A per-author
    delete that ran before the project-wide one existed would be the narrower blast radius
    shipping first, which sounds prudent and is how the wide one arrives later untested.
+7. **A backup rotation shorter than whatever erasure commitment we make**, written down and
+   observed — the fourth store. Added 2026-08-18 with the tier-1 qualification above. It is a
+   number and it is the **human's**, alongside ADR-036 decision 5's other two; nothing here
+   guesses it. `infra-compose-engineer` owns the mechanism, this page owns the claim it makes
+   true, and until it exists tier 1 says *in the live planes*. Note the ordering trap: an
+   `eraseProject` that shipped before this would look complete and would not be.
 
 **Not on this list, and that is the ruling:** anything that would find a third party named
 inside a body. No item can be written for tier 3 — not a full-text index, not an entity

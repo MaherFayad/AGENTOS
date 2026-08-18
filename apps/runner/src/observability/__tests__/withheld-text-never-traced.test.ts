@@ -30,7 +30,7 @@ import assert from 'node:assert/strict';
 
 import { createInstrumentation } from '../instrument.ts';
 import { redact, refreshEnvSecrets } from '../redact.ts';
-import { createWithheld, MIN_LITERAL, WINDOW } from '../withhold.ts';
+import { createWithheld, MAX_LITERALS, MAX_WITHHELD_CHARS, MIN_LITERAL, WINDOW } from '../withhold.ts';
 import type { RunRecord, ToolCallRecord } from '../types.ts';
 
 /** The sibling gate's body, character for character, so the two files cannot drift apart. */
@@ -273,14 +273,128 @@ test('short literals are not registered, and ordinary prose survives', () => {
   assert.equal(short.count, 0, `below ${WINDOW} characters a partial match is not made`);
 });
 
-test('the register is bounded — a long-running process cannot grow one without limit', () => {
-  const withheld = createWithheld();
-  for (let i = 0; i < 200; i++) withheld.add(`literal-number-${i}-padding-padding`);
-  assert.ok(withheld.size() <= 32, 'oldest evicted at the cap');
+/* -------------------------------------------------------------------------- *
+ * 4. Exhaustion — the bound must not be a way to lose protection
+ *
+ * This block replaces a test that asserted `size() <= 32` and called that a bound. It was
+ * true and it graded the wrong half: `rtl-arabic-pdpl-specialist` found on 2026-08-18 that
+ * the eviction behind it was a **fail-open**, so the 33rd registered body silently
+ * un-protected the 1st on the one register whose job is stopping a body reaching a trace.
+ * A test that measures the resource and not the protection is how a leak passes a gate.
+ * -------------------------------------------------------------------------- */
 
-  withheld.add(BODY);
-  withheld.add(BODY);
-  assert.ok(withheld.size() <= 32, 'the same literal twice is one entry');
+test('THE gate: registering past the cap never un-protects the first body', () => {
+  const withheld = createWithheld();
+
+  // The 33-message thread from the finding, made worse: MAX_LITERALS + 50 later messages,
+  // each an ordinary body. The first one is the one a long conversation forgets, and it is
+  // the one most likely to name a third party (tier 3, ADR-036).
+  assert.equal(withheld.add(BODY), true, 'the first body registers');
+  for (let i = 0; i < MAX_LITERALS + 50; i += 1) {
+    withheld.add(`later message number ${i} in an ordinary thread`);
+  }
+
+  assert.equal(
+    withheld.scrub(`halted: ${BODY}`).out,
+    'halted: [REDACTED:withheld]',
+    'THE assertion this whole block exists for. Under the old shape (`literals.shift()` at ' +
+      'the cap) this is red: the first body comes back verbatim because a later one evicted ' +
+      'it. Protection is monotonic — if this is red, exhaustion is reducing protection again ' +
+      'and the direction of the failure is toward leaking. Do not raise the cap to make it ' +
+      'green; the cap is not the property.',
+  );
+  assertNoFragment(JSON.stringify(withheld.scrub(`halted: ${BODY}`)), 'a full register');
+});
+
+test('size() only ever grows — nothing evicts, nothing expires', () => {
+  const withheld = createWithheld();
+  let previous = 0;
+  for (let i = 0; i < MAX_LITERALS + 50; i += 1) {
+    withheld.add(`message body number ${i}, padded past the floor`);
+    const size = withheld.size();
+    assert.ok(size >= previous, `size() fell from ${previous} to ${size} at literal ${i}`);
+    previous = size;
+  }
+  assert.equal(withheld.size(), MAX_LITERALS, 'it fills to the ceiling and stops there');
+});
+
+test('exhaustion refuses the newest literal, loudly — add() returns false and refused() counts', () => {
+  const withheld = createWithheld();
+  for (let i = 0; i < MAX_LITERALS; i += 1) {
+    assert.equal(withheld.add(`message body number ${i}, padded past the floor`), true);
+  }
+  assert.equal(withheld.refused(), 0, 'nothing was refused on the way to the ceiling');
+
+  assert.equal(
+    withheld.add(BODY),
+    false,
+    'A full register cannot withhold this body and says so. The residual is real — this body ' +
+      'is unprotected — but it is the NEWEST, whose call site is still on the stack, and the ' +
+      'caller is told. The old shape returned void and quietly dropped an older one instead.',
+  );
+  assert.equal(withheld.refused(), 1);
+
+  // …and the refusal did not cost anything already held.
+  const held = 'message body number 0, padded past the floor';
+  assert.equal(withheld.scrub(`halted: ${held}`).count, 1, 'an earlier literal is untouched');
+});
+
+test('the character budget bites independently of the count, and also refuses', () => {
+  const withheld = createWithheld();
+  const huge = 'ب'.repeat(MAX_WITHHELD_CHARS / 8 - 1); // with its 1-char prefix: 8 fill it exactly
+
+  for (let i = 0; i < 8; i += 1) {
+    // Distinct strings, so `includes` cannot short-circuit them into one entry.
+    assert.equal(withheld.add(`${i}${huge}`), true, `literal ${i} fits the budget`);
+  }
+  assert.equal(withheld.size(), 8);
+  assert.equal(
+    withheld.add(`8${huge}`),
+    false,
+    'MAX_LITERALS is nowhere near reached — 8 of 512 — so this is the character budget, ' +
+      'which is the bound a count could never see. Eight bodies of 128k characters is the ' +
+      'shape that made a count of 32 the wrong instrument.',
+  );
+  assert.equal(withheld.refused(), 1);
+});
+
+test('a refusal is reported on the trace, and an ordinary run carries no such key', async () => {
+  refreshEnvSecrets({});
+  const { obs, sent } = harness();
+
+  const quiet = begin(obs);
+  quiet.withhold(BODY);
+  await quiet.finish({ status: 'ok' });
+  assert.equal(
+    JSON.stringify(sent[0]).includes('withheld_refused'),
+    false,
+    'absent when zero, so the key\'s presence is itself the signal and no ordinary trace ' +
+      'shape changes',
+  );
+
+  const full = begin(obs);
+  for (let i = 0; i < MAX_LITERALS; i += 1) {
+    full.withhold(`message body number ${i}, padded past the floor`);
+  }
+  assert.equal(full.withhold(BODY), false, 'the run is told at the call site');
+  await full.finish({ status: 'ok' });
+
+  assert.match(
+    JSON.stringify(sent[1]),
+    // The OTLP encoding, not the JS object: `attributes()` emits `{key, value:{intValue}}`,
+    // and asserting the object shape would pass against a payload that never shipped the key.
+    /"key":"langfuse\.trace\.metadata\.withheld_refused","value":\{"intValue":"1"\}/,
+    'A silent fail-open was the whole finding. The count is on the root span — a number, ' +
+      'never a string, so the report cannot itself carry a body.',
+  );
+});
+
+test('the same literal twice is one entry, and re-adding a held literal still answers true', () => {
+  const withheld = createWithheld();
+  assert.equal(withheld.add(BODY), true);
+  assert.equal(withheld.add(BODY), true, 'already registered ⇒ the run CAN withhold it');
+  assert.equal(withheld.size(), 1);
+  assert.equal(withheld.refused(), 0, 'a duplicate is not an exhaustion');
 });
 
 test('a bare redact() is unchanged — no register, no new behaviour', () => {

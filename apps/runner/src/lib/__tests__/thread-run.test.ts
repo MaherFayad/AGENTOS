@@ -132,7 +132,10 @@ function fakeObs(db: DbClient): Observability {
     usage: () => {},
     event: () => {},
     // Required on `RunTrace` as of the withheld-literal register (`observability/withhold.ts`).
-    withhold: () => {},
+    // Returns `boolean` since 2026-08-18: the register refuses at capacity rather than
+    // evicting, so the caller is told whether the text is actually protected. `true` for a
+    // double that never fills. One-token edit by `observability-engineer` for that change.
+    withhold: () => true,
     finish: async () => ({}) as never,
   };
   return { startRun: () => trace, db, close: async () => {} } as unknown as Observability;

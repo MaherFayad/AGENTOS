@@ -20,9 +20,34 @@ the problem on that axis, and it stops being one problem:
 
 | Tier | Unit | Selectable? | Executable? | Does a delete verb fix it? |
 |---|---|---|---|---|
-| 1 | project | yes | no | **yes** |
-| 2 | author — `ops.message.author = 'human:{identity}'` | yes | no | **yes** |
+| 1 | project | yes | no | **yes, in the live planes** — a backup is a fourth store and no `DELETE` reaches it |
+| 2 | author — `ops.message.author = 'human:{identity}'` | yes | no | **yes for what that author wrote**, which is not the same as an erasure request *from* that person |
 | 3 | a third party named *inside* free text | **no, at any price** | no | **no** |
+
+**Both qualifications are `rtl-arabic-pdpl-specialist`'s, and both live in
+[`company/COMPANY.md`](../../company/COMPANY.md) rule 7, not here.** They were graded onto this
+ADR on 2026-08-18 and deliberately written into that file instead, because it is injected into
+every run of every project and this ADR is read once. This table now agrees with it rather than
+restating it; if the two ever diverge, **rule 7 is the text and this is the summary**. What each
+qualification costs is worth one line, because both are read wrongly by default and the wrong
+reading is the flattering one:
+
+- **An author is not a data subject.** A single natural person is simultaneously tier 2 for
+  their own rows and **tier 3 for everything other people wrote about them** — so the three
+  tiers are not three populations, and *"we can erase an author"* answers *"delete everything I
+  typed"*, never *"honour my erasure request"*. Which means the conflation this ADR exists to
+  prevent was reachable one row above where it prevents it.
+- **A backup is a fourth store.** Rule 2 requires encrypted backups; restoring one resurrects
+  what tier 1 erased. Judged by this ADR's own standard — *an erasure that cannot be proven
+  complete is not an erasure* — that is not complete, and the answer is a backup rotation
+  shorter than the erasure commitment: a written, observed number, not a property of the verb.
+  It is the human's, like the other two in decision 5, and it is not guessed here.
+
+**Neither weakens tier 3, and neither is a gap to be closed later.** They make tiers 1 and 2
+narrower; tier 3 is unchanged and stays what it was — **unreachable by any delete verb, and
+that is the finding.** Read the wrong way round, "an author is also tier 3" becomes an argument
+for building a tier-3 selector; it is the opposite. It is one more population that minimisation
+is the only mechanism for.
 
 Tier 3 is why this is an ADR and not a ticket. A `DELETE` landing tomorrow would not answer
 *"remove Fatima Al-Harbi"*: she never touched this system, her name is inside a sentence
@@ -138,4 +163,16 @@ is what tests it, and the ADR should be re-read on the day one arrives.
   already carry the ruling and the horizon; §9.4's *"the same ADR as the delete verb"* now
   resolves to this number, which is the one thing they asked for.
 - `company/COMPANY.md` — **no edit; it is `rtl-arabic-pdpl-specialist`'s.** Rule 7 there
-  already states the three tiers and rule 10 already states the model is a processor.
+  already states the three tiers and rule 10 already states the model is a processor. On
+  2026-08-18 they added the author/data-subject distinction and the backup-as-fourth-store
+  limit to rule 7 while grading this ADR. **That file is normative for both and this one now
+  cites it** — the reconciliation is above, in Context. Putting them there rather than here was
+  the right call and is worth naming: rule 7 is injected into every run of every project, so a
+  correction placed there is inherited, and the same correction placed in an ADR is read by
+  whoever opens the ADR.
+- `apps/runner/src/observability/withhold.ts` — decision 3's minimisation freeze acquires its
+  first mechanical consequence. The literal register's bound was `literals.shift()` at 32,
+  which `rtl-arabic-pdpl-specialist` graded as a **fail-open**: the 33rd registered body
+  silently un-protected the 1st. It now refuses the newest, counts refusals, and reports them
+  on the root span as `withheld_refused`; protection is monotonic. Gated by
+  `withheld-text-never-traced.test.ts` §4, which is red on the old shape.

@@ -86,7 +86,12 @@ test('the plan span is handed input keys, never the flattened summary', async ()
       // `RunTrace.withhold` is required, so every construction site had to acknowledge it —
       // which is the required member doing its job. A fake that silently lacked it would be
       // a plane where a body could not be withheld and nothing said so.
-      withhold: () => {},
+      // Returns `boolean` as of 2026-08-18 — `withhold()` now answers "can this run withhold
+      // that text", because its register refuses at capacity instead of evicting an older
+      // literal (`observability/withhold.ts`, *The bound refuses*). `true` is right for a
+      // double that never fills. Edited by `observability-engineer` for that type change and
+      // for nothing else.
+      withhold: () => true,
       finish: async () => ({}) as never,
     };
     services.obs = { startRun: () => trace } as unknown as Observability;

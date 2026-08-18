@@ -52,7 +52,7 @@ import assert from 'node:assert/strict';
 import { createInstrumentation } from '../instrument.ts';
 import { redact, refreshEnvSecrets } from '../redact.ts';
 import { KEY_DENYLIST, normaliseKey } from '../redaction-rules.ts';
-import { createWithheld, MAX_LITERALS, MIN_LITERAL } from '../withhold.ts';
+import { createWithheld, MIN_LITERAL } from '../withhold.ts';
 import { messageSpanAttributes, type ThreadMessage } from '@agnetos/contracts';
 import type { RunRecord, ToolCallRecord } from '../types.ts';
 
@@ -315,37 +315,36 @@ test('an error STRING carrying a body leaks in full — found by this gate, not 
  *
  * `withhold.ts` is `observability-engineer`'s and its "what it cannot see" list is
  * good — text never registered, a fragment under WINDOW, a paraphrase, a string
- * over MAX_SCAN. These two tests assert the things that list does NOT name, in the
+ * over MAX_SCAN. These tests assert the things that list does NOT name, in the
  * file that owns the PDPL claim, because a blind spot named nowhere is the exact
- * shape this repo keeps paying for.
+ * shape this repo keeps paying for. There were two; one was closed rather than
+ * recorded — see the tombstone directly below, which is the only edit
+ * `observability-engineer` made to this file.
  * ------------------------------------------------------------------------ */
 
-test('the register FAILS OPEN at its own bound — eviction is a redaction hole, not a memory limit', () => {
-  const withheld = createWithheld();
+/*
+ * ── CLOSED 2026-08-18 — `the register FAILS OPEN at its own bound` was deleted here ──
+ *
+ * That test asserted, as a known gap, that the 33rd registered body un-protected the 1st.
+ * Its own closing instruction was *"If this starts failing because eviction was replaced with
+ * a refusal to register […] delete this test and say so — do not weaken it to keep it green."*
+ * Eviction was replaced with a refusal to register, so it is deleted rather than weakened, and
+ * this is the saying-so. **Deleted by `observability-engineer` under that instruction and the
+ * sender's own note** (*"my test is the one that must go red, which is the point of it"*,
+ * inbox 20260818-2210); the rest of this file is untouched and the `MIN_LITERAL` gap below
+ * stands, because nothing about it changed.
+ *
+ * The replacement lives in `withheld-text-never-traced.test.ts` §4 and asserts the opposite
+ * property: registering `MAX_LITERALS + 50` literals past the first leaves the **first** body
+ * still withheld, protection is monotonic, and exhaustion refuses the newest and reports
+ * itself on the root span as `withheld_refused`. That gate is red on the old shape.
+ *
+ * Rewriting it in place as an inverted assertion would have put `observability-engineer`'s
+ * claim inside `rtl-arabic-pdpl-specialist`'s file, which is the drift this repo already paid
+ * for once (`20260817-0044`).
+ */
 
-  // `MAX_LITERALS` is documented as *"bounded so a long-running process cannot grow a
-  // register without limit. Oldest evicted."* That is a resource sentence for what is, in
-  // this file's terms, a leak: the 33rd registered body silently un-protects the 1st.
-  //
-  // Reachable, not theoretical. A thread's drain registers one literal per message; a
-  // thread with 33 messages is an ordinary thread, and the message that stops being
-  // withheld is the OLDEST — which in a long conversation is the one furthest from the
-  // author's attention and the most likely to name a third party (tier 3, ADR-036).
-  const first = 'Chase Fatima Al-Harbi about the Olaya lease in March.';
-  withheld.add(first);
-  for (let i = 0; i < MAX_LITERALS; i += 1) {
-    withheld.add(`filler literal number ${i} padded past MIN_LITERAL`);
-  }
 
-  assert.equal(withheld.size(), MAX_LITERALS, 'the bound holds, which is the half that works');
-  assert.equal(
-    withheld.scrub(`halted: ${first}`).out,
-    `halted: ${first}`,
-    'ASSERTED AS A KNOWN GAP. If this starts failing because eviction was replaced with a ' +
-      'refusal to register, or with a bound per THREAD rather than per RUN, delete this test ' +
-      'and say so — do not weaken it to keep it green.',
-  );
-});
 
 test('a body under MIN_LITERAL is never registered, so a short body has no backstop at all', () => {
   const withheld = createWithheld();

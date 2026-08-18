@@ -46,6 +46,38 @@
  *   that. It is why the structural rule — never hand the body to the tracer — stays primary
  *   and this stays a backstop.
  * - **A string longer than `MAX_SCAN`**, which falls back to whole-literal matching only.
+ * - **A literal the register refused for capacity.** See *The bound refuses* below. Refusals
+ *   are counted and reported; they are not silent, and they never take protection away from
+ *   something already registered.
+ *
+ * ## The bound refuses; it does not forget — corrected 2026-08-18
+ *
+ * This register was bounded by `literals.shift()` at 32 entries. `rtl-arabic-pdpl-specialist`
+ * graded that while grading ADR-036 and it was a **fail-open, not a memory limit**: the 33rd
+ * registered body silently un-protected the 1st, in an ordinary 33-message thread, on the one
+ * mechanism whose entire job is stopping a message body reaching a trace. The oldest literal
+ * is also the worst one to drop — furthest from anyone's attention, most likely to name a
+ * third party (tier 3, ADR-036). A bound that drops protection is not a bound; it is an
+ * expiry nobody is told about, failing in the direction that leaks.
+ *
+ * Three properties hold now, and the third is the one that was missing:
+ *
+ * 1. **Protection is monotonic.** A literal that was registered stays registered for the rest
+ *    of the run. Nothing evicts, nothing expires, `size()` never decreases.
+ * 2. **The budget is characters, not entries.** Characters are the resource; a count was
+ *    always a bad proxy for it, and `32 × 100 KB` is the case a count cannot see.
+ *    `MAX_LITERALS` survives as a second ceiling on *scrub cost*, not on memory.
+ * 3. **Exhaustion refuses the newest literal and says so.** `add()` returns `false`,
+ *    `refused()` counts it, and `instrument.ts` puts that count on the run's root span as
+ *    `langfuse.trace.metadata.withheld_refused`.
+ *
+ * **The residual, stated rather than implied.** A full register still cannot withhold the
+ * literal it refused, and neither bound is unreachable by construction — `ops.message.body`
+ * has no length CHECK (`0008_threads.sql` §4) and `readMailbox` has no `LIMIT`, so no upstream
+ * constraint caps what one drain can register. What changed is the direction and the volume of
+ * the failure: it now costs the **newest** body, whose call site is still on the stack and
+ * which is therefore the one a caller can act on, and it arrives as a `false` and a number on
+ * the trace instead of as nothing at all.
  */
 
 /** Shortest literal worth registering. Below this the register would scrub ordinary prose. */
@@ -58,8 +90,22 @@ export const MIN_LITERAL = 8;
  */
 export const WINDOW = 32;
 
-/** Bounded so a long-running process cannot grow a register without limit. Oldest evicted. */
-export const MAX_LITERALS = 32;
+/**
+ * The register's memory budget, in characters, for one run. Roughly 1 MiB of UTF-16 — about
+ * five hundred ordinary message bodies, or one pathological one.
+ *
+ * A budget rather than a count because characters are what actually grows. Exceeded, `add()`
+ * **refuses the new literal** and counts the refusal; it never evicts an old one.
+ */
+export const MAX_WITHHELD_CHARS = 1_048_576;
+
+/**
+ * A second ceiling, on **scrub cost** rather than on memory: `scrub()` walks every literal for
+ * every string the run emits, so the character budget alone would permit ~131k eight-character
+ * entries and a redactor slow enough that someone turns it off. Reached, `add()` refuses in
+ * exactly the same way. 512 is fifteen times the 33-message thread that found the old bound.
+ */
+export const MAX_LITERALS = 512;
 
 /** Above this length a string is matched whole rather than scanned window-by-window. */
 export const MAX_SCAN = 64_000;
@@ -68,12 +114,32 @@ export const MAX_SCAN = 64_000;
 export const WITHHELD_LABEL = 'withheld';
 
 export type Withheld = {
-  /** Register a literal. Non-strings and strings under `MIN_LITERAL` are ignored. */
-  add(text: unknown): void;
+  /**
+   * Register a literal.
+   *
+   * **Returns whether this run can now withhold that text**, which is the only question a
+   * caller has. `true` also when it was already registered — protection holds either way.
+   * `false` in three cases, and they are not the same failure:
+   *
+   * - a non-string, or a string under `MIN_LITERAL` — the stated floor, by design;
+   * - the character budget or the literal ceiling is exhausted — counted by `refused()`.
+   *
+   * A caller holding a body that came back `false` is holding text this run cannot scrub out
+   * of its own error strings. That is now knowable at the call site; it used to be knowable
+   * nowhere.
+   */
+  add(text: unknown): boolean;
   /** Replace every registered literal — whole or in part — in one string. */
   scrub(input: string): { out: string; count: number };
-  /** How many literals are registered. For tests and for the handoff's honesty. */
+  /** How many literals are registered. Monotonic: this never decreases. */
   size(): number;
+  /**
+   * How many literals this run was told about and could not accept **for capacity**. Nonzero
+   * means the run holds client text it cannot withhold; it is reported on the root span rather
+   * than left for someone to notice. Floor rejections are not counted here — they are a
+   * design limit, not an exhaustion.
+   */
+  refused(): number;
 };
 
 const placeholder = `[REDACTED:${WITHHELD_LABEL}]`;
@@ -130,18 +196,27 @@ function scrubLiteral(input: string, literal: string): { out: string; count: num
 }
 
 export function createWithheld(): Withheld {
-  // Insertion-ordered; the oldest is evicted first. Longest-first at scrub time so a literal
-  // containing another is consumed whole rather than leaving its tail behind — the same
-  // ordering `refreshEnvSecrets` uses, for the same reason.
+  // Append-only. Nothing is ever removed from this array — that is the fix, not an oversight.
+  // Longest-first at scrub time so a literal containing another is consumed whole rather than
+  // leaving its tail behind — the same ordering `refreshEnvSecrets` uses, for the same reason.
   const literals: string[] = [];
+  let chars = 0;
+  let refused = 0;
 
   return {
-    add(text: unknown): void {
-      if (typeof text !== 'string') return;
-      if (text.length < MIN_LITERAL) return;
-      if (literals.includes(text)) return;
+    add(text: unknown): boolean {
+      if (typeof text !== 'string') return false;
+      if (text.length < MIN_LITERAL) return false;
+      if (literals.includes(text)) return true;
+      if (literals.length >= MAX_LITERALS || chars + text.length > MAX_WITHHELD_CHARS) {
+        // Refuse the newest. Evicting the oldest here is what made this a fail-open: it
+        // spent an already-held protection to buy one, and told nobody.
+        refused += 1;
+        return false;
+      }
       literals.push(text);
-      if (literals.length > MAX_LITERALS) literals.shift();
+      chars += text.length;
+      return true;
     },
 
     scrub(input: string): { out: string; count: number } {
@@ -157,6 +232,7 @@ export function createWithheld(): Withheld {
     },
 
     size: () => literals.length,
+    refused: () => refused,
   };
 }
 
@@ -165,7 +241,10 @@ export function createWithheld(): Withheld {
  * was supplied — a bare `redact(value)` behaves exactly as it did before this file existed.
  */
 export const NO_WITHHELD: Withheld = {
-  add() {},
+  // `false`, because nothing is protected here and `add()`'s contract is "can this run
+  // withhold that text". A `true` would be the same lie in a smaller costume.
+  add: () => false,
   scrub: (input) => ({ out: input, count: 0 }),
   size: () => 0,
+  refused: () => 0,
 };

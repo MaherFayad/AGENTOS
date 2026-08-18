@@ -342,6 +342,15 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
           'langfuse.trace.metadata.dry_run': Boolean(init.dryRun),
           'langfuse.trace.metadata.cost_source': costSource,
           'langfuse.trace.metadata.redactions': hits.length,
+          // How many literals this run was told to withhold and could not accept, for
+          // capacity. **Absent when zero**, which is every ordinary run — `attributes()`
+          // drops undefined, so no existing trace shape changes and the key's presence is
+          // itself the signal. Nonzero means the run held client text the register could not
+          // scrub, and it is on the trace rather than in a log nobody reads: the bound used
+          // to be crossed by silently evicting the oldest literal, which reduced protection
+          // and reported nothing. It is a count of strings, never a string.
+          'langfuse.trace.metadata.withheld_refused':
+            withheld.refused() > 0 ? withheld.refused() : undefined,
           ...scope,
         },
       });
@@ -369,9 +378,16 @@ export function createInstrumentation(deps: InstrumentationDeps): Instrumentatio
      * `bodyChars` count and deliberately no body. The register never learns the body that
      * way, so an error string composed from it a second later is not matched. One call at
      * the point the body is read closes it; see the handoff for the call site.
+     *
+     * **Returns whether this run can now withhold it.** `false` means the opposite of what
+     * calling this asks for: the text is not registered, and an error string composed from it
+     * will carry it. That happens below `MIN_LITERAL` (the stated floor) and at the register's
+     * capacity (counted, and reported on the root span as `withheld_refused`). It used to
+     * return `void` while silently evicting an older literal to make room, which is the
+     * fail-open `rtl-arabic-pdpl-specialist` found on 2026-08-18.
      */
-    function withhold(text: string): void {
-      withheld.add(text);
+    function withhold(text: string): boolean {
+      return withheld.add(text);
     }
 
     return { runId, traceId, traceUrl, tool, usage, event, withhold, finish };
