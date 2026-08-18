@@ -319,7 +319,54 @@ async function checkDecisions() {
   }
 
   if (count === 0) fail('comms/decisions/ contains no ADRs.');
+  await checkAdrsAreRegistered(numbers);
   return count;
+}
+
+/**
+ * Every ADR on disk must be registered on BOARD.
+ *
+ * **An unregistered ADR is a number the next agent computes as free**, and it is worse than
+ * an unwritten one because the collision is silent from both sides: the register looks
+ * complete and the directory looks authoritative. This repo has now produced that state
+ * three times — the double-ADR-012, then ADR-035 (accepted and landed, absent from the
+ * table), then 006/007/008, three accepted decisions from 2026-08-15 that were listed
+ * nowhere until 2026-08-18. BOARD's own rule is *"claim the number on BOARD before writing
+ * the file"*, which had no enforcer; this is it.
+ *
+ * The near-miss that makes it a FAIL and not a warn: ADR-036 (erasure **and retention**) was
+ * written while ADR-008 (retention) was invisible on the board. A duplicate decision was
+ * avoided only because its author read `decisions/` directly instead of trusting the
+ * register — the board was the unreliable instrument, not the directory.
+ *
+ * **Both spellings are accepted, and that is the load-bearing part of this function.** BOARD
+ * uses two formats in one document: `ADR-036` in prose and a bare `| 036 |` row in the
+ * register table. A check written for only the first reports three false positives, which is
+ * exactly what happened when this was first run by hand — *a substring is a claim you did not
+ * narrow*, committed while writing the finding about it. Matching the union is why this can
+ * be a FAIL rather than a warn nobody trusts.
+ */
+async function checkAdrsAreRegistered(numbers) {
+  if (numbers.size === 0) return;
+  let board;
+  try {
+    board = await readFile(join(COMMS, 'BOARD.md'), 'utf8');
+  } catch {
+    return; // checkStatus already fails loudly if BOARD is unreadable.
+  }
+  for (const [num, file] of [...numbers].sort()) {
+    const inProse = board.includes(`ADR-${num}`);
+    const inRegister = new RegExp(`^\\|\\s*${num}\\s*\\|`, 'm').test(board);
+    if (!inProse && !inRegister) {
+      fail(
+        `comms/decisions/${file} is not registered on BOARD.md. An unregistered ADR is a ` +
+          `number the next agent computes as free — that produced the double-ADR-012 and ` +
+          `nearly duplicated ADR-008 into ADR-036. Add it to the register table (a "| ${num} |" ` +
+          `row) or to the cross-cutting-questions list, then claim numbers there BEFORE ` +
+          `writing the file.`,
+      );
+    }
+  }
 }
 
 async function checkStatus(roster) {

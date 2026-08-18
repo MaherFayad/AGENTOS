@@ -956,6 +956,21 @@ Answer these as ADRs before the milestone that depends on them.
 - [x] `M6` The six Command Centers for *our* stack (§2.4 "Ours:") → **[ADR-004](decisions/ADR-004-command-centers.md)** accepted. The set is fixed before any `panels/*.json` is written, because a seventh center or a rename is a rail-order change in six files (§2.5.6).
 - [x] `M4` The two crypto/push runtime dependencies ADR-005 named → **[ADR-010](decisions/ADR-010-sessions-runtime-deps.md)** accepted. `tweetnacl` + `web-push` in `apps/web/package.json` only; the honest fallbacks stay until each swap is verified.
 - [x] `M0` An agent that produces a deliverable must declare a connector that can write one → **[ADR-009](decisions/ADR-009-artifact-write-capability.md)** accepted (`agent-library-curator`).
+- [x] `M1` d3-force is not deterministic and ADR-003 requires determinism → **[ADR-006](decisions/ADR-006-deterministic-force-engine.md)** accepted (`map-galaxy-engineer`). The build-time solver is ours; `d3` stays client-side. `forceLink`/`forceCollide` call an internal `jiggle()` of `(Math.random() - 0.5) * 1e-6`, so "run it twice, diff it" could never have held with d3 at build time.
+- [x] `M3` The Second Brain write-back boundary → **[ADR-007](decisions/ADR-007-brain-write-back.md)** accepted (`runner-engineer`). A second, equally narrow write boundary, amending ADR-002 — the runner's git writes touch `agents/` only, enforced by a path check, so a prompt-injected agent cannot commit to `apps/`.
+- [x] `M3` Observability retention windows → **[ADR-008](decisions/ADR-008-observability-retention.md)** accepted (`observability-engineer`), **human-confirmed 2026-08-15**: `ops.agent_run_tools` 90d · `ops.agent_runs` 400d · `ops.agent_run_daily` forever · `app.agent_outputs` never pruned (business rows are product, not telemetry) · Langfuse retention matched to the span table so the two stores never disagree about what still exists. **[ADR-036](decisions/ADR-036-erasure-and-retention.md) builds on this, it does not replace it.**
+
+> **006, 007 and 008 were on disk and registered nowhere until 2026-08-18** — three accepted
+> decisions, all from 2026-08-15, absent from this list, from the register table below and
+> from `decisions/README.md`. That is the same state that produced the double-ADR-012 and
+> that `observability-engineer` had just found on ADR-035. **An unregistered ADR is a number
+> the next agent computes as free**, and it is worse than an unwritten one: the collision is
+> silent on both sides. `check-comms.mjs` now fails on it.
+>
+> The near-miss is worth recording. ADR-036 (erasure **and retention**) was written while
+> ADR-008 (retention) was invisible here — a duplicate was avoided only because its author
+> read `decisions/` directly instead of trusting this board. The board was the unreliable
+> instrument, not the directory.
 - [ ] `M3` Runner auth to Langfuse — `LANGFUSE_INIT_*` passthrough so the runner gets real keys instead of a null sink. Agent work, in flight: `infra-compose-engineer` offered it, `runner-engineer` asked for it (`inbox/infra-compose-engineer/20260816-2121-runner-engineer-langfuse-init-passthrough.md`). The *billing* half of this question — which capped workspace holds the monthly cap — is the user's and moved below.
 - [ ] Any `deliver:` target that leaves the tailnet is a data-egress decision needing its own ADR (Part VII.4) — `rtl-arabic-pdpl-specialist`. **M15 widens this:** `Plan §9`'s `library_remote` implies the coordinator may `git clone`/`git push` a project library. A git remote leaving the tailnet is the same class of event as a `deliver:` target. Answer it inside this ADR, not separately.
 - [x] `M15` **Is Part Two spec?** → **[ADR-013](decisions/ADR-013-part-two-standing-and-spec-coverage.md)** accepted. It is a plan that amends the spec; the coverage gate stays pointed at the spec of record and keeps its exact current meaning. Also rules the ADR-numbering collision, and the boundary between `agent-cascade.md` and `project-scoping.md`.
