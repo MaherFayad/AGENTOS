@@ -750,10 +750,21 @@ contract because each one contradicts something a slice owner would otherwise re
    else edits it), routed as a message. **Nothing built against §4.1 changes.**
 2. **`ops.agent_runs.thread_id` ships nullable on purpose.** Not an oversight and not a
    TODO. `NOT NULL` on a column ahead of its writer **is exactly M15's ledger defect** — a
-   constraint the only writer cannot satisfy. `recordRun` is untouched, so today the column
-   exists and nothing writes it. `thread-model.md` §5.3 carries the argument and the test that
-   forces the column and its writer to move together. `observability-engineer` reads this
-   column across 34 metrics endpoints and LAST RUNS: **it is empty, honestly.**
+   constraint the only writer cannot satisfy. `thread-model.md` §5.3 carries the argument and
+   the test that forces the column and its writer to move together.
+
+   **Amended 2026-08-18: the writer has since landed, and the distinction matters.** This row
+   said *"`recordRun` is untouched, so the column exists and nothing writes it"*, and it was
+   read back that way twice afterwards — by the orchestrator, and out loud to the user. It is
+   no longer true: `db/ledger.ts:79` names `thread_id` in its `INSERT` and
+   `lib/runService.ts:233` supplies it, so the path exists end to end. Caught by
+   `fidelity-qa-reviewer` at the M16 re-gate, against a brief that repeated the stale version.
+
+   **"No writer" and "an unexercised writer" fail differently, and only one of them is fixed
+   by a run.** A missing writer stays missing however many runs execute; an unexercised one is
+   discharged by the first. Collapsing them would have put this column on the wrong list of
+   things Phase 0 unblocks. It is still empty, honestly — because zero runs have executed, not
+   because nothing writes it.
 3. **`#sales` "1 run" is a lower bound, not a figure.** The department lead answers *or
    delegates*, and a delegation is a second run. So even the non-fan-out case has no exact run
    count, which sharpens Hazard 1 rather than softening it: the composer may print a **bound**
