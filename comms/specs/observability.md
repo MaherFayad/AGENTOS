@@ -96,11 +96,14 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
     `key: value` inside strings. Blunt in the safe direction: a value runs to the next
     `·`, `;`, `|` or newline and **not** to the next comma, because
     `address: 12 King Fahd Road, Riyadh` must not leave `Riyadh` behind.
-14. **The project attribute is a selector, and a selector is not erasure.** PDPL rule 7
-    needs an *operation* that finds and removes one subject's data across artefacts,
-    traces and Postgres. What §3.5 has after this change is the handle to select on, at
-    **project** granularity, and no delete verb anywhere in the repo for the trace store.
-    See *Erasure* below; it is written as an open item on purpose.
+14. **The project attribute is a selector, and a selector is not erasure — but a missing
+    selector is worse, because deletion presupposes selection.** PDPL rule 7 needs an
+    *operation* that finds and removes one subject's data across artefacts, traces and
+    Postgres. What §3.5 has is the handle to select on at **project** granularity (tier 1)
+    and, in `ops.message.author`, at **author** granularity (tier 2); no delete verb exists
+    for either. **Tier 3 — a third party named inside free text — has no selector at any
+    price, and a delete verb does not fix it** (ruling, 2026-08-18). See *Erasure* below; it
+    is written as a stated limit, not an open item, and the difference is the point.
 15. **A thread is a filter on the run plane, never a second aggregation model**
     (`Plan §12`, ADR-023). ADR-023 rejected making the thread the traced unit on
     *one run, one trace* alone, and that assumption is untouched: a thread spanning four
@@ -187,7 +190,9 @@ Compose / Langfuse image pins are **not** this spec. Infra owns `infra/`.
 | REQ-OBS-38 | §3.5 | The run ledger row **stores** `thread_id` — the INSERT names the column *and* binds the value — so a thread's runs are answerable from the table every number is read from | `apps/runner/src/db/ledger.ts` *(`runner-engineer`'s writer; landed during M16)* · `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
 | REQ-OBS-39 | §3.5 | Every span of a threaded run carries `agnetos.thread.id` and its trace carries `langfuse.trace.metadata.thread`; a run with **no** thread emits neither key rather than an empty one | `apps/runner/src/observability/instrument.ts` · `apps/runner/src/observability/langfuse.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
 | REQ-OBS-40 | §3.5 | `SpanScope`'s required set tracks the ledger's NOT NULL set — a migration making `ops.agent_runs.thread_id` NOT NULL fails the gate until `agnetos.thread.id` stops being optional | `apps/runner/src/observability/langfuse.ts` | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
-| REQ-OBS-41 | §3.5 | An `ops.message` body never becomes a span attribute — the projection is a type with no field it could arrive in, and the redactor is demonstrably **not** a fallback for free text | `packages/contracts/src/threads.ts` *(`messageSpanAttributes`, `thread-model-engineer`'s — consumed, not owned)* | `apps/runner/src/observability/__tests__/threads-observability.test.ts` |
+| REQ-OBS-41 | §3.5 | An `ops.message` body never becomes a span attribute — the projection is a type with no field it could arrive in, and the redactor is demonstrably **not** a fallback for free text | `packages/contracts/src/threads.ts` *(`messageSpanAttributes`, `thread-model-engineer`'s — consumed, not owned)* | `apps/runner/src/observability/__tests__/threads-observability.test.ts` · `apps/runner/src/observability/__tests__/message-body-never-traced.test.ts` *(`rtl-arabic-pdpl-specialist`'s — the projection was **opt-in** until it existed)* |
+| REQ-OBS-42 | §3.5 | Text a run is told to withhold is scrubbed from **every** string it emits — span attribute, ledger column, activity line and **error message** — whole or in a 32-character window, because §9.3 refuses truncation by name | `apps/runner/src/observability/withhold.ts` · `apps/runner/src/observability/redact.ts` · `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/withheld-text-never-traced.test.ts` |
+| REQ-OBS-43 | §3.5 | A body seen once under a denylisted key is withheld for the rest of that run, whatever container it arrives in next — and the register is **per-run**, so one client's text never scrubs another's trace | `apps/runner/src/observability/redact.ts` · `apps/runner/src/observability/instrument.ts` | `apps/runner/src/observability/__tests__/withheld-text-never-traced.test.ts` |
 
 ## Interfaces we expose
 
@@ -302,15 +307,28 @@ Anything not listed is private.
   the reasoning, under *Retention*. The number is the human's.
 - **Erasure itself.** Below.
 
-## Erasure (PDPL rule 7) — the selector landed; the operation did not
+## Erasure (PDPL rule 7) — three tiers, two of which a delete verb reaches
 
 Recorded here rather than in a handoff, because the next person to read "traces carry a
 project now" will otherwise read it as this being solved.
 
+**Which planes this table speaks for, stated first because it used to be assumed.** The
+ledger, the tool-call rows, `app.agent_outputs`, the Langfuse traces, the artefact directory,
+`ops.thread` and `ops.message` — the planes this repo stores data in. It does **not** speak
+for the model endpoint. `lib/prompt.ts` renders every prior turn's `body` into the user
+prompt, and this repo asserts no processing region for that endpoint — there is no region or
+base-URL configuration in `apps/runner` at all — so a message body leaves the tailnet the
+moment a thread takes a second turn (`thread-model.md` §7.1, corrected 2026-08-18). Rule 7's
+*"traces stay local"* is true and answers for **this** plane, not for the plane carrying the
+words. Cross-border transfer under PDPL Arts. 29–31 is `rtl-arabic-pdpl-specialist`'s
+data-egress ADR, it needs the human, and **nothing in this file settles it**. An erasure
+table that quietly implied it covered every path the text takes would be the house defect in
+its costliest costume.
+
 **Can we name an operation that finds one subject's data across artefacts, traces and
-Postgres, and does it terminate?** At **project** granularity: nearly — three of four
-planes have the selector, one has no delete verb. At **subject** granularity: no, and the
-reason is structural rather than a missing feature.
+Postgres, and does it terminate?** At **project** granularity: nearly — every plane has the
+selector, none has a delete verb. At **subject** granularity the answer splits in two, and
+that split is the 2026-08-18 ruling; see the tier table below.
 
 | Plane | Select by project? | Delete verb exists? |
 |---|---|---|
@@ -318,7 +336,15 @@ reason is structural rather than a missing feature.
 | `app.agent_outputs` | yes — `project_id` in the unique index | same |
 | Langfuse traces | **yes** — `langfuse.trace.metadata.project` + `agnetos.project.id` on every span | **no.** Nothing in this repo calls a Langfuse delete endpoint. We can now *find* them and cannot *remove* them |
 | Artefacts on disk | **yes, as of `7b6401d`** — `<artifactsRoot>/<project>/<runId>/`, and an old-layout directory is *refused*, never adopted (`runner-engineer`, REQ-RUN-42/43, new code `artifact_unattributed`) | **no.** A per-project directory now exists to remove and nothing removes it — `rm -rf` of a real path, unwritten |
-| `ops.thread` · **`ops.message`** | yes — `project_id` NOT NULL on both, FK-pinned, RLS'd (`0008_threads.sql` §5) | **no**, and `ops.prune` is deliberately not extended to them — see *Retention* |
+| `ops.thread` · **`ops.message`** | yes — `project_id` NOT NULL on both and FK-pinned (`0008_threads.sql` §5) | **no**, and `ops.prune` is deliberately not extended to them — see *Retention* |
+
+*(The `ops.thread` / `ops.message` row said "NOT NULL, FK-pinned, **RLS'd**" until 2026-08-18.
+Two of those three mechanisms fire on the only stack that exists; RLS does not, because
+compose's Postgres user is a superuser and a superuser bypasses RLS unconditionally —
+`GET /api/status` reports `projects.scopeEnforcement: "bypassed"`, and `thread-model.md` §8b
+grades every mechanism in `0008` this way. The conclusion was never wrong — the `WHERE`
+clause carries it — but the sentence listed three enforcers where two are running, which is
+a declared value read as an observed one. Cited, not concluded from, per §8b.)*
 
 *(The artefacts row said **no** until 2026-08-17 and was wrong at `eaca677`: the project
 segment landed one commit later at `7b6401d`. Corrected on `commandcenter-orchestrator`'s
@@ -350,28 +376,83 @@ no keys to deny, so `redact()` returns a sentence naming a client with **zero hi
 
 So the sentence *"for every field the rules catch, erasure is satisfied by construction"*
 is still true and no longer sufficient, because at `ops.message` the rules catch nothing by
-design. The position moves:
+design.
 
-| | Before `ops.message` | At `ops.message` |
-|---|---|---|
-| Project-level erasure | terminates — bounded by one project's rows, traces and directory | **still terminates.** `project_id` is NOT NULL, FK-pinned and RLS'd from the first migration that created the table |
-| Subject-level erasure | *unanswerable because we minimised* — the strongest answer available | **unanswerable because no delete verb exists** — a weak one, and a different sentence entirely |
+### The three tiers — `rtl-arabic-pdpl-specialist`'s ruling, 2026-08-18, and the table is mine
 
-The trace plane is unaffected and that is the one thing here that is load-bearing rather
-than regrettable: **a message body never becomes a span attribute** (decision 17,
-REQ-OBS-41), so nothing this weakening touches has leaked into Langfuse. The exposure is
-Postgres, and it is one table.
+The standing finding on this page was *"erasure has no delete verb in any plane"*, and it was
+one step short in a way that changes what to build. **Deletion presupposes selection.** Split
+on that, subject-level erasure is not one problem but three, and a `DELETE` landing tomorrow
+answers two of them:
+
+| Tier | Unit | Selectable today? | Executable today? | Does a delete verb fix it? |
+|---|---|---|---|---|
+| **1** | a **project** | **yes** — `project_id` NOT NULL and FK-pinned on every table, `metadata.project` on every trace, one directory on disk | no | **yes.** One `DELETE` per table, one API call, one `rm -rf` |
+| **2** | an **author's own words** — `ops.message.author = 'human:{identity}'`, plus `thread_id` and `message.id` | **yes** — `author` is NOT NULL and its grammar is fixed (`0008` §4), so *"everything Maher wrote"* is a `WHERE` clause | no | **yes.** Same verb, a different predicate |
+| **3** | a **third party named inside a body** | **no, at any price** | no | **no** |
+
+**Tier 3 is the ruling and it is why this table is written as a limit rather than a roadmap.**
+*"Chase Fatima Al-Harbi about the Olaya lease"* is a data subject who never touched this
+system, stored in full, with nothing to select on. Full-text search is a guess whose false
+negatives nobody can count — a misspelling, a nickname, an Arabic rendering, a pronoun — and
+**an erasure that cannot be proven complete is not an erasure**. So the honest sentence is
+not *"we cannot execute erasure yet"*. It is that for text a human typed, **deletion is not
+the mechanism that discharges the obligation; not accumulating it is.**
+
+That makes four decisions elsewhere load-bearing rather than tidy, and **they may not be
+relaxed for convenience** (`thread-model.md` §9.3): §9.6 no thread title (it would have put a
+truncated body in every list payload), §5.2 `payload` is an object and never prose,
+contentless push, and `messageSpanAttributes` having no `body` field. Each was argued on other
+grounds; each is now doing PDPL work, and each is minimisation — which is the only tier-3
+mechanism there is.
+
+**v1 ships tier 1, stated rather than gapped.** Tier 2 is buildable from the same verb and is
+not in v1 because no row exists to delete. Tier 3 ships as a written position.
+
+### The trace plane, and what its "by construction" argument now rests on
+
+The trace plane is unaffected by the `ops.message` weakening, and that is load-bearing rather
+than regrettable: **a message body never becomes a span attribute** (decision 17, REQ-OBS-41),
+so nothing this weakening touches has leaked into Langfuse. The exposure is Postgres, and it
+is one table.
+
+**But that argument used to rest on a call site's good manners, and now it rests on a gate.**
+`messageSpanAttributes` was the sanctioned projection and was **opt-in**; on 2026-08-18
+`rtl-arabic-pdpl-specialist` measured `trace.event('mailbox-read', message)` putting the body
+verbatim into the OTLP payload in **three** places with zero redaction hits. Two mechanisms
+now hold it, and this page cites them rather than the claim:
+
+- `apps/runner/src/observability/__tests__/message-body-never-traced.test.ts` — the key
+  backstop (`body` and four siblings on `KEY_DENYLIST`), catching a message-shaped object at
+  any depth under any entry point.
+- `apps/runner/src/observability/__tests__/withheld-text-never-traced.test.ts` +
+  `observability/withhold.ts` — the **withheld-literal register**, which is the only pass that
+  survives flattening and interpolation. `` `halted: ${message.body}` `` is a `string` by the
+  time any signature sees it, so no type reaches it and no value rule should try; characters
+  are the only handle left. A registered literal is scrubbed from every string this run emits,
+  whole or in a 32-character window — §9.3 refuses truncation **by name**, so a mechanism that
+  missed `body.slice(0, 40)` would miss the case the ruling anticipates.
+
+**What that register still cannot do, asserted as a passing test rather than a TODO:** a run
+that was never told a literal is client text still emits it. It is a register, not a
+classifier. The automatic half needs no call site (a body seen once under a denylisted key is
+remembered for the rest of that run); the sanctioned mailbox path never shows the body to the
+redactor at all, so it needs one `trace.withhold(message.body)` at the drain — filed to
+`runner-engineer`, **not landed**.
 
 **Owners:** the PDPL ruling is `rtl-arabic-pdpl-specialist`'s (`thread-model.md` §9.3); this
 table is mine. **A delete verb gets its own ADR before its first line of code** — erasure is
 destructive, the number it needs is the human's, and writing one into a migration nobody
-asked to review is how an irreversible capability arrives without a decision behind it.
+asked to review is how an irreversible capability arrives without a decision behind it. That
+ADR is **[ADR-036](../decisions/ADR-036-erasure-and-retention.md)**, claimed on BOARD before
+the file was written, and it carries the retention horizon in the same document for the reason
+given there.
 
 So the only erasure unit this architecture can actually execute is **the project** — erase
 everything for that client, or demonstrate the subject's data was never in the trace store.
 That terminates: it is bounded by one project's traces, one `DELETE` per table, and one
-directory. Subject-level does not, and no attribute added later fixes that without
-un-minimising the traces, which would be the wrong trade.
+directory. Tier 2 terminates the same way once the verb exists. Tier 3 does not terminate and
+no attribute added later fixes it.
 
 **What is missing, in the order it should land:**
 
@@ -380,14 +461,24 @@ un-minimising the traces, which would be the wrong trade.
    the gap that makes the whole chain non-executable today.
 2. **Artefacts under `artifactsRoot/<project>/<runId>/`** — `runner-engineer`, in flight
    from the same sign-off. Until then the durable bytes have no project handle at all.
-3. **`DELETE FROM … WHERE project_id = $1`** for `ops.agent_runs`, `ops.agent_run_tools`
-   and `app.agent_outputs`, behind one named operation rather than three ad-hoc statements.
+3. **`DELETE FROM … WHERE project_id = $1`** for `ops.agent_runs`, `ops.agent_run_tools`,
+   `app.agent_outputs`, `ops.message` and `ops.thread`, behind one named operation rather
+   than five ad-hoc statements. **Tier 1.**
 4. An answer to **what `app.agent_outputs.payload` erasure means per `kind`** — that
    table holds business rows a client is entitled to have deleted, and "delete the whole
    project" is the only granularity anyone has specified.
 5. **Whether a Langfuse trace deleted through its API is actually gone** from its Postgres
    *and* its ClickHouse/blob storage. Unverified, and it is the difference between
    erasure and a hidden row.
+6. **`DELETE … WHERE project_id = $1 AND author = $2`** — **tier 2**, the same verb with one
+   more predicate, and deliberately *after* tier 1 rather than alongside it. A per-author
+   delete that ran before the project-wide one existed would be the narrower blast radius
+   shipping first, which sounds prudent and is how the wide one arrives later untested.
+
+**Not on this list, and that is the ruling:** anything that would find a third party named
+inside a body. No item can be written for tier 3 — not a full-text index, not an entity
+extractor, not a "PII scan" job. Each of those produces a number nobody can audit and a
+report that reads like completeness, which is worse than the empty list above.
 
 Items 1, 3 and 4 are mine. None of them is in M15's scope and none should be smuggled in:
 each one is a destructive operation and the first destructive operation in this product
@@ -422,8 +513,15 @@ operational question and it is not answered by pretending it is a retention ques
 |---|---|
 | Horizon | **none.** Nothing deletes a thread or a message |
 | Why not a number now | any figure I pick is a plausible number on a surface with no data to derive it from — zero threads exist, zero messages, zero runs. The same rule that types `TurnCost.estimatedUsd` as `null` |
-| What it needs | **the human**, one number, in an ADR. Erasure and retention are the product's first destructive operations and they arrive together or not at all |
+| What it needs | **the human**, one number, in **[ADR-036](../decisions/ADR-036-erasure-and-retention.md)** — claimed on BOARD 2026-08-18, `proposed`. Erasure and retention are the product's first destructive operations and they arrive together or not at all |
 | Meanwhile | the exposure is bounded by the fact that nothing writes either table yet |
+
+**Why the horizon is in the same ADR as the delete verb, since splitting them keeps being
+proposed.** They share an enforcement point, a blast radius and a review. Split, the
+irreversible half acquires a default six weeks later in a migration nobody read — which is
+exactly how `ops.prune`'s 90 days would arrive on `ops.message` under the honest-sounding
+heading *"align thread retention with span retention"*. One document, one review, one human
+number.
 
 Filed as a decision-request rather than a default. **An unbounded table that says so is an
 operational task; an invented 90-day horizon on a client's conversation is a data-loss
