@@ -1,46 +1,46 @@
 # status — rtl-arabic-pdpl-specialist
 
-**Updated:** 2026-08-18T03:45
-**Milestone:** M16 — `thread-model.md` §9.3 PDPL ruling · M8 ongoing
+**Updated:** 2026-08-18T22:25
+**Milestone:** M16 — §23.11 rule-6 pass over the threads surfaces · ADR-038 · M8 ongoing
 **State:** review
 
 ## Now
-**§9.3's ruling half is closed, and the §7.2 flattening finding is a gate instead of a fifth
-paragraph.** Ruling: v1 ships **project-level erasure only**, stated not gapped. The framing
-correction is that **selection precedes deletion** — tier 1 (project) and tier 2 (author) are
-selectable and not executable, and **tier 3, a third party named inside free text, is not
-selectable at any price and no delete verb fixes it**. So minimisation is load-bearing, not tidy.
-Derived planes are erasure-**by construction** (traces, metrics, ledger, push) — with one row I
-added: **the model is a processor and a thread's history reaches it verbatim**, and this repo
-asserts no processing region for that endpoint. *"Traces stay local"* answers for the
-observability plane only.
-**§7.1 had no enforcer.** Measured: `trace.event('mailbox-read', message)` +
-`trace.tool(…).ok(message)` put the body **verbatim into the OTLP payload in three places**,
-`hits: []`, nothing red. `messageSpanAttributes` was real and **opt-in** — it held because one
-call site had good manners. Backstop landed (`body` + 4 on `KEY_DENYLIST`, disclosed to the file
-owner) plus `message-body-never-traced.test.ts`, 7 tests. Falsified: keys removed → 4 red; the
-2 known-gap tests correctly stay green.
-**Two inert claims found and fixed:** `COMPANY.md` rule 7 asserted a working erasure capability
-(false, inherited by every run), and **REQ-RTL-12's verification could not see it** — it asserted
-four unrelated strings. Its checker now normalises whitespace, because the first draft went red
-only on a line wrap, and a phrase-checker that fails open on rewrap is blind in the safe-looking
-direction.
+**The rule-6 pass is done and it found one measured defect, not an opinion.** In `dir="rtl"`,
+`threads.compose.placeholder` rendered as `… · @@sales@` — the leading `@` is a bidi neutral
+at paragraph start, so it detached and landed at the far end of the Latin run. **`@sales` lost
+its sigil and `@@sales` appeared to gain one**, in the one field where the sigil is the
+difference between one run and N. Measured per character in headless Chrome, not derived from
+UAX #9. Fixed with `⁨…⁩` and gated in `i18n.test.ts`.
+**The interrupt radio group was the fourth site of the M15 arrow-key class** — a
+`role="radiogroup"` of buttons with **no key handling at all**, while its own comment argued
+from what arrow keys do to a `disabled` radio. `inlineStep` + roving tabindex; arrows now land
+on the refused `steer` without selecting it, which is what `aria-disabled` was for.
+**Four of `drawer-engineer`'s seventeen Arabic strings changed** — all word choices, none
+guesses. Their call to write rather than file seventeen `todo()`s was right; the ceiling of 5
+stays, and two agents hitting it and both routing copy to me *is* the ceiling working.
+**PDPL:** ADR-036's table is honest in its hardest column and wider than its evidence in two
+cells — **an author is not a data subject** (they are tier 3 for what others wrote about
+them) and **a backup is a fourth store no `DELETE` reaches**. Both are now in `COMPANY.md`
+rule 7, gated, falsified — one file, every run inherits it. `withhold.ts` is the right
+mechanism and its `MAX_LITERALS` eviction is a **fail-open** its blind-spot list does not
+name; asserted as a known gap in my file, filed to its owner.
+**ADR-038 (egress) is filed `proposed`.** `deliver:` carries references never bodies;
+`library_remote` stays `NULL`; **the model endpoint is the human's question** and deriving a
+region from SDK docs is refused by name.
 
 ## Blocked on
-nothing. `db/threads.ts:175` does not parse (backticks inside a SQL template literal, 15 runner
-suites red) — **not mine**, routed to `thread-model-engineer` with the diagnosis.
+nothing. ADR-038's open half needs the human: whether a DPA exists for the runner's key, and
+what region it names. Neither is derivable and no agent may invent one.
 
 ## Last handoff
-`comms/handoffs/M15-rtl-arabic-pdpl-specialist-checker-counts-what-it-names.md`
-(this dispatch is a ruling + a routed request + a gate; no handoff by design)
+`comms/handoffs/M16-rtl-arabic-pdpl-specialist-the-rule-6-pass-and-the-egress-adr.md`
 
 ## Next
-1. **§23.11 rule-6 pass over the new M16 surfaces** — THREADS view, composer, `thread-feed`,
-   tab slot. Deferred deliberately: four agents were in those files during this dispatch.
-2. The egress ADR, now **three** things not two: `deliver:` · `library_remote` · **the model
-   endpoint's unasserted region**. Needs the human.
-3. `components/shell` — 91 findings, the largest module and now fully visible.
-4. Empty states in both languages · light-theme parity · mobile QA (M8 core).
+1. `components/shell` — 91 `check-rtl` findings, the largest module.
+2. **M8 core:** light-theme parity · edge pulses · count-up numbers · mobile QA. Empty states
+   are done for the threads surfaces only.
+3. `panels/*.json` — 151 English strings, the largest untranslated surface, outside the walk.
+4. `Carousel.tsx` still carries the M15 arrow-key defect (`dashboards-engineer`'s).
 
 <!-- Overwrite this file each session. Under 30 lines. History lives in git and in
      handoffs/, not here. -->
