@@ -1,78 +1,71 @@
 # status — fidelity-qa-reviewer
 
-**Updated:** 2026-08-18T23:05
-**Milestone:** M16 — the §23.11 rule-6 pass graded **PASS**
-**State:** review
+**Updated:** 2026-08-19T23:45
+**Milestone:** M17 and M18 — re-gate run; **both PASS**
+**State:** idle
 
 ## Now
 
-**M16's last open item is graded and M16 flips.** `rtl-arabic-pdpl-specialist`'s rule-6 pass
-(`20260818-2225`) is **PASS** — answered and archived. It was **not** scoped out: §23.11 rule
-6, `Plan §22` and §21.8 put it inside the milestone and M15 set the separate-artefact
-precedent.
+**Both milestones clear. `commandcenter-orchestrator` may flip M17 and M18 on BOARD.**
+Verdicts are the `## Answer` blocks on `20260819-2250-drawer-engineer-…` (M17) and
+`20260819-2235-runner-engineer-…` (M18). Nothing in my queue is ungraded: my inbox is eight
+messages, six `answered`/`closed` before tonight and the two above answered now.
 
-- Verdict: `comms/handoffs/M16-fidelity-qa-reviewer-the-rule-6-pass-verdict.md`.
-  **`comms/verdicts/` still does not exist — four verdicts now cite it.**
-- **The bidi placeholder fix is the strongest artefact in M16.** I derived it rather than
-  taking the measurement: UAX #9 **N2** moves the leading `@` (neutral, R→L, at `sor`=R);
-  **N1** leaves the interior `·`/`#`/`@@` (L→L) alone. One sigil detaches, the others cannot —
-  which is exactly why the two misread tokens are the two that mean different money. The gate
-  scans the whole catalogue (`Object.entries(ar)`), so later strings are covered.
-- **The jsdom ruling holds: do not split the test.** Re-declared, not re-graded. The
-  `AddressComposer` keyboard work stays graded at `0351add`, not re-graded here.
-- **ADR-038 graded as `proposed`**, and its **refusal of option D is the better half** — in
-  the options table, by name, reasoned as the house defect, so a later agent must overturn it
-  in writing rather than fill a blank.
+- **M17 surface — PASS.** All three findings fixed, plus the `onClose`-in-deps defect the
+  author found. `focus-trap.ts:64` is `closest('[inert]')`; the review has its own trap
+  scoped to `reviewing`; the diff is windowed through the **existing**
+  `sessions/lib/virtual.ts`. **No `.css` file appears in any of the four commits**, so
+  nothing I graded on proportion, radius, tracking or density moved.
+- **M18 — PASS.** Fixed at the source: `nextMatchAt`, `firedBy: ScheduleFiredBy` (a union, so
+  widening it fails `tsc` at the sentence), server-authored `executionNote`. The consumer no
+  longer reaches the honest branch by *absence* of a key — `data/client.ts` returns the
+  contract's type and `format.ts` takes `Pick<ScheduleResponse,'executionNote'>`.
 
-**Three follow-ups, none blocking:** (1) ADR-038 cites `0007_projects.sql`; the constraint is
-`0005_project_axis.sql:75` and 24 citations across 20 comms files say so — fix before a human
-reads the ADR. (2) `i18n.test.ts:78` skips `todo()` entries, which render **English inside the
-RTL paragraph**; four current todos are clean but `threads.address.default` is one. (3)
-`rtl.css:238`'s `.u-auto` is unused and its name claims `dir="auto"` semantics (`plaintext`)
-that `inherit`+`isolate` does not have — the same class as the comment just corrected.
+**I closed the live-DOM half I said I would.** `drawer-engineer` was right that jsdom
+implements neither `inert` nor Tab, and that nothing in the repo asserted the browser agrees
+with `focusables()`. I built a CDP probe **outside the repo** (session scratchpad only —
+never `apps/`, `packages/` or `scripts/`), booted the dev server, drove headless Chrome at
+1440×900 and fulfilled `*work-product*` over `Fetch.requestPaused`, since Docker is down and
+there is no thread store. Chrome: focus enters the review; **all 18 controls under `[inert]`
+refuse focus**; 24 forward Tabs and 12 Shift+Tabs never leave the overlay; Esc closes the
+review only and returns focus to the `Review` pill; ring is `2px solid rgb(236,236,238)`; 0
+console errors. On a 20×400 page: **44 rows mounted of 8,000**, `scrollHeight` 159,730, and
+the end of the scroll is `const v19_399 = 399;` — the last line of the last file.
 
-**Gated by me on a still tree at `d808fb2`, 22:55–23:00 +03:00.** `validate:tokens` 0
-violations, banner `scanned at 2026-08-18 22:57 +03:00 · d808fb2 · clean`, 337 files ·
-`validate:rtl:gate` **holding 308** · `test:web` both halves green. I did **not** re-run
-`verify`/`smoke`/`smoke:browser` — run twice at `4337eb6` by the author and the orchestrator,
-and the browser green **printed its NOTE: 66 backend absences**, which is why none of it is
-evidence about a running backend.
+**The probe was seen failing before it was believed.** My first run matched the wrong control
+and reported the pre-fix shape back at me — focus stuck on the pill, Tab escaping 24/24. A
+green from an instrument I had never watched go red is the standing finding wearing a fourth
+costume, and I am not issuing one.
 
-**The 1440px side-by-side has still never been run, on any milestone.** Reference frames are
-with the user — still the only remaining half of the Part VI bar. This dispatch's commits
-touch **no CSS at all**, so nothing about proportion, tracking or density moved.
+**Hypothesis I chased and disproved, recorded so nobody re-chases it:** I expected windowing
+to draw a `.diffFile` border + 12px margin mid-file, asserting a file boundary that does not
+exist. 37 scroll positions, 3 hits, all three the *real* file-0/file-1 boundary — at
+`scrollTop 7000` the window spans `v0_380`→`v1_26` and renders `src/file-1.ts`'s header.
+Overscan keeps the window edge off-screen. Not a finding.
+
+**Follow-ups, none blocking:** (1) **sticky file-path header on the diff screen** — confirmed
+live that scrolling inside one 400-line file leaves no path on screen, but the all-rows
+rendering did the same, so it is inherited, not introduced; highest-value ticket here. (2)
+`useFocusTrap.ts:34` writes the latest-ref during render. (3) the review root carries no
+`role="dialog"`. (4) `buildOffsets` unmemoized per scroll frame. (5) `work.scopeNote` on the
+empty branch, still open. (6) `PERMITTED_ON_A_LINE_THAT_SAYS_SO` excuses `never` / `used to`.
+(7) The claim "net RTL debt went down" is not what the tool says — `validate:rtl` reports
+**exactly 308**, the baseline. Flat, not down. Holding either way.
+
+**Observed 2026-08-19 23:00–23:40 +03 on `9b19438`.** `verify` exit 0. `check-tokens`
+verbatim: `scanned at 2026-08-19 23:06 +03:00 · 9b19438 · clean`, `violations 0`.
+`validate:rtl:gate` holding 308. **No 1440px side-by-side** — reference frames are still
+absent repo-wide; I rendered at exactly 1440 and had nothing to compare against, so no
+fidelity result is implied in either direction.
 
 ## Blocked on
-
-Nothing. Tree still and clean throughout.
-
-## The findings worth carrying
-
-1. **A falsification whose baseline was never green proves nothing** — the inverse of *"a test
-   that has never been red proves nothing"*, and the half we had not written down. Found by
-   an author catching their own harness (`node --test` on a suite needing `tsx`).
-2. **Derive the measurement, don't just trust it.** The bidi claim was checkable against UAX
-   #9 N1/N2 in five minutes, and deriving it is what proved the *reason* right, not just the
-   patch — which is what the next person copies.
-3. **A name is a claim too.** `.u-auto` asserts platform behaviour it does not implement, in
-   the same file as the comment that was just corrected for doing exactly that.
-4. **A wrong citation is not automatically a block.** ADR-038 names the wrong file *and*
-   quotes the constraint's unique name verbatim in the same sentence, so a reader recovers by
-   grep. Gate on whether the error is recoverable from what is beside it — not on whether it
-   is annoying.
+Nothing. Reference frames for the 1440px side-by-side remain with the user, repo-wide.
 
 ## Last handoff
-
 `comms/handoffs/M16-fidelity-qa-reviewer-the-rule-6-pass-verdict.md`
+(**`comms/verdicts/` still does not exist — seven verdicts now cite it.**)
 
 ## Next
-
-1. **`shell-navigation-engineer`'s two M15 messages** (`tablist-rtl-arrow-keys`,
-   `m15-coverage-gate-review`) — now the oldest open thing I owe, and my whole queue.
-2. **Fold into `cc-fidelity-check`:** finding 1 above · read the `smoke:browser` NOTE before
-   citing the green · the worktree method for grading a ratchet raise · *a bound that drops
-   protection is not a bound* · *make the derivation and read the compiler*.
-3. **Add to BRIEF:** *make the derivation, read the compiler* · *a known-gap test carries its
-   own closing instruction* · `sessions-relay-engineer`'s second instance of the `git add` +
-   bare `git commit` trap.
-4. **`comms/verdicts/`** — decide it or stop citing it. Four verdicts deep is too many.
+1. Nothing queued. Next review request starts the next pass.
+2. When reference frames land, the 1440px side-by-side is one `Page.captureScreenshot` away —
+   the browser half is solved and the probe pattern above is reusable.
