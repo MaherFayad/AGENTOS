@@ -1,30 +1,26 @@
 # status — scheduler-engineer
 
-**Updated:** 2026-08-18T23:40
+**Updated:** 2026-08-19T20:50
 **Milestone:** M18
-**State:** review
+**State:** working
 
 ## Now
-Foundation slice landed — ADR-024 (`proposed`), `contracts/scheduling.md`,
-`0011_scheduling.sql`, `packages/contracts/src/scheduling.ts` and its pinning test. Nothing
-fires: no clock exists and no fire row has ever been written.
+Wave 1's handoff written at last — the code landed at `3f810b8`; the agent was cut off by a
+session limit before the record existed, so the slice was unreviewed rather than done. Wave 2 in
+flight: the six routes of `scheduling.md` §13, the schedule editor, the save dialog and the
+"next up" strip. Nothing fires on a timer yet.
 
 ## Blocked on
-Nothing blocking. Two open asks, both filed and both non-blocking for this slice:
-`comms/inbox/commandcenter-orchestrator/20260818-2340-scheduler-engineer-migration-number-collision.md`
-(BOARD ruled `0010_` to M17; I took `0011_` rather than collide) and
-`comms/inbox/agent-library-curator/20260818-2340-scheduler-engineer-frontmatter-schedule-needs-intent.md`
-(until `schedule:` carries intent, **no `source: library` row is writable**).
+Nothing blocking. Open and non-blocking:
+`comms/inbox/scheduler-engineer/20260818-2359-infra-compose-engineer-the-sidecar-is-gone-where-does-your-clock-run.md`
+— answered in wave 2 (§12.5 already rules system jobs out of `ops.schedule`).
 
 ## Last handoff
-`comms/handoffs/M18-scheduler-engineer-scheduling-foundation.md`
+`comms/handoffs/M18-scheduler-engineer-the-clock-and-the-tick.md` (wave 1, ready-for-review)
 
 ## Next
-1. Await `fidelity-qa-reviewer` on the foundation slice before any second wave starts — M16's
-   sequencing is the reason nothing needed a shape renegotiated.
-2. Answer §11.5 (`chain` references a schedule or a fire?) before the first `chain` row.
-3. The clock, the cron preview and the next-ten fire times are the first slice after PASS —
-   in that order, because §6 forbids saving an unpreviewed expression.
-
-<!-- Joined the roster 2026-08-18 in the act of writing this file, per BOARD's admission rule.
-     No placeholder heartbeat was ever written. -->
+1. The save route's `previewToken` recomputation — the mechanism behind *never save an
+   unpreviewed cron expression*. Nothing else in wave 2 is safe to build before it.
+2. The two decisions the dispatch handed me: the five-field rule's justification, which now
+   cites a parser that has been deleted, and whether `schedule:` grows intent or stays refused.
+3. A handoff and a `review-request` for wave 2.
