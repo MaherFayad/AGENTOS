@@ -169,7 +169,6 @@ export type ApiErrorCode =
    */
   | 'brain_write_refused'
   | 'git_failed'
-  | 'ofelia_sync_failed'
   /**
    * The coordinator's scheduling plane (ADR-024, `contracts/scheduling.md` §8, M18 wave 2).
    *
@@ -182,9 +181,11 @@ export type ApiErrorCode =
    * rewrite — the throwing code is in `apps/runner/src/lib/scheduleClock.ts`,
    * `schedulePlan.ts`, `db/schedules.ts` and `routes/schedules.ts`.
    *
-   * `ofelia_sync_failed` above now describes a sidecar removed from `infra/compose.yaml` at
-   * `e4e0bff`. It is deliberately **not** deleted here: `POST /api/p/:project/schedule` still
-   * calls `syncOfelia`, and both the route and the code are `runner-engineer`'s to sequence.
+   * `ofelia_sync_failed` (502) used to sit above `schedule_not_found`. It is **deleted**, not
+   * retired: the sidecar it named left `infra/compose.yaml` at `e4e0bff`, the sync call left
+   * `lib/schedule.ts`, and a declared code no path can throw is a branch a client writes and
+   * never reaches. `POST /api/schedule` now reports what will act on the commit instead — see
+   * `ScheduleResponse.firedBy` below.
    */
   | 'schedule_not_found'
   | 'schedule_address_not_schedulable'
@@ -261,7 +262,6 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   git_write_refused: 403,
   brain_write_refused: 403,
   git_failed: 500,
-  ofelia_sync_failed: 502,
 
   // `contracts/scheduling.md` §8, statuses as proposed there. Three are worth the sentence:
   //
@@ -522,16 +522,61 @@ export interface ScheduleRequest {
   cron: string | null;
 }
 
+/**
+ * **What will act on the committed `schedule:` line — the union that is allowed to be one
+ * member wide.**
+ *
+ * `'nobody'` is the whole set on this build. The cron sidecar that used to be the answer left
+ * `infra/compose.yaml` at `e4e0bff` (ADR-024), and the coordinator's scheduling plane
+ * (`contracts/scheduling.md`) records fires; it does not start runs. There is no timer in this
+ * repo that reaches `POST /api/run`.
+ *
+ * It is a union rather than a `false` boolean because widening it is the event that matters.
+ * When an executor lands, adding `'coordinator'` here makes `apps/runner/src/lib/schedule.ts`
+ * fail to compile — its `executionNote` is an exhaustive switch over this type — so the
+ * sentence a person reads cannot stay behind the mechanism. A boolean flipping to `true`
+ * would have compiled silently, which is how the field this one replaces came to lie.
+ */
+export type ScheduleFiredBy = 'nobody';
+
+/**
+ * The reply to `POST /api/schedule`.
+ *
+ * **It carries no field that implies an execution, and that is load-bearing rather than
+ * stylistic.** The shape this replaces had `nextRunAt` and `ofeliaSynced`; the drawer read the
+ * first as a promise and rendered *"Saved. Next run 2026-08-20T06:00:00Z."* on a stack where
+ * nothing fires, and the second was named for a container that no longer exists. Both were
+ * true statements under names that claimed more than they knew — BOARD rule 9, a declared
+ * value read as an observed one, and the reason the rename happened here instead of in the
+ * caller: a consumer cannot repeat a mistake the type will not let them spell.
+ */
 export interface ScheduleResponse {
   ok: true;
   agent: string;
   cron: string | null;
   /** SHA of the commit that changed `agents/**`. The audit trail is the git log. */
   commitSha: string;
-  /** ISO 8601 of the next firing, or `null` when unscheduled. */
-  nextRunAt: string | null;
-  /** False when the commit landed but ofelia did not reload — the schedule is still true. */
-  ofeliaSynced: boolean;
+  /**
+   * Who will fire this schedule. `'nobody'` on this build — the commit is real, the execution
+   * is not. Branch on this, not on the presence of a time.
+   */
+  firedBy: ScheduleFiredBy;
+  /**
+   * ISO 8601 of the next wall-clock instant the cron expression **matches**, or `null` when
+   * unscheduled or when the expression matches no day in the four years the evaluator scans.
+   *
+   * Arithmetic on the expression, computed in UTC by `lib/cron.ts` — the same function behind
+   * the map's clock badge, so badge and response agree by construction. It is **not** a
+   * scheduled execution: while `firedBy` is `'nobody'`, nothing happens at this time. Any
+   * sentence rendered from this field has to say which of the two it means.
+   */
+  nextMatchAt: string | null;
+  /**
+   * One sentence, written for a human on a phone, stating what will and will not happen. The
+   * server owns this string so that every client tells the same truth; render it rather than
+   * composing your own from `nextMatchAt`.
+   */
+  executionNote: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1284,7 +1329,10 @@ export const LEGACY_COST_TICKER_PATH = '/api/cost/today' as const;
 
 /**
  * `POST /api/ops/prune` (ADR-008 nightly retention) is **`observability-engineer`'s**.
- * ofelia fires it; metrics reads and `POST /api/run` never call `ops.prune()`.
+ *
+ * **Nothing fires it.** The cron sidecar that was going to left the stack at `e4e0bff`
+ * (ADR-024) and the coordinator has no executor yet, so retention runs only when a human
+ * calls this route. Metrics reads and `POST /api/run` never call `ops.prune()`.
  */
 export const OPS_PRUNE_ROUTE = { method: 'POST', path: '/api/ops/prune' } as const;
 

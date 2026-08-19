@@ -92,8 +92,6 @@ export interface RunnerConfig {
   maxConcurrentRuns: number;
   /** Model the runner's headless sessions use. */
   model: string;
-  /** ofelia's sync endpoint/command target; `null` disables the sync step. */
-  ofeliaSyncUrl: string | null;
   langfuse: { baseUrl: string | null; publicKey: string | null; secretKey: string | null };
   slackWebhookUrl: string | null;
 }
@@ -177,7 +175,6 @@ export function loadConfig(): RunnerConfig {
     monthlyCapUsd: numberFromEnv('RUNNER_MONTHLY_CAP_USD', null),
     maxConcurrentRuns: numberFromEnv('RUNNER_MAX_CONCURRENT_RUNS', 3) ?? 3,
     model: process.env.RUNNER_MODEL ?? 'claude-opus-5',
-    ofeliaSyncUrl: process.env.OFELIA_SYNC_URL ?? null,
     langfuse: {
       // Compose names this LANGFUSE_HOST; the observability module reads LANGFUSE_BASE_URL.
       // Accept both so a run still traces when only infra's name is set.

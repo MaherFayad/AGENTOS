@@ -391,15 +391,39 @@ reader grepping for the route needs to find.
 ```jsonc
 { "agent": "sales/account-enrichment", "cron": "0 6 * * 1" }   // cron:null unschedules
 ```
-Writes `schedule:` into the agent's frontmatter via a git commit, then triggers ofelia
-sync. Response `{ok, agent, cron, commitSha, nextRunAt, ofeliaSynced}`. The map adds the
-clock badge from the frontmatter, not from this response — one source of truth. A job
-that exists in ofelia but not in frontmatter is a bug, never a state to reconcile.
+Writes `schedule:` into the agent's frontmatter via a git commit. **That is the entire
+effect of this route.** Response `{ok, agent, cron, commitSha, firedBy, nextMatchAt,
+executionNote}`. The map adds the clock badge from the frontmatter, not from this
+response — one source of truth. A schedule that exists in an executor but not in
+frontmatter is a bug, never a state to reconcile.
 
-`ofeliaSynced:false` means the commit landed but the reload did not: the schedule is
-still true, it is just not firing yet. The runner's git writes are confined to
-`agents/**` (ADR-002) — a path outside it is refused with `git_write_refused`, so a
-prompt-injected agent cannot commit to `apps/`.
+**`firedBy` is `"nobody"` and no field of this response promises an execution.** The cron
+sidecar left `infra/compose.yaml` at `e4e0bff` (ADR-024), the coordinator's scheduling
+plane records fires without starting runs (`contracts/scheduling.md`), and there is no
+timer in this repo that reaches `POST /api/run`. `firedBy` is a **union**, not a boolean:
+when an executor lands, adding a member to `ScheduleFiredBy` breaks
+`apps/runner/src/lib/schedule.ts` at compile time, because `executionNote` is an
+exhaustive switch over it. A boolean flipping would have compiled in silence.
+
+**`nextMatchAt` is arithmetic, not a promise, and its name is the contract.** It is the
+next wall-clock instant the expression *matches*, computed in UTC by `lib/cron.ts` — the
+same function behind the clock badge — or `null` when unscheduled or when the expression
+matches no day in the four years the evaluator scans. Rendering it as *"next run"* is the
+defect this shape exists to prevent: the fields it replaces were `nextRunAt` and
+`ofeliaSynced`, both individually true, which together told a person **"Saved. Next run
+2026-08-20T06:00:00Z."** on a stack that fires nothing. `ofelia_sync_failed` (502) is
+deleted from the error table with them.
+
+**`executionNote` is the sentence a client renders.** The server owns it so that every
+surface tells the same truth, and so that no client has to compose one from a timestamp.
+Compose your own only if you can state, in it, that nothing will fire.
+
+The runner's git writes are confined to `agents/**` (ADR-002) — a path outside it is
+refused with `git_write_refused`, so a prompt-injected agent cannot commit to `apps/`.
+
+`schedule-claims-no-fire.test.ts` is the gate, and it asserts the response's **exact key
+set** rather than the presence of the honest fields: re-adding `nextRunAt` beside them
+goes red, which a "the new fields are present" assertion would not have caught.
 
 ## Approvals (§3.2)
 
@@ -670,7 +694,6 @@ a stack trace. Codes and their statuses (`ApiErrorCode` / `API_ERROR_STATUS` in
 | `git_write_refused` | 403 | write target outside `agents/**` (ADR-002) |
 | `brain_write_refused` | 403 | the Second Brain write-back was refused **before git was reached** — the tier being written is not this project's (ADR-007, `COMPANY.md` rule 9). Same status as the row above and deliberately a different code: a person reading a log needs to know which file to open |
 | `git_failed` | 500 | commit failed |
-| `ofelia_sync_failed` | 502 | commit landed, reload did not |
 | `graph_not_built` | 503 | no stored layout artifact yet — run `npm run graph:build` |
 | `panel_not_found` | 404 | no such `panels/*.json` |
 | `runner_not_configured` | 503 | no runner API key in env |

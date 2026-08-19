@@ -40,10 +40,12 @@ the coverage checker does not steal them from the heading above.
 2. **Two write roots, not one wide one** — [ADR-007](../decisions/ADR-007-brain-write-back.md).
    `agents/**` for schedule commits, `company/**` for the interview write-back. Gated on
    the constant `intelligence/company-interview`, not a frontmatter flag.
-3. **Frontmatter is the schedule.** `POST /api/schedule` edits `schedule:` via a git
-   commit, then `scripts/sync-ofelia.mjs` regenerates `infra/ofelia/config.ini`. A job in
-   ofelia but not in frontmatter is a bug. `ofeliaSynced: false` means the commit landed
-   and the file was rewritten but the running daemon was not HUPed.
+3. **Frontmatter is the schedule, and nothing fires it.** `POST /api/schedule` edits
+   `schedule:` via a git commit. That is the whole effect: the cron sidecar was removed at
+   `e4e0bff` (ADR-024) and no executor replaced it, so the response reports
+   `firedBy: "nobody"` and a `nextMatchAt` named for what it is — when the expression next
+   *matches*, not when a run starts. A schedule in an executor but not in frontmatter is a
+   bug. `schedule-claims-no-fire.test.ts` is the gate.
 4. **`GET /api/graph` never simulates** (ADR-003). It serves the stored artifact and
    overlays exactly two live fields: `core.brainCompleteness` (honest, from `company/`)
    and `nodes[].approvalPending`. The open `brainCompleteness` decision-request to
@@ -145,9 +147,9 @@ the coverage checker does not steal them from the heading above.
 | REQ-RUN-13 | §3.2 | Delivery follows `deliver:` (Slack when webhook set; email declared unsupported) | `apps/runner/src/lib/deliver.ts` | — |
 | REQ-RUN-14 | §3.2 | `approval: required` pauses at `plan`, listed on `GET /api/p/:project/approvals`, resumed or aborted by `POST /api/p/:project/approvals/:runId` | `apps/runner/src/lib/runStore.ts` | `apps/runner/src/routes/__tests__/approvals-payload.test.ts` · `apps/runner/src/lib/__tests__/company-interview.test.ts` |
 | REQ-RUN-15 | §3.2 | A denied run ends `done{status:denied, denialNote}` — data, not a discard | `apps/runner/src/lib/runService.ts` | `apps/runner/src/lib/__tests__/company-interview.test.ts` |
-| REQ-RUN-16 | §3.2 | `POST /api/schedule` writes `schedule:` via a git commit confined to `agents/**` | `apps/runner/src/lib/schedule.ts` · `apps/runner/src/lib/git.ts` | — |
+| REQ-RUN-16 | §3.2 | `POST /api/schedule` writes `schedule:` via a git commit confined to `agents/**` — **and its response claims no execution**, because nothing fires one | `apps/runner/src/lib/schedule.ts` · `apps/runner/src/lib/git.ts` | `apps/runner/src/lib/__tests__/schedule-claims-no-fire.test.ts` |
 | REQ-RUN-17 | §3.2 | ~~cron config is regenerated from frontmatter after that commit~~ **Retired by ADR-024** — the cron sidecar was removed from the stack 2026-08-18; the generator and its test were deleted with it. The commit half of `POST /api/schedule` is unchanged and is REQ-RUN-16 | — | — |
-| REQ-RUN-18 | §3.2 | ~~cron jobs POST the same `/api/run` the drawer uses~~ **Retired by ADR-024.** Nothing fires on a timer until the coordinator's clock runs; how a fire reaches `/api/run` is `contracts/scheduling.md`'s question and this row's successor is `runner-engineer`'s to write | — | — |
+| REQ-RUN-18 | §3.2 | ~~cron jobs POST the same `/api/run` the drawer uses~~ **Retired by ADR-024.** Nothing fires on a timer until the coordinator's clock runs; how a fire reaches `/api/run` is `contracts/scheduling.md`'s question and this row's successor is `runner-engineer`'s to write. Until it exists, `POST /api/schedule` reports `firedBy: "nobody"` rather than a next run time — the retirement is stated on the surface, not only here | — | — |
 | REQ-RUN-19 | §3.2 | `GET /api/graph` serves the stored artifact and never simulates | `apps/runner/src/lib/graph.ts` | `apps/runner/src/routes/__tests__/project-derived-reads.test.ts` |
 | REQ-RUN-20 | §3.3 | `GET /api/graph` overlays honest `core.brainCompleteness` from `company/` | `apps/runner/src/lib/graph.ts` | — |
 | REQ-RUN-21 | §3.2 | `GET /api/agents/:slug` is a wildcard (`department/agent-slug`) and returns `runnable` | `apps/runner/src/routes/api.ts` | `apps/runner/src/routes/__tests__/api.test.ts` |
@@ -273,16 +275,17 @@ the coverage checker does not steal them from the heading above.
   `SLACK_WEBHOOK_URL` is set. Failures are console tokens, not failed runs.
 - **Push on the approval gate.** `notifyApproval` is a hook; the payload belongs to
   sessions-relay (§3.1 / §3.6). The queue and the amber overlay still work without it.
-- **ofelia HUP from this container.** The generator rewrites `config.ini`. Reload needs
-  `OFELIA_SYNC_URL` or `OFELIA_HUP_COMMAND` (runner has no docker.sock). Until infra
-  wires one, `ofeliaSynced` is false after a truthful rewrite — stale, not wrong.
+- **Anything that fires a schedule.** The cron sidecar and its sync path are deleted
+  (ADR-024), and the coordinator's plane records fires without starting runs. `POST
+  /api/schedule` says so in `firedBy` rather than implying otherwise in a timestamp; the
+  executor is `contracts/scheduling.md`'s question and it is not built.
 - **Layout-engine signature change for `brainCompleteness`.** Open decision-request to
   map-galaxy. Overlay remains until they answer. The watcher already *passes* the value
   if the engine accepts `opts`; it does not fork the engine.
 - **MCP servers themselves.** The registry names tools; wiring Exa/Firecrawl/Slack
   credentials is connector setup, not this milestone.
-- **Distinguishing schedule vs manual trigger** on `POST /api/run`. Ofelia posts the
-  same body the drawer does (one code path). A `trigger` field would be a contract
+- **Distinguishing schedule vs manual trigger** on `POST /api/run`. Moot until something
+  fires on a timer; whatever does will post the same body the drawer does (one code path). A `trigger` field would be a contract
   change.
 - **Auth.** Tailnet-only, none in v1 (§3.6).
 - **The web app's own panel loader.** `apps/web/src/dashboards/data/load.ts` still walks a

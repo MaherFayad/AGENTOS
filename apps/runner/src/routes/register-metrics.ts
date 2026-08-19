@@ -21,8 +21,9 @@
  * attached to **every** response from these routes, success and failure alike, so no
  * consumer has to infer reachability from the shape of a payload.
  *
- * `POST /api/ops/prune` is ofelia-only (nightly). Never called from metrics GETs
- * or from `POST /api/run`.
+ * `POST /api/ops/prune` is **fired by nobody**. The nightly cron sidecar that was going to
+ * call it left the stack at `e4e0bff` (ADR-024) and no executor replaced it, so retention runs
+ * only when a human calls this route. Never called from metrics GETs or from `POST /api/run`.
  *
  * `GET /api/runs` is deliberately unmounted — runner-engineer serves it.
  */
@@ -204,7 +205,7 @@ export function registerMetricsRoutes(app: FastifyInstance, mount: MetricsMount)
             health.state === 'absent'
               ? 'This runner has no run ledger configured, so there is nothing to prune.'
               : 'The run ledger is not answering.',
-          hint: 'Retention prune needs Postgres. ofelia will retry on the next nightly tick.',
+          hint: 'Retention prune needs Postgres. Nothing retries this on a timer — no scheduler runs on this stack — so call it again once the ledger is up.',
         },
         ledger: health,
       });
@@ -229,7 +230,7 @@ export function registerMetricsRoutes(app: FastifyInstance, mount: MetricsMount)
 
   /**
    * `POST /api/ops/prune` stays **coordinator-scoped**, and that is a decision rather than
-   * an omission. Retention runs for the whole database on one nightly ofelia tick;
+   * an omission. Retention is a whole-database operation on one manual call;
    * `ops.prune` and `ops.rollup_runs` both carry `SET agnetos.project_id = '*'` in their
    * definitions so the cross-project scope is written where the query is, not in a runbook.
    * Per-project retention windows would be a different feature and would need an ADR
