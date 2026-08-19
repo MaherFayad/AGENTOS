@@ -14,9 +14,10 @@ Everything is **structural**: `ops.work_product` has never held a row, and the e
 the state a human will actually see. `PR #42 · CI green` renders and nothing claims anything
 observed it.
 
-`npm run verify` exit 0 at **2026-08-19 21:35 +03** on a tree that was **not still** —
-`scheduler-engineer` was moving `apps/runner/**`, `comms/contracts/scheduling.md` and an
-untracked `apps/web/src/schedules/` during the run.
+`npm run verify` exit 0 at **2026-08-19 21:44 +03 on a still tree** — `git status --porcelain`
+empty before and after, at `7a1bbc4`. An earlier exit 0 at 21:35 was on a tree
+`scheduler-engineer` was moving under; both are in the handoff, because a green on a moving
+tree is a green about a tree nobody can reconstruct.
 
 ## Blocked on
 **Nothing blocking code.** Blocking the *review* of this slice: §9.5's sigil-gate `todo()` and

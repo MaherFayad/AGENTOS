@@ -174,10 +174,14 @@ sentence. "Approved" with no tree state names nothing.
 
 ## Verification
 
-**`npm run verify` exit 0, observed 2026-08-19 21:35 +03:00.** The tree was **not still**:
+**`npm run verify` exit 0, observed 2026-08-19 21:44 +03:00, on a still tree** —
+`git status --porcelain` printed nothing before the run and nothing after it, at `7a1bbc4`.
+
+The earlier run of this slice, at **21:35**, was also exit 0 but the tree was **not** still:
 `apps/runner/src/routes/schedules.ts`, `comms/contracts/scheduling.md` and an untracked
-`apps/web/src/schedules/` were all moving under `scheduler-engineer` during the run. Stated
-because an inherited or borrowed green is a declared value read as an observed one.
+`apps/web/src/schedules/` were all moving under `scheduler-engineer` during it. Both are
+recorded because the difference between them is the whole reason this repo asks for an
+observation time — a green on a moving tree is a green about a tree nobody can reconstruct.
 
 `npm run smoke:browser` exit 0, observed 21:22 +03:00, after `rm -rf apps/web/.next`. Its own
 banner applies and is quoted rather than paraphrased: *"the backend was absent for essentially
