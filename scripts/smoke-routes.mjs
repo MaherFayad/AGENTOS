@@ -98,6 +98,16 @@ const ROUTES = [
   { path: '/p/agentos/chart', marker: '>MAP<' },
   { path: '/p/agentos/chart/sales', marker: '>MAP<' },
   { path: '/p/agentos/dashboards', marker: '>MAP<' },
+  // **The one content marker in this table, and it is deliberate.** Every other marker here is
+  // chrome, because chrome is the cheapest proof the shell rendered rather than an error page.
+  // That reasoning fails on this route twice over. `dashboards/[id]` falls back to
+  // `DashboardsView` with an *error* when the id is unknown, so a chrome marker passes against
+  // a panel that does not exist; and the entire reason to load this route is to execute
+  // `WidgetView`, which a tab-bar marker says nothing about. `>The week ahead<` is the
+  // `calendar` widget's own title, rendered by `WidgetChrome` as an `<h3>` text node, so
+  // only a real widget renderer can satisfy it — the rule this file already states as *prefer
+  // a marker only the real thing can satisfy*.
+  { path: '/p/agentos/dashboards/mission-control', marker: '>The week ahead<' },
   // M16 — THREADS took the fourth tab slot from SESSIONS (`Plan §23.5`, `Plan §23.8`).
   //
   // `/sessions` is now a **redirect** to `/threads` (the condition

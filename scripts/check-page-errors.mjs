@@ -87,6 +87,14 @@ const ROUTES = [
   '/p/agentos/chart',
   '/p/agentos/chart/sales',
   '/p/agentos/dashboards',
+  // **The detail view, and the reason it is worth naming separately.** Every other view here
+  // has its deep route listed — `map/:dept/:agent`, `chart/:dept`, `threads/:id`,
+  // `sessions/:id` — and this one did not, for as long as this gate has existed. The carousel
+  // above renders no widget at all, so **no widget renderer had ever been executed by a
+  // runtime gate**: not the canonical seven, not `thread-feed`, not `calendar`. An
+  // include-list is a decision to be blind to everything unnamed, and the comment directly
+  // below already described this exact hazard while the list underneath it had it.
+  '/p/agentos/dashboards/mission-control',
   // M16 — THREADS took the fourth tab slot; both `/sessions` paths stay live underneath it
   // rather than being redirected, so all four are loaded. Kept in step with the list in
   // `smoke-routes.mjs` by hand: the lists are separate because that one pairs each path with
