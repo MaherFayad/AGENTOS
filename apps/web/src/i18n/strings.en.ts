@@ -730,6 +730,14 @@ export const en = {
     other: '{count} further lines in this file were not sent.',
   },
   'work.diff.more': 'Show more files',
+  /* The model's hold ceiling (`MAX_DIFF_ROWS_HELD`). Reached only by loading page after
+     page; the ceiling is far above one page on purpose. It says the number it is holding
+     because a *Show more* that stops working without a reason reads as *there is no more*,
+     which on this screen means approving a change you have only seen part of. */
+  'work.diff.holdFull': {
+    one: 'This browser is holding {count} line of this diff and will not load more. Reopen the review to carry on from a fresh page.',
+    other: 'This browser is holding {count} lines of this diff and will not load more. Reopen the review to carry on from a fresh page.',
+  },
   'work.diff.moved':
     'The worktree moved while this was open. Load the diff again — half of one tree and half of another is not a change anyone should approve.',
   'work.diff.unavailable':

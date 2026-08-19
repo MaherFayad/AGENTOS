@@ -41,13 +41,27 @@ export function nextIndex(current: number, count: number, back: boolean): number
   return back ? (current - 1 + count) % count : (current + 1) % count;
 }
 
-/** Visible, focusable descendants in DOM order. */
+/**
+ * Visible, focusable descendants in DOM order.
+ *
+ * **All three exclusions ask the ancestor chain, and that is the whole point of this
+ * comment.** For most of M17 the first two used `closest()` and the third used
+ * `getAttribute('inert')` — which inspects the element and nothing above it. So a control
+ * inside an `inert` *container* stayed in this list while the browser had already dropped
+ * it from the tab order, and the boundary arithmetic below (`current === items.length - 1`)
+ * was computed against phantom entries. `DiffScreen` is the first inert container this repo
+ * ever mounted inside an *active* trap root, which is why nothing caught it earlier.
+ *
+ * The shape is worth naming because it is the house defect in miniature: an instrument that
+ * checks ancestry for two attributes and the element alone for a third is an include-list —
+ * it is blind to exactly the case nobody wrote down.
+ */
 export function focusables(root: HTMLElement | null): HTMLElement[] {
   if (!root) return [];
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => {
     if (element.closest('[hidden]')) return false;
     if (element.closest('[aria-hidden="true"]')) return false;
-    if (element.getAttribute('inert') !== null) return false;
+    if (element.closest('[inert]')) return false;
     // getComputedStyle rather than offsetParent: jsdom has no layout engine and reports
     // offsetParent as null for everything, which would make the trap untestable.
     if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {

@@ -61,7 +61,21 @@ export function SkillFileCard({
       <p className={s.skillCardLine}>
         ⬇ {fileCount} runnable skill {fileCount === 1 ? 'file' : 'files'} · yours to download
       </p>
-      {inWords ? <p className={s.sectionNote}>Scheduled: {inWords}.</p> : null}
+      {/* What the file says, and what acts on it — which is nothing.
+        *
+        * This read `Scheduled: {inWords}.`, which is the same rule 9 defect the save
+        * sentence carried: `schedule:` in frontmatter is a *declaration*, and calling it
+        * "scheduled" asserts that something reads it on a timer. Nothing does — the cron
+        * sidecar left `infra/compose.yaml` at `e4e0bff` and the coordinator's plane records
+        * fires rather than starting runs (`ScheduleResponse.firedBy` is `'nobody'`). Unlike
+        * the save reply there is no server sentence to render here, because nothing was
+        * posted: this is frontmatter the drawer already had. So it states the declaration
+        * and names its absent executor in the same breath. */}
+      {inWords ? (
+        <p className={s.sectionNote}>
+          Its file asks for {inWords}. Nothing in this build acts on that yet.
+        </p>
+      ) : null}
 
       <div className={s.actions}>
         {capabilities.download && downloadHref ? (
@@ -138,7 +152,7 @@ export function SkillFileCard({
       {editing && runnerReady ? (
         <div className={`${s.field} ${s.fieldBlock}`}>
           <label className={s.fieldLabel} htmlFor="drawer-cron">
-            Cron — five fields, the same syntax ofelia reads
+            Cron — five fields, minute hour day month weekday
           </label>
           <input
             id="drawer-cron"

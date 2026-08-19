@@ -23,6 +23,7 @@ import {
   postSchedule,
   postThreadMessage,
 } from './data/client';
+import { scheduleSentence } from './data/format';
 import { initialValues, toRunPayload, validateInputs, type InputValues } from './data/inputs';
 import { projectAgent, type DrawerModel } from './data/project';
 import { drawerProvenance, type DrawerProvenance } from './data/provenance';
@@ -72,6 +73,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
   const isChart = side === 'right';
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const reviewRef = useRef<HTMLDivElement | null>(null);
   /**
    * Which project's library answers (M15, ADR-015). `useProjectSegment` and not
    * `useShell()`: the latter throws outside `<ShellProvider>`, and this component is
@@ -123,6 +125,27 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
   }, [reviewing, onClose]);
 
   useFocusTrap(panelRef, { active: open, onClose: onEscape });
+  /**
+   * The review screen is a modal on top of a modal, and it needs its own trap.
+   *
+   * `.review` is `position: absolute; inset: 0` on `--screen` — opaque, full-bleed, over the
+   * whole panel. The drawer's trap above is keyed on `open`, so for the whole of M17 wave 2
+   * opening the review did two wrong things at once: focus stayed on the `Review` pill that
+   * was now behind an opaque panel, and every control underneath — filter chips, roster
+   * pills, thread links, the inputs form — stayed in the tab order, so Tab walked through
+   * controls a person could not see.
+   *
+   * Two mechanisms, and both are needed. This trap **puts focus into the review** and holds
+   * it there; `obscured` below marks the body and the console `inert`, which is what removes
+   * them from the browser's tab order *and* from `focusables()`. Neither alone is the fix:
+   * a trap with the body still tabbable cycles through invisible controls, and `inert`
+   * without a trap leaves focus parked on a hidden pill.
+   *
+   * Both traps stay active together on purpose. With the body inert they compute the same
+   * list — the review's own controls — so the outer one is a no-op rather than a competitor,
+   * and `onEscape` is idempotent, which is what makes running twice harmless.
+   */
+  useFocusTrap(reviewRef, { active: open && Boolean(reviewing), onClose: onEscape });
 
   useEffect(() => {
     if (!slug || !open) {
@@ -183,18 +206,42 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
     run.start({ agent: slug, inputs: toRunPayload(fields, values) });
   }, [agent, run, slug, values]);
 
+  /**
+   * §2.3 item 4's ⏰ Schedule, and the sentence it is allowed to say afterwards.
+   *
+   * **What actually happens: the cron is written into the agent's frontmatter and committed**
+   * (REQ-RUN-16, `apps/runner/src/lib/schedule.ts`). That part is real and it is what the
+   * sentence reports.
+   *
+   * **What does not happen: anything fires.** The ofelia sidecar left the stack at `e4e0bff`
+   * and the coordinator's clock does not run — `scheduler-engineer` built the computation and
+   * the routes and their own handoff says so. The response still carries `nextRunAt`, but it
+   * is `nextRunAt(cron)` — an occurrence *computed from the expression*, not an appointment
+   * anything holds. Printing it was rule 9's defect in its purest form: a declared value read
+   * as an observed one, on the one M18 surface a person can touch, and worse than an error
+   * because it succeeded silently. Someone scheduled an agent, was told when it would next
+   * run, and nothing was ever going to happen.
+   *
+   * So the sentence is **the server's**, not this drawer's. `runner-engineer` fixed the shape
+   * at the source (`4937d0b`): `nextRunAt` no longer exists on the wire, `firedBy: 'nobody'`
+   * says who will act, `nextMatchAt` says in its own name that it is arithmetic on the
+   * expression, and `executionNote` is one sentence written behind an exhaustive switch on
+   * `firedBy` — so the day an executor lands, the compiler stops the runner until the wording
+   * catches up. `scheduleSentence` renders it and composes nothing from a time. The time is
+   * not drawn at all: a rendered value out-argues an adjacent caveat, which is the same
+   * ruling this drawer already made for `ci_state`.
+   */
   const onSchedule = useCallback(
     (cron: string) => {
       if (!slug) return;
       setScheduleBusy(true);
       postSchedule(project, slug, cron)
-        .then((response) => {
+        .then((response) =>
           setScheduleResult(
-            response.nextRunAt
-              ? `Saved. Next run ${response.nextRunAt}.`
-              : 'Saved. The schedule is in the agent’s file.',
-          );
-        })
+            scheduleSentence(response) ??
+              'Saved to the agent’s file. This runner did not say whether anything will act on it, so nothing here can claim it will run.',
+          ),
+        )
         .catch((error: unknown) => {
           setScheduleResult(error instanceof Error ? error.message : 'The schedule could not be saved.');
         })
@@ -300,7 +347,12 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
           aria-label={t('a11y.drawer')}
           tabIndex={-1}
         >
-          <div className={s.body}>
+          {/* `inert` rather than `aria-hidden`: the review over it is opaque, and a control
+            * behind an opaque panel must leave the tab order, not merely the accessibility
+            * tree. `focusables()` honours an inert ancestor as of this slice — before that
+            * it asked `getAttribute('inert')` on the element alone and this would have been
+            * a declaration with no mechanism behind it. */}
+          <div className={s.body} {...(reviewing ? { inert: true } : {})}>
             {agent.kind === 'loading' || agent.kind === 'idle' ? (
               <p className={s.status}>{t('drawer.empty.loading')}</p>
             ) : null}
@@ -371,6 +423,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
             onDecide={(decision) => void run.decide(decision)}
             onCancel={run.cancel}
             onDismiss={onDismissConsole}
+            obscured={Boolean(reviewing)}
           />
 
           {/* The diff review screen, over the drawer and over the console. Mounted rather
@@ -378,6 +431,7 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
             * and `inert` while closed so its controls are not in the tab order. */}
           <DiffScreen
             open={Boolean(reviewing)}
+            rootRef={reviewRef}
             state={diffReview.state}
             loadingMore={diffReview.loadingMore}
             onLoadMore={diffReview.loadMore}

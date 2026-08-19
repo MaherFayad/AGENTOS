@@ -21,7 +21,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { DiffFile, DiffPage } from '@agnetos/contracts';
-import { appendPage, fileKey, filePathLabel, firstPage } from './diff-model';
+import { appendPage, diffRows, fileKey, filePathLabel, firstPage, groupWindow } from './diff-model';
 
 const file = (over: Partial<DiffFile> = {}): DiffFile => ({
   oldPath: 'src/a.ts',
@@ -134,5 +134,75 @@ describe('a rename is one row with both paths, and both are shown', () => {
     const renamed = file({ oldPath: 'src/a.ts', newPath: 'src/b.ts', status: 'renamed' });
     const added = file({ oldPath: null, newPath: 'src/b.ts', status: 'added' });
     expect(fileKey(renamed, 0)).not.toBe(fileKey(added, 0));
+  });
+});
+
+/* -----------------------------------------------------------------------------
+ * The flat row axis the windowing runs on. Pure arithmetic, so it is tested as arithmetic —
+ * the DOM consequence is `DiffScreen.test.tsx`'s half.
+ * -------------------------------------------------------------------------- */
+
+describe('the row list is the diff, flattened and nothing else', () => {
+  it('emits a head, a hunk header and one row per line, in reading order', () => {
+    const rows = diffRows([file()]);
+    expect(rows.map((r) => r.kind)).toEqual(['head', 'hunk', 'line', 'line']);
+    expect(rows.filter((r) => r.kind === 'line').map((r) => r.text)).toEqual([
+      'const a = 1;',
+      'const b = 2;',
+    ]);
+  });
+
+  it('keeps the server’s cut as a row of its own — a window must not swallow a disclosure', () => {
+    const rows = diffRows([file({ truncated: true, linesWithheld: 298 })]);
+    const withheld = rows.filter((r) => r.kind === 'withheld');
+    expect(withheld).toHaveLength(1);
+    expect(withheld[0]).toMatchObject({ count: 298 });
+  });
+
+  it('gives a binary file a flag row and no line rows at all', () => {
+    const rows = diffRows([file({ hunks: null, status: 'binary' })]);
+    expect(rows.map((r) => r.kind)).toEqual(['head', 'binary']);
+  });
+
+  it('carries the origin as a field, never as the first character of the text', () => {
+    const rows = diffRows([file()]);
+    const added = rows.find((r) => r.kind === 'line' && r.origin === '+');
+    expect(added).toBeDefined();
+    expect(added && 'text' in added ? added.text.startsWith('+') : true).toBe(false);
+  });
+
+  it('keys every row uniquely across files, so React never reuses one file’s row for another', () => {
+    const rows = diffRows([file(), file({ oldPath: 'src/b.ts', newPath: 'src/b.ts' })]);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+  });
+});
+
+describe('a window folds back into per-file cards', () => {
+  const rows = diffRows([file(), file({ oldPath: 'src/b.ts', newPath: 'src/b.ts' })]);
+
+  it('groups a whole diff into one run per file', () => {
+    const groups = groupWindow(rows, 0, rows.length);
+    expect(groups.map((g) => g.file)).toEqual([0, 1]);
+    expect(groups.reduce((n, g) => n + g.rows.length, 0)).toBe(rows.length);
+  });
+
+  it('reports the absolute start index of each run, which is what the height cache is keyed on', () => {
+    // Two files of four rows each. Row 3 is file 0's last line; file 1 starts at row 4.
+    const groups = groupWindow(rows, 3, 8);
+    expect(groups[0]!.start).toBe(3);
+    expect(groups[1]!.start).toBe(4);
+  });
+
+  it('opens mid-file without inventing a header row for it', () => {
+    const groups = groupWindow(rows, 2, 4);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.file).toBe(0);
+    expect(groups[0]!.rows.map((r) => r.kind)).toEqual(['line', 'line']);
+  });
+
+  it('clamps a window that runs off either end rather than emitting holes', () => {
+    expect(groupWindow(rows, -50, 2).map((g) => g.rows.length)).toEqual([2]);
+    expect(groupWindow(rows, rows.length - 1, rows.length + 50)[0]!.rows).toHaveLength(1);
+    expect(groupWindow(rows, 5, 5)).toEqual([]);
   });
 });

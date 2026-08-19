@@ -9,6 +9,10 @@
  *   2. A binary file drawn as if it were empty.
  *   3. `work_product_unavailable` (410) drawn as "this run changed nothing".
  *   4. An enabled Approve that would post a verdict naming no tree.
+ *   5. A first page of 8,000 line rows mounted at once — which is not a lie about the diff
+ *      but is a phone that stops responding while someone is trying to read one.
+
+ *
  *
  * ## What this suite cannot see
  *
@@ -22,7 +26,7 @@
  * Owner: drawer-engineer · Consumes: comms/contracts/work-product.md §4.2, §4.3, §8
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DiffFile } from '@agnetos/contracts';
 import { en } from '@/i18n';
@@ -222,5 +226,124 @@ describe('paging is offered only when there is another page', () => {
   it('offers nothing on the last page', () => {
     draw({ kind: 'ready', diff: diff({ nextCursor: null }) });
     expect(screen.queryByRole('button', { name: en['work.diff.more'] })).toBeNull();
+  });
+});
+
+/* -----------------------------------------------------------------------------
+ * The DOM bound. `MAX_DIFF_FILES_PER_PAGE = 20` × `MAX_DIFF_LINES_PER_FILE = 400` is the
+ * server's own ceiling for a single page, so this is not a pathological fixture — it is the
+ * largest ordinary one, and before windowing every row of it was mounted synchronously.
+ *
+ * These assertions are about the DOM that exists, not about which module was imported. A
+ * pin on `import { windowFor }` would be satisfied by an import that is never called.
+ * -------------------------------------------------------------------------- */
+
+const bigFile = (n: number): DiffFile => ({
+  oldPath: `src/f${n}.ts`,
+  newPath: `src/f${n}.ts`,
+  status: 'modified',
+  insertions: 400,
+  deletions: 0,
+  hunks: [
+    {
+      header: `@@ -1,400 +1,400 @@ file ${n}`,
+      oldStart: 1,
+      oldCount: 400,
+      newStart: 1,
+      newCount: 400,
+      lines: Array.from({ length: 400 }, (_, i) => ({
+        origin: '+' as const,
+        text: `f${n} line ${i}`,
+      })),
+    },
+  ],
+  truncated: false,
+  linesWithheld: 0,
+});
+
+/** One full server page: 20 files × 400 lines = 8,000 line rows. */
+const FULL_PAGE = Array.from({ length: 20 }, (_, n) => bigFile(n));
+
+describe('a full page does not mount as a full page', () => {
+  it('renders a small window of a 8,000-line diff instead of all of it', () => {
+    const { panel } = draw({ kind: 'ready', diff: diff({ files: FULL_PAGE, totalFiles: 20 }) });
+
+    const mounted = panel.querySelectorAll('[data-origin]').length;
+    // The number that matters is the order of magnitude. Before windowing this was 8,000
+    // `<div>`s and 16,000 `<span>`s, inside a panel mid-320ms-slide.
+    expect(mounted).toBeGreaterThan(0);
+    expect(mounted).toBeLessThan(400);
+  });
+
+  it('starts at the top of the change rather than at some arbitrary row', () => {
+    const { panel } = draw({ kind: 'ready', diff: diff({ files: FULL_PAGE, totalFiles: 20 }) });
+
+    expect(panel.textContent).toContain('src/f0.ts');
+    expect(panel.textContent).toContain('f0 line 0');
+    // …and nothing from the far end is mounted, which is the whole point.
+    expect(panel.textContent).not.toContain('f19 line 399');
+  });
+
+  /**
+   * A window is not a cut, and the difference has to be observable: the rows that are not
+   * mounted must still be *reachable*. Scrolling is the mechanism, so scrolling is what is
+   * asserted — not the presence of a spacer div.
+   */
+  it('mounts later rows when the reader scrolls to them', () => {
+    const { panel } = draw({ kind: 'ready', diff: diff({ files: FULL_PAGE, totalFiles: 20 }) });
+
+    const scroller = panel.querySelector('[data-testid="diff-scroller"]') as HTMLElement;
+    expect(scroller).toBeTruthy();
+    expect(panel.textContent).not.toContain('f2 line 100');
+
+    // jsdom has no layout, so `scrollTop` is defined onto the element the way a real
+    // scroll would have set it, and the same `scroll` event is then dispatched.
+    // Row arithmetic, stated rather than tuned: each file is 1 head + 1 hunk header + 400
+    // lines = 402 rows, and the un-measured estimate is 20px. `f2 line 100` is therefore
+    // absolute row 2×402 + 2 + 100 = 906.
+    Object.defineProperty(scroller, 'scrollTop', { value: 906 * 20, configurable: true });
+    fireEvent.scroll(scroller);
+
+    expect(panel.textContent).toContain('f2 line 100');
+    expect(panel.textContent).not.toContain('f0 line 0');
+  });
+
+  /**
+   * The scrollbar has to describe the whole diff. Without the spacers it would describe the
+   * mounted window, so a 8,000-line change would look ten screens long — a claim about the
+   * size of a change, made by a scrollbar.
+   */
+  it('holds the scroll height of the whole diff, not of the mounted window', () => {
+    const { panel } = draw({ kind: 'ready', diff: diff({ files: FULL_PAGE, totalFiles: 20 }) });
+
+    const spacers = [...panel.querySelectorAll('[aria-hidden="true"]')].filter(
+      (el) => el instanceof HTMLElement && el.style.height !== '',
+    ) as HTMLElement[];
+    expect(spacers).toHaveLength(2);
+    const padBottom = Number.parseFloat(spacers[1]!.style.height);
+    // 8,000 lines + 20 heads + 20 hunk headers, minus the mounted window, at the estimate.
+    expect(padBottom).toBeGreaterThan(100_000);
+  });
+});
+
+describe('the hold ceiling is stated, never silent', () => {
+  it('says nothing while the browser can still take another page', () => {
+    const { panel } = draw({
+      kind: 'ready',
+      diff: diff({ files: FULL_PAGE, totalFiles: 60, nextCursor: 'bbbbbbb:20' }),
+    });
+    expect(panel.textContent).not.toContain('will not load more');
+    expect(screen.getByRole('button', { name: en['work.diff.more'] as string }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('disables Show more with the reason once the ceiling is reached', () => {
+    // Enough pages to pass MAX_DIFF_ROWS_HELD (20,000). 3 pages ≈ 25,260 rows.
+    const held = [...FULL_PAGE, ...FULL_PAGE, ...FULL_PAGE];
+    const { panel } = draw({
+      kind: 'ready',
+      diff: diff({ files: held, totalFiles: 200, nextCursor: 'bbbbbbb:60' }),
+    });
+    expect(screen.getByRole('button', { name: en['work.diff.more'] as string }).hasAttribute('disabled')).toBe(true);
+    expect(panel.textContent).toContain('will not load more');
   });
 });

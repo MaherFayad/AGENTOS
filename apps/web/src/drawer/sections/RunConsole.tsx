@@ -38,6 +38,7 @@ export const VISIBLE_LINES = 400;
 export function RunConsole({
   state,
   open,
+  obscured = false,
   threadId,
   sendMessage,
   onDecide,
@@ -46,6 +47,16 @@ export function RunConsole({
 }: {
   state: ConsoleState;
   open: boolean;
+  /**
+   * Something opaque is on top of this — today, the diff review screen.
+   *
+   * The console keeps its state and its scroll position; what it gives up is the keyboard.
+   * A control a person cannot see must not be a control a person can Tab to, and `inert` is
+   * the only thing that says that to both the browser and to `focusables()`. `aria-hidden`
+   * alone hides it from a screen reader while leaving it in the tab order, which is the
+   * worse of the two halves.
+   */
+  obscured?: boolean;
   /** The thread this run is a turn of. `null` until the stream says — see `mailbox.ts`. */
   threadId: string | null;
   sendMessage: Sender;
@@ -71,7 +82,12 @@ export function RunConsole({
   const paused = state.phase === 'awaiting-approval';
 
   return (
-    <div className={s.console} data-state={open ? 'open' : 'closed'} aria-hidden={open ? undefined : true}>
+    <div
+      className={s.console}
+      data-state={open ? 'open' : 'closed'}
+      aria-hidden={open && !obscured ? undefined : true}
+      {...(!open || obscured ? { inert: true } : {})}
+    >
       <div className={s.consoleHead}>
         <span className={s.consoleTitle}>{paused ? 'Waiting on you' : streaming ? 'Running' : 'Run output'}</span>
         {streaming || paused ? (

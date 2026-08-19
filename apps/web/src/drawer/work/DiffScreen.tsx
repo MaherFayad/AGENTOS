@@ -21,6 +21,13 @@
  *    its own sentence, and the verdict carries the sha it read. A verdict that cannot say
  *    what it looked at is a claim with no observation behind it.
  *
+ * 5. **The screen is windowed, and a window is not a cut.** Only the rows near the viewport
+ *    are in the DOM (`sessions/lib/virtual.ts`, via `diffRows` / `groupWindow`). Nothing is
+ *    withheld by it — every row is reachable by scrolling, and the *server's* cut is still a
+ *    sentence with a number in it. Before this, a first page was up to 8,000 line rows and
+ *    ~24,000 elements mounted at once, inside a panel mid-320ms-slide; the run console has
+ *    capped itself at 2,000 lines since M2 and a diff is the same problem at 4× the volume.
+ *
  * And the refusal that is not an error: `work_product_unavailable` (410) means *the tree was
  * removed*, which must not look like *this run changed nothing*. Same empty list, completely
  * different news (§4.2).
@@ -28,12 +35,33 @@
  * Owner: drawer-engineer · Consumes: comms/contracts/work-product.md §4.2, §4.3, §8
  */
 
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_LOCALE, translate, type StringKey, type Vars } from '@/i18n';
 import type { DiffFile, DiffFileStatus } from '@agnetos/contracts';
+import { buildOffsets, windowFor } from '@/sessions/lib/virtual';
 import { Pill } from '../primitives';
 import s from '../drawer.module.css';
-import { fileKey, filePathLabel, type DiffState } from './diff-model';
+import {
+  MAX_DIFF_ROWS_HELD,
+  diffRows,
+  filePathLabel,
+  groupWindow,
+  type DiffRow,
+  type DiffState,
+} from './diff-model';
 import type { Verdict } from './review';
+
+/**
+ * One 12px monospace line with its padding — used only until a row has been measured.
+ *
+ * Rows here are genuinely variable height: a file header wraps to two lines on a phone, a
+ * diff line is `white-space: pre-wrap` and a long one wraps to four. `virtual.ts` keeps a
+ * measured-height cache for exactly that, and the estimate is only the first frame's guess.
+ */
+const ESTIMATED_ROW = 20;
+
+/** Fallback viewport until the scroller reports one. jsdom reports `0` and never lays out. */
+const ASSUMED_VIEWPORT = 640;
 
 const t = (key: StringKey, vars?: Vars): string => translate(DEFAULT_LOCALE, key, vars);
 
@@ -54,6 +82,16 @@ export type DiffViewState =
 
 export interface DiffScreenProps {
   open: boolean;
+  /**
+   * The element `JobDrawer` scopes the review's own focus trap to.
+   *
+   * This screen is an opaque `inset: 0` overlay — a modal in every way except that it was
+   * not confined. The drawer's trap is keyed on `open`, so before M17's fix it kept cycling
+   * the roster pills and the inputs form underneath, and opening the review moved focus
+   * nowhere at all. A modal that does not take focus is a modal only for people using a
+   * mouse.
+   */
+  rootRef?: React.Ref<HTMLDivElement>;
   state: DiffViewState;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -71,6 +109,7 @@ export interface DiffScreenProps {
 
 export function DiffScreen({
   open,
+  rootRef,
   state,
   loadingMore,
   onLoadMore,
@@ -84,8 +123,63 @@ export function DiffScreen({
 }: DiffScreenProps) {
   const diff = state.kind === 'ready' ? state.diff : null;
 
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const heights = useRef(new Map<number, number>());
+  const [, forceRender] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewport, setViewport] = useState(ASSUMED_VIEWPORT);
+
+  const rows = useMemo(() => diffRows(diff?.files ?? []), [diff?.files]);
+  const offsets = buildOffsets(rows.length, heights.current, ESTIMATED_ROW);
+  const win = windowFor(offsets, scrollTop, viewport);
+  const groups = groupWindow(rows, win.start, win.end);
+  /** The model's ceiling, reached only by repeated *Show more*. Stated, never silent. */
+  const holdFull = rows.length >= MAX_DIFF_ROWS_HELD;
+
+  const readViewport = useCallback(() => {
+    const el = scroller.current;
+    // `clientHeight` is 0 under jsdom and during the drawer's slide-in; keeping the
+    // assumption rather than adopting a zero is what stops the window collapsing to nothing
+    // on the first frame, which would render six rows and look like an empty diff.
+    if (el && el.clientHeight > 0) setViewport(el.clientHeight);
+  }, []);
+
+  const onScroll = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    setScrollTop(el.scrollTop);
+    readViewport();
+  }, [readViewport]);
+
+  useEffect(() => {
+    readViewport();
+    window.addEventListener('resize', readViewport);
+    return () => window.removeEventListener('resize', readViewport);
+  }, [readViewport, open]);
+
+  // A new run, or a fresh refusal, starts at the top — otherwise the second review opens
+  // scrolled to wherever the first one was left.
+  useEffect(() => {
+    const el = scroller.current;
+    if (el) el.scrollTop = 0;
+    heights.current = new Map();
+    setScrollTop(0);
+  }, [diff?.runId, diff?.headSha]);
+
+  const measure = useCallback((index: number, height: number) => {
+    // A measured `0` means "not laid out yet", not "this row has no height". Recording it
+    // would zero every offset and collapse the window to the last six rows — a windowing
+    // bug that looks exactly like a truncated diff, which is the one thing this screen
+    // must never look like.
+    if (height <= 0) return;
+    if (heights.current.get(index) === height) return;
+    heights.current.set(index, height);
+    forceRender((n) => n + 1);
+  }, []);
+
   return (
     <div
+      ref={rootRef}
       className={s.review}
       data-state={open ? 'open' : 'closed'}
       data-testid="diff-review"
@@ -102,7 +196,7 @@ export function DiffScreen({
         </Pill>
       </div>
 
-      <div className={s.reviewBody}>
+      <div className={s.reviewBody} data-testid="diff-scroller" ref={scroller} onScroll={onScroll}>
         {state.kind === 'loading' ? <p className={s.empty}>{t('work.diff.loading')}</p> : null}
 
         {state.kind === 'refused' ? (
@@ -115,19 +209,42 @@ export function DiffScreen({
 
         {diff && diff.files.length === 0 ? <p className={s.empty}>{t('work.diff.empty')}</p> : null}
 
+        {/* Two spacers and the rows between them. The spacers hold the scrollbar honest —
+          * the bar describes the whole diff, not the part currently mounted. */}
+        <div style={{ height: win.padTop }} aria-hidden="true" />
         {diff
-          ? diff.files.map((file, index) => <DiffFileView key={fileKey(file, index)} file={file} />)
+          ? groups.map((group) => (
+              <div className={s.diffFile} key={`${group.file}:${group.rows[0]?.key ?? ''}`}>
+                {group.rows.map((row, offset) => (
+                  <DiffRowView
+                    key={row.key}
+                    row={row}
+                    file={diff.files[row.file]}
+                    index={group.start + offset}
+                    onMeasure={measure}
+                  />
+                ))}
+              </div>
+            ))
           : null}
+        <div style={{ height: win.padBottom }} aria-hidden="true" />
 
         {diff && diff.nextCursor ? (
           <div className={s.workActions}>
             {/* `totalFiles` is on every page, so "more" can say how much more. A file list
              * that cannot say how many files there are cannot be read in two seconds. */}
-            <Pill variant="ghost" onClick={onLoadMore} disabled={loadingMore}>
+            <Pill variant="ghost" onClick={onLoadMore} disabled={loadingMore || holdFull}>
               {t('work.diff.more')}
             </Pill>
             <span className={s.diffStat}>{t('work.files', { count: diff.totalFiles })}</span>
           </div>
+        ) : null}
+
+        {/* A control that stopped working says why, in the flow, beside itself. A silent
+         * ceiling is the same failure as a silent cut: the reader believes they reached the
+         * end of the change when they reached the end of what the browser would hold. */}
+        {diff && diff.nextCursor && holdFull ? (
+          <p className={s.diffWithheld}>{t('work.diff.holdFull', { count: rows.length })}</p>
         ) : null}
       </div>
 
@@ -181,39 +298,72 @@ export function DiffScreen({
   );
 }
 
-function DiffFileView({ file }: { file: DiffFile }) {
-  return (
-    <div className={s.diffFile}>
-      <div className={s.diffFileHead}>
-        <span className={s.diffPath}>{filePathLabel(file)}</span>
-        <span className={s.diffStat}>{t(STATUS_KEY[file.status])}</span>
+/**
+ * One windowed row, measured on every layout so the offsets stop drifting.
+ *
+ * The markup per kind is byte-for-byte what `DiffFileView` drew before windowing — same
+ * classes, same `data-origin`, same order — because the reviewed thing here was the
+ * rendering and only the mounting strategy changed.
+ */
+function DiffRowView({
+  row,
+  file,
+  index,
+  onMeasure,
+}: {
+  row: DiffRow;
+  file: DiffFile | undefined;
+  index: number;
+  onMeasure: (index: number, height: number) => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (ref.current) onMeasure(index, ref.current.offsetHeight);
+  });
+
+  if (row.kind === 'head') {
+    return (
+      <div className={s.diffFileHead} ref={ref}>
+        <span className={s.diffPath}>{file ? filePathLabel(file) : ''}</span>
+        <span className={s.diffStat}>{file ? t(STATUS_KEY[file.status]) : ''}</span>
         {/* The whole change, not the part that arrived. See the header note (2). */}
         <span className={s.diffStat}>
-          {t('work.lines', { insertions: file.insertions, deletions: file.deletions })}
+          {t('work.lines', { insertions: file?.insertions ?? 0, deletions: file?.deletions ?? 0 })}
         </span>
       </div>
+    );
+  }
 
-      {file.hunks === null ? (
+  if (row.kind === 'binary') {
+    return (
+      <div ref={ref}>
         <p className={s.diffBinary}>{t('work.diff.binary')}</p>
-      ) : (
-        file.hunks.map((hunk) => (
-          <div key={hunk.header}>
-            <div className={s.diffHunkHeader}>{hunk.header}</div>
-            {hunk.lines.map((line, index) => (
-              <div key={index} className={s.diffLine} data-origin={line.origin}>
-                {/* Rendered, not implied by the colour. "added" and "removed" are opposite
-                 * instructions to a reviewer, and colour alone does not carry them. */}
-                <span className={s.diffOrigin}>{line.origin === ' ' ? ' ' : line.origin}</span>
-                <span>{line.text}</span>
-              </div>
-            ))}
-          </div>
-        ))
-      )}
+      </div>
+    );
+  }
 
-      {file.truncated ? (
-        <p className={s.diffWithheld}>{t('work.diff.withheld', { count: file.linesWithheld })}</p>
-      ) : null}
+  if (row.kind === 'withheld') {
+    return (
+      <div ref={ref}>
+        <p className={s.diffWithheld}>{t('work.diff.withheld', { count: row.count })}</p>
+      </div>
+    );
+  }
+
+  if (row.kind === 'hunk') {
+    return (
+      <div className={s.diffHunkHeader} ref={ref}>
+        {row.text}
+      </div>
+    );
+  }
+
+  return (
+    <div className={s.diffLine} data-origin={row.origin} ref={ref}>
+      {/* Rendered, not implied by the colour. "added" and "removed" are opposite
+       * instructions to a reviewer, and colour alone does not carry them. */}
+      <span className={s.diffOrigin}>{row.origin === ' ' ? ' ' : row.origin}</span>
+      <span>{row.text}</span>
     </div>
   );
 }

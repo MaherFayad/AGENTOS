@@ -34,6 +34,7 @@ import {
   RUNNER_ROUTES,
   type DiffPage,
   type PostThreadMessageResponse,
+  type ScheduleResponse,
   type WorkProductListResponse,
   type WorkProductResponse,
 } from '@agnetos/contracts';
@@ -228,16 +229,27 @@ export async function fetchRuns(
 }
 
 /** `POST /api/p/:project/schedule` — writes `schedule:` into frontmatter via a git commit. */
+/**
+ * `POST /api/p/:project/schedule` — writes `schedule:` into frontmatter and commits it.
+ *
+ * The response type is **the contract's**, not a local restatement of it. It used to be a
+ * local `{ ok?, nextRunAt?, commitSha? }`, and when `runner-engineer` renamed `nextRunAt` to
+ * `nextMatchAt` at the source the local type went on declaring a field nobody sends: the
+ * drawer's `response.nextRunAt` quietly became `undefined` and fell through to a different
+ * sentence. It reached the honest branch **by accident of absence**, which is the
+ * consumer-with-no-producer shape that read SOURCE UNKNOWN for every agent through M15.
+ * Importing the contract's interface is what makes the next rename a compile error here
+ * instead of a silent branch change.
+ */
 export async function postSchedule(
   project: string | null,
   slug: string,
   cron: string,
-): Promise<{ ok?: boolean; nextRunAt?: string; commitSha?: string }> {
-  return (await postJson(scopedPath(RUNNER_ROUTES.schedule.path, project), { agent: slug, cron })) as {
-    ok?: boolean;
-    nextRunAt?: string;
-    commitSha?: string;
-  };
+): Promise<ScheduleResponse> {
+  return (await postJson(scopedPath(RUNNER_ROUTES.schedule.path, project), {
+    agent: slug,
+    cron,
+  })) as ScheduleResponse;
 }
 
 /** `POST /api/p/:project/approvals/:runId` — resumes or aborts a run paused at its plan. */

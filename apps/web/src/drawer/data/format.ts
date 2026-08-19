@@ -6,6 +6,8 @@
  * Owner: drawer-engineer
  */
 
+import type { ScheduleResponse } from '@agnetos/contracts';
+
 /** `sales/account-enrichment` -> `Account Enrichment`. `exa` -> `Exa`. */
 export function labelFromSlug(slug: string): string {
   const tail = slug.split('/').pop() ?? slug;
@@ -76,4 +78,32 @@ export function describeCron(cron: string | undefined | null): string | null {
   }
   if (numeric.test(dom) && month === '*' && dow === '*') return `on day ${Number(dom)} of each month at ${time}`;
   return cron.trim();
+}
+
+/**
+ * The sentence shown after ⏰ Schedule saves, taken from the server rather than composed.
+ *
+ * `ScheduleResponse.executionNote` exists *"so that every client tells the same truth; render
+ * it rather than composing your own from `nextMatchAt`"* (`packages/contracts/src/api.ts`).
+ * The reason it is the server's to write is the defect it replaced: this drawer used to print
+ * *"Saved. Next run {nextRunAt}."* while `firedBy` was — and still is — `'nobody'`, so a
+ * person scheduled an agent, was told when it would next run, and nothing was ever going to
+ * happen. A sentence composed here would drift from the mechanism again the moment an executor
+ * lands or fails to; a sentence composed there is behind an exhaustive `switch` on
+ * `ScheduleFiredBy`, so the compiler stops the runner until the wording catches up.
+ *
+ * `null` for a runner older than the contract, which sends no such field — this module's
+ * standing rule (see the file header): return `null` when the input is missing and let the
+ * caller write the sentence. It matters more than usual here. The honest fallback can only
+ * say the one thing this client observed, that the request succeeded, and must claim nothing
+ * about firing; composing one from `nextMatchAt` would rebuild the original defect behind a
+ * version check.
+ */
+export function scheduleSentence(response: Pick<ScheduleResponse, 'executionNote'>): string | null {
+  // The parameter is the contract's field, so the day it is renamed this stops compiling —
+  // which is the whole point, after a rename reached the honest branch by accident of
+  // absence. The `typeof` guard is the runtime half of the same question: a runner older
+  // than the contract sends nothing here, and TypeScript cannot see across the wire.
+  const note: unknown = response.executionNote;
+  return typeof note === 'string' && note.trim() !== '' ? note : null;
 }

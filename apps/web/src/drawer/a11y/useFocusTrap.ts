@@ -10,7 +10,7 @@
  * Owner: drawer-engineer
  */
 
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { focusables, keyIntent, nextIndex } from './focus-trap';
 
 export interface FocusTrapOptions {
@@ -21,6 +21,20 @@ export interface FocusTrapOptions {
 }
 
 export function useFocusTrap(ref: RefObject<HTMLElement | null>, { active, onClose, autoFocus = true }: FocusTrapOptions): void {
+  /**
+   * `onClose` is held in a ref and deliberately kept out of the effect's dependencies.
+   *
+   * It is not a micro-optimisation. The drawer's `onEscape` is a `useCallback` keyed on
+   * `reviewing`, so with `onClose` in the dependency array this whole effect tore down and
+   * re-ran every time the review screen opened or closed — and its setup **autofocuses**.
+   * The visible symptom was that closing the review threw focus onto the drawer's ✕ instead
+   * of returning it to the `Review` pill, because a trap that re-arms treats an unchanged
+   * drawer as a newly opened one. Re-arming a focus trap is never what a changed callback
+   * identity means.
+   */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!active) return;
     const root = ref.current;
@@ -38,7 +52,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, { active, onClo
       if (!intent) return;
       if (intent === 'close') {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       const items = focusables(root);
@@ -76,5 +90,6 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, { active, onClo
         opener.focus({ preventScroll: true });
       }
     };
-  }, [active, autoFocus, onClose, ref]);
+    // `onClose` is intentionally absent — see `onCloseRef` above.
+  }, [active, autoFocus, ref]);
 }
