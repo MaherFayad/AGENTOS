@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isCronExpression } from '@agnetos/contracts';
-import { parseCron } from '../cron.ts';
+import { nextRunAt, parseCron } from '../cron.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 const LIBRARY = join(REPO, 'agents');
@@ -130,31 +130,110 @@ test('six fields is refused by the parser, which is the reason the frontmatter r
 });
 
 /**
- * **A pin on a live defect, not a proof of correctness.** ADR-040 found this while writing the
- * gate above and did not fix it, because neither file is `scheduler-engineer`'s:
- * `packages/contracts/src/frontmatter.ts` is `agent-library-curator`'s and
- * `apps/runner/src/lib/cron.ts` is `runner-engineer`'s.
+ * **The agreement gate the pin asked for.** Until 2026-08-19 this file ended in a pin recording
+ * that the two dialects disagreed about day-of-week `7`: `CRON_BOUNDS[4]` in
+ * `packages/contracts/src/frontmatter.ts` is `[0, 7]` (POSIX/Vixie, where `7` is Sunday) while
+ * `FIELDS[4]` in `apps/runner/src/lib/cron.ts` was `{ min: 0, max: 6 }`. So `schedule: "0 6 * * 7"`
+ * passed `validate:frontmatter`, committed, rendered a clock badge, and threw in the only parser
+ * that can turn it into an occurrence. `runner-engineer` fixed it in the permissive direction —
+ * `max: 7` with `7` folded to `0` after range expansion — and the pin is replaced here, in the
+ * same commit, by what its own failure message specified.
  *
- * `CRON_BOUNDS[4]` is `[0, 7]` — POSIX, where `7` is Sunday. `FIELDS[4]` in the runner is
- * `{ min: 0, max: 6 }`. So `schedule: "0 0 * * 7"` passes `validate:frontmatter`, commits,
- * renders a clock badge and is un-plannable forever. It is not in the library today, and the
- * gate above is what stops it arriving; this pin is what stops the *fact* being forgotten.
+ * **The direction is one-way and that is deliberate.** `isCronExpression` is what lets a
+ * `schedule:` be *committed*; `parseCron` is what turns it into an occurrence. So everything
+ * frontmatter accepts must parse, with no exceptions listed. The converse does not hold and must
+ * not be asserted: `parseCron` also accepts `mon`/`jan` names, which frontmatter rejects, and a
+ * name that cannot be committed cannot strand a badge.
  *
- * **It is designed to go red when somebody repairs it**, which is the honest shape when the
- * repair is in another agent's file: a gate that is red on arrival cannot be landed, and a
- * paragraph in a handoff is read once.
+ * **Not a comparison of two declarations.** The standing finding is that a pin comparing two
+ * declarations is satisfiable by a lie. This runs a generated corpus through both *functions* and
+ * asserts what it saw before concluding anything: how many expressions frontmatter actually
+ * accepted, and — named explicitly, because a narrowing of `CRON_BOUNDS` would otherwise make the
+ * whole implication vacuously true and green — that `0 0 * * 7` is still one of them.
  */
-test('PIN — the two cron dialects disagree about day-of-week 7, and the divergence is somebody else\'s to fix', () => {
-  const fixed =
-    'The dialects agree about day-of-week 7. Delete this pin and replace it with the full ' +
-    'agreement gate ADR-040 describes: every expression isCronExpression accepts must parse ' +
-    'under parseCron, with no exceptions listed.';
 
-  assert.equal(isCronExpression('0 0 * * 7'), true, fixed);
-  assert.throws(() => parseCron('0 0 * * 7'), /day of week 7 is out of range/, fixed);
+/** Per-field token forms, including out-of-range ones so the corpus contains real rejections. */
+const TOKENS: Record<number, string[]> = {
+  0: ['*', '0', '59', '60', '*/15', '0-30', '0,30', '00', '5/10'],
+  1: ['*', '0', '23', '24', '*/6', '9-17', '6,18', '09'],
+  2: ['*', '1', '31', '0', '32', '1-15', '1,15', '*/2'],
+  3: ['*', '1', '12', '0', '13', '1-6', '1,7', '*/3', 'jan'],
+  4: ['*', '0', '6', '7', '8', '-1', '1-5', '5-7', '0-7', '1,7', '7/1', '*/2', '07', 'mon'],
+};
 
-  // The other direction, harmless but real: frontmatter is narrower about names. Recorded so
-  // that "the dialects differ" is a checked statement rather than a remembered one.
-  assert.equal(isCronExpression('0 0 * * mon'), false, fixed);
-  assert.doesNotThrow(() => parseCron('0 0 * * mon'), fixed);
+/** `* * * * *` with one field replaced — enough shape without a 100k-row cross product. */
+function corpus(): string[] {
+  const out = new Set<string>(['* * * * *']);
+  for (const [index, tokens] of Object.entries(TOKENS)) {
+    for (const token of tokens) {
+      const parts = ['*', '*', '*', '*', '*'];
+      parts[Number(index)] = token;
+      out.add(parts.join(' '));
+    }
+  }
+  for (const whole of ['0 0 * * 7', '0 6 * * 7', '0 6 * * 1,7', '0 6 * * 5-7', '30 2 1 1 0', '*/15 9-17 * * 1-5']) {
+    out.add(whole);
+  }
+  return [...out];
+}
+
+test('every expression frontmatter accepts, the coordinator can parse — no exceptions', () => {
+  const all = corpus();
+  const accepted = all.filter((expression) => isCronExpression(expression));
+
+  // What the instrument saw, asserted before anything is concluded from it. A corpus that
+  // generated nothing, or a CRON_BOUNDS narrowed until nothing is accepted, would otherwise
+  // satisfy the implication below by holding it vacuously.
+  assert.ok(
+    accepted.length >= 30,
+    `frontmatter accepted only ${accepted.length} of ${all.length} generated expressions — this ` +
+      'gate is asserting an implication over almost nothing. Either the corpus stopped generating ' +
+      'or isCronExpression was narrowed; both need a human.',
+  );
+  assert.ok(
+    accepted.includes('0 0 * * 7'),
+    'isCronExpression no longer accepts "0 0 * * 7", so the very case this gate replaced a pin ' +
+      'for is no longer being tested and every assertion below is vacuous for it. If day-of-week ' +
+      '7 was deliberately removed from CRON_BOUNDS that is a frontmatter schema change ' +
+      '(agent-library-curator, ADR-040) — and parseCron should be narrowed back in the same breath.',
+  );
+
+  for (const expression of accepted) {
+    assert.doesNotThrow(
+      () => parseCron(expression),
+      `frontmatter accepts "${expression}" and the coordinator's parser refuses it. That is a ` +
+        'schedule a human can commit, that renders a clock badge, and that can never be planned ' +
+        '— ADR-040. Widen parseCron, or narrow frontmatter and say so in an ADR.',
+    );
+  }
+});
+
+/**
+ * **Parsing `7` is not enough, and accepting it without folding would be worse than refusing it.**
+ * Every consumer matches the expanded day-of-week set against `getUTCDay()`, which returns 0-6 and
+ * never 7. So a `max: 7` without the fold parses clean, validates clean, renders a badge — and
+ * matches no day for the four years `nextRunAt` scans. That is the same stranded badge wearing a
+ * green tick, which is why the assertions below are about occurrences and not about a Set.
+ */
+test('day-of-week 7 is Sunday, all the way through to the occurrence', () => {
+  const from = new Date('2026-08-19T00:00:00.000Z'); // a Wednesday
+
+  const sunday = nextRunAt('0 6 * * 7', from);
+  assert.ok(sunday !== null, '"0 6 * * 7" produced no occurrence in four years — 7 parsed but was ' +
+    'never folded to 0, so it matches a weekday that does not exist.');
+  assert.equal(new Date(sunday).getUTCDay(), 0, `"0 6 * * 7" fired on day ${new Date(sunday).getUTCDay()}, not Sunday.`);
+  assert.equal(sunday, nextRunAt('0 6 * * 0', from), '"0 6 * * 7" and "0 6 * * 0" are the same schedule in POSIX cron.');
+
+  // A range that spans the seam: Fri, Sat, Sun. Folding at parse time would have turned this into
+  // `5-0` and thrown "runs backwards", so this is what pins the fold to *after* expansion.
+  const span = parseCron('0 6 * * 5-7').fields[4]!;
+  assert.deepEqual([...span].sort(), [0, 5, 6], '"5-7" should expand to Fri, Sat, Sunday-as-0.');
+  assert.deepEqual([...parseCron('0 6 * * 1,7').fields[4]!].sort(), [0, 1]);
+
+  // `*` must not leak a 7 into the set either — it expands across the widened max.
+  assert.deepEqual([...parseCron('0 6 * * *').fields[4]!].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6]);
+
+  // Widened by exactly one, not opened. 8 is out of range in both dialects.
+  assert.throws(() => parseCron('0 6 * * 8'), /day of week 8 is out of range/);
+  assert.equal(isCronExpression('0 6 * * 8'), false);
 });

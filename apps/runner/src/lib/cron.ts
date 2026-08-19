@@ -2,9 +2,17 @@
  * 5-field cron validation and next-fire calculation for `POST /api/schedule` (§3.2).
  *
  * Validation is strict and happens *before* the git commit, because the failure mode we
- * are avoiding is a committed schedule that ofelia silently refuses to load — at which
+ * are avoiding is a committed schedule that nothing can turn into an occurrence — at which
  * point the map shows a clock badge for a job that will never fire, and the frontmatter
- * has become a lie rather than a source of truth.
+ * has become a lie rather than a source of truth. Until `e4e0bff` the thing that would
+ * silently refuse the string was ofelia; the sidecar is gone and **this file is now the
+ * only code in the repo that turns an expression into an occurrence** (`nextRunAt` for the
+ * badge, `scheduleClock.scanCron` for what the coordinator plans with), so a string this
+ * parser refuses is a schedule nothing can ever fire. ADR-040.
+ *
+ * That makes the dialect load-bearing rather than cosmetic: `isCronExpression`
+ * (`packages/contracts/src/frontmatter.ts`) is what lets a `schedule:` be committed, and
+ * anything it accepts must parse here. `cron-dialect.test.ts` is that gate.
  */
 import { ApiError } from './errors';
 
@@ -14,6 +22,13 @@ interface FieldSpec {
   max: number;
   /** Named aliases (`mon`, `jan`) mapped to their numeric value. */
   names?: Record<string, number>;
+  /**
+   * Applied to every value *after* range expansion, for fields where two numbers name the
+   * same thing. Only day-of-week has one. It runs after expansion and never at parse time,
+   * because folding a range bound would turn the legal `5-7` (Fri–Sun) into `5-0`, which
+   * this parser correctly refuses as running backwards.
+   */
+  fold?: (value: number) => number;
 }
 
 const FIELDS: FieldSpec[] = [
@@ -27,10 +42,21 @@ const FIELDS: FieldSpec[] = [
     names: { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 },
   },
   {
+    // POSIX and Vixie cron accept 0-7 with **both 0 and 7 meaning Sunday**, and
+    // `isCronExpression` has always accepted `7` on that convention. This parser accepted
+    // only 0-6 until 2026-08-19, so `schedule: "0 6 * * 7"` passed `validate:frontmatter`,
+    // committed, rendered a clock badge and threw in the one parser that plans it — a
+    // schedule a human can write that can never fire. ADR-040; widened here rather than
+    // narrowing frontmatter, because narrowing would reject expressions that are legal
+    // everywhere else.
     name: 'day of week',
     min: 0,
-    max: 6,
+    max: 7,
     names: { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 },
+    // Accepting 7 without folding it would be worse than rejecting it: every consumer
+    // matches the expanded set against `getUTCDay()`, which returns 0-6 and never 7, so an
+    // un-folded 7 would parse clean, render a badge, and match no day for four years.
+    fold: (value) => (value === 7 ? 0 : value),
   },
 ];
 
@@ -90,7 +116,7 @@ function expandField(spec: FieldSpec, field: string): Set<number> {
         retryable: false,
       });
     }
-    for (let value = from; value <= to; value += step) out.add(value);
+    for (let value = from; value <= to; value += step) out.add(spec.fold ? spec.fold(value) : value);
   }
   return out;
 }
@@ -136,8 +162,9 @@ export function nextRunAt(expression: string, from: Date = new Date()): string |
   ];
   // Standard cron quirk, and the one people get wrong: when *both* day-of-month and
   // day-of-week are restricted the match is an OR, not an AND. `0 6 1 * 1` fires on the
-  // 1st **and** on Mondays. Getting this wrong would make `nextRunAt` disagree with ofelia
-  // about when a job actually runs, and the frontmatter badge would be quietly untrue.
+  // 1st **and** on Mondays. Getting this wrong would make the badge disagree with the
+  // occurrence the coordinator actually plans, and the frontmatter badge would be quietly
+  // untrue.
   const domRestricted = restricted[2] === true;
   const dowRestricted = restricted[4] === true;
 
