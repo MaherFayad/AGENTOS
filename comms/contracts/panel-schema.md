@@ -145,15 +145,27 @@ satisfy the other does not get a type through. Both were falsified before being 
 the fourth type was planted, `tsc` reported `Type '4' is not assignable to type
 '0 | 1 | 2 | 3'` and the validator printed three FAILs; removing it returned both to green.
 
-**Built vs reserved.** Only `thread-feed` has a schema and a renderer. `board` needs
-ADR-029's drag primitive and `calendar` reads `ops.schedule`; neither exists, and a schema
-written against an absent table is a plausible spec. So `board` and `calendar` are **named
-and refused**: the validator rejects a panel declaring one with a sentence naming ADR-028,
-and they stay out of `WidgetType`, so `WidgetView`'s exhaustive `switch` is never asked for
-an arm that nothing can render — the compiler naming every render site is the safety
-property, and two unrenderable arms spend it early.
+**Built vs reserved — two of three are spent.** `thread-feed` (M16) and `calendar` (M18)
+have a schema and a renderer. Each was built on the milestone its data arrived in, which is
+the whole discipline: ADR-028 deferred `calendar` because it reads `ops.schedule` and *"a
+schema written against an absent table is a plausible spec"*, and M18's
+`0011_scheduling.sql` created that table, so the reservation was spent **for the reason the
+ADR gave** rather than early. **One extension remains — `board` — and that is the entire
+remaining allowance, ever.** It needs ADR-029's drag primitive, which is unwritten.
 
-## The seven widget types, plus `thread-feed`
+`board` is therefore **named and refused**: the validator rejects a panel declaring it with
+a sentence naming ADR-028, and it stays out of `WidgetType`, so `WidgetView`'s exhaustive
+`switch` is never asked for an arm that nothing can render — the compiler naming every
+render site is the safety property, and an unrenderable arm spends it early.
+
+A third enforcer arrived with the second extension: `WIDGET_TYPE_EXTENSIONS_BUILT:
+0 | 1 | 2 | 3` in `panels.ts` is the same instrument aimed one step in, so a fourth *built*
+extension is unassignable even if someone widened `EXTENSION_WIDGET_TYPES` and its budget
+in one edit. `checkContractParity()` reads that constant out of the TypeScript source and
+requires it to be `BUILT_EXTENSION_WIDGET_TYPES.length`, so a hand-edited count that still
+compiles is red at `validate:panels`.
+
+## The seven widget types, plus `thread-feed` and `calendar`
 
 | `type` | Shape | Notes |
 |---|---|---|
@@ -165,6 +177,7 @@ property, and two unrenderable arms spend it early.
 | `progress-table` | `{rows:[{label, phase, progress:0..1, status:"on-track"\|"at-risk"}]}` | teal track, status chip |
 | `activity-feed` | `{query:{source:"langfuse"}, limit:12}` | `09:41 Meeting transcript processed · 4 action items assigned — Follow-Up Coordinator` — bold event + `--ink-2` attribution |
 | `thread-feed` | `{query:{source:"langfuse", metric:"runs", shape:"list"}, limit:12, emptyState, unthreadedState}` | ADR-028. The activity feed's rows **grouped by `threadId`**, newest thread first; group header is a truncated id |
+| `calendar` | `{query:{source:"sql", name}, emptyState, unplaceableState, projectionState}` | ADR-028. A **week grid of what will run** — seven columns, one lane per `ops.schedule` row. No `limit`, no `tone`, no colour, no drag |
 
 Grid: 2 columns, 16px gap. A widget declares `span: 1 | 2`.
 
@@ -207,12 +220,87 @@ A row with no `threadId` is **dropped, never bucketed into a synthetic thread of
 Every row is in that state today, so a fallback would draw a screen full of threads over a
 database with none.
 
+### `calendar` — what it reads, and the four things it refuses to do
+
+*"A week grid of what will run"* (`Plan §14`). A week of **future** occurrences is the one
+thing no arrangement of the canonical seven can draw: every one of them reports something
+that has already happened. That is why it is a type rather than a composition.
+
+1. **Its `query.source` must be `sql`, and the validator refuses any other.** `langfuse` is
+   an aggregate over the agent-run ledger (§3.5) and a run is a thing that *ran*; a schedule
+   is a thing that has not. Reading a future off the past plane is the wrong table dressed
+   as the right number. The registered query name is the runner's — **a panel never carries
+   SQL**.
+2. **No colour, and the ruling is a value not a paragraph.** `Plan §14` asks for a grid
+   *coloured by department*; `CALENDAR_INK` in `packages/contracts/src/panels.ts` rules that
+   it does not get one. Chrome is monochrome and colour is data ink (§1.3); seven
+   departments against a seven-hue palette, tiled across a dense grid, is where that rule
+   dies first (`scheduling.md` §10). Department is not the lane axis either — a schedule
+   stores `kind` / `addressed_to` (`scheduling.md` §3.4), `@sales/digest` would need a
+   library join and a project-default schedule has no department at all, and two thirds of a
+   lane axis is not a lane axis. Department is a **filter on the query**, which is selection
+   rather than decoration. One hue is reserved for a fire *outcome* and is off, because
+   `ops.schedule_fire` has never held a row. `widget.tone` is refused at validation, and
+   `Calendar.test.tsx` reads the component's source and fails on any data-ink class.
+3. **No drag-to-reschedule.** `Plan §14` mentions it; ADR-029's drag primitive is unwritten,
+   which is exactly why `board` is still reserved. A pointer handler here would decide that
+   ADR by accident, so the suite fails on one.
+4. **No occurrence arithmetic and no clock.** Nothing in this repo computes a fire time
+   (`scheduling.md` §6) and the coordinator owns the clock (ADR-024). A lane arrives with
+   its days already placed — `day` is a 0..6 offset from `weekStart`, computed by the source
+   in the schedule's own zone — or it does not arrive placed at all. A browser that derived
+   occurrences from `trigger_spec` would be a second occurrence engine, and the two would
+   disagree the first time a DST boundary or a `follow_me` zone came up (the argument
+   ADR-023 used to keep one run and one trace). Column headers are formatted in UTC, which
+   is not a timezone claim: they are calendar dates and the widget prints no clock time
+   anywhere.
+
+Also absent by construction: **`limit`**. Every lane the source returns is drawn, because a
+truncation rule silently hides schedules and *"which schedules are worth showing"* is a
+policy invented for a table that has never held a row. Narrow with `query.params`, in data.
+
+**Three sentences, three different claims, and the middle one is the true one today.**
+`ops.schedule` has never held a row, no `source: 'library'` row is even *writable*
+(`AgentFrontmatter.schedule` is a bare cron that cannot satisfy the mandatory policy
+columns — ADR-024), and nothing computes an occurrence:
+
+| State | Sentence |
+|---|---|
+| The source answered and there are no schedules at all | `emptyState` |
+| Schedules arrived, **none placeable on a day** | `unplaceableState`, with the count observed in the payload |
+| A grid was drawn | `projectionState`, annotating it with an occurrence count |
+
+`unplaceableState` and `projectionState` must each contain `{value}`, and a digit anywhere
+outside that token is refused as a fabricated number — the same grammar `unthreadedState`
+uses. **Collapsing the first two would let *"you have nothing scheduled"* stand for *"nobody
+has worked out when your schedules fire"***, which are different facts about the system, and
+a calendar is a surface where that substitution is easy to miss.
+
+A lane with no cell is **counted into `unplaceable`, never drawn as a row of blanks**: an
+empty row claims *this schedule fires nothing this week*, and the true statement is *nobody
+computed when it fires*. The converse is what makes a blank cell readable — a lane is in the
+grid only because the source enumerated its whole week, so inside a drawn lane a blank day
+genuinely is an observed zero. Both facts are on screen at once, which is why
+`unplaceableState` renders *under* a grid rather than instead of one.
+
+**`projectionState` carries no money, and the validator enforces that with a currency
+pattern.** `Plan §14` asks for the grid *"annotated with projected cost"*;
+`CalendarProjection.estimatedUsd` is typed `null` so a figure cannot compile, and the copy
+rule is the same refusal one layer out. Zero runs have completed, so there is nothing to
+average — and a calendar is the one surface that multiplies a guessed per-run figure by
+every cell on screen before anyone checks it. The occurrence count is the honest half and it
+is prefixed `≥` whenever any lane reported its own count as a lower bound, because `event`,
+`condition`, `chain` and `manual` triggers fire on the world rather than on a clock
+(`scheduling.md` §6). The word *"cost"* is deliberately legal in the sentence: the honest
+copy has to be able to say there is no cost projection.
+
 ## Rules
 
 1. Unknown `type` → render a bordered "unsupported widget" placeholder, never crash. A
-   **reserved** type (`board`, `calendar`) takes the same path at runtime and a *different*
-   sentence at validation: the name is real and ADR-028 reserved it, but no schema exists to
-   check the widget against. "gauge" is wrong; "board" is early.
+   **reserved** type (`board` — the last one, since `calendar` was built in M18) takes the
+   same path at runtime and a *different* sentence at validation: the name is real and
+   ADR-028 reserved it, but no schema exists to check the widget against. "gauge" is wrong;
+   "board" is early.
 2. Missing data → skeleton at correct height, then empty state (**`--ink-2`**, one line).
    Never a spinner that shifts layout.
 
@@ -325,6 +413,7 @@ project staffs, so a fallen-through panel could not even be checked for relevanc
 - `department[]` — ADR-001 slugs. An array because `pipeline` covers `sales` and `deals`.
 - `emptyState` — required on every `sql`-backed widget. One sentence naming the agent that will fill it. It is the copy for `empty` (the source answered and had nothing). On `unavailable` the resolver's own sentence wins where it has one, because "No spend in this window" is a claim about data we could not read; `sql` results deliberately carry no message so `emptyState` still speaks for them.
 - `unthreadedState` — required on every `thread-feed`. Carries `{value}`. See above: it is the sentence for *rows arrived, none of them threaded*, which is a different fact from *nothing arrived* and is the true one today.
+- `unplaceableState` / `projectionState` — required on every `calendar`. Both carry `{value}`, both refuse a digit outside it, and all three of a calendar's sentences refuse a currency symbol, code or money word. See above: *no schedules at all*, *schedules nobody can place on a day* and *here is what the grid adds up to* are three claims, and the second is the true one today.
 - `pending` — required on every signal that has a query. What the strip says before the figure exists, and what `hideWhenZero` prints at zero. Same precedence as above: a resolver message wins on `unavailable`.
 - `note` — required on every `static` query. Provenance, in a sentence. An unsourced literal is a fabricated number.
 - `range: "$range"` — binds the query to the panel's time-range pills. Illegal without `filters.type: "range"`.
