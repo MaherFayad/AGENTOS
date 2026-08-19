@@ -5,6 +5,7 @@ import { isWidgetType } from '@agnetos/contracts';
 import { ActivityFeed } from './ActivityFeed';
 import { AreaChart } from './AreaChart';
 import { BarList } from './BarList';
+import { Calendar } from './Calendar';
 import { CostTable } from './CostTable';
 import { DataTable } from './DataTable';
 import { ProgressTable } from './ProgressTable';
@@ -16,10 +17,12 @@ import { UnsupportedWidget, WidgetChrome } from './widget-chrome';
  * new component, this switch is wrong.
  *
  * The `never` fallthrough is a safety property and ADR-028 caps how often it can be spent:
- * seven canonical types plus at most three extensions, ever. `board` and `calendar` are
- * reserved but deliberately absent from `WidgetType`, so they arrive here through
- * `isWidgetType` returning false and render the placeholder — an arm for a type nothing
- * can draw would spend the compiler's guarantee on nothing.
+ * seven canonical types plus at most three extensions, ever. **Two of the three are spent**
+ * — `thread-feed` in M16, `calendar` in M18, each on the milestone its data arrived in.
+ * `board` is reserved and deliberately absent from `WidgetType`, so it arrives here through
+ * `isWidgetType` returning false and renders the placeholder; an arm for a type nothing can
+ * draw would spend the compiler's guarantee on nothing, and ADR-029's drag primitive — the
+ * thing `board` is waiting for — is still unwritten.
  */
 export function WidgetView({ widget }: { widget: Widget }): React.JSX.Element {
   if (!isWidgetType(widget.type)) {
@@ -45,6 +48,8 @@ export function WidgetView({ widget }: { widget: Widget }): React.JSX.Element {
       return <ActivityFeed widget={widget} />;
     case 'thread-feed':
       return <ThreadFeed widget={widget} />;
+    case 'calendar':
+      return <Calendar widget={widget} />;
     default: {
       const _never: never = widget;
       return (

@@ -27,8 +27,8 @@ import type { Panel } from '@agnetos/contracts';
  * an exemption ends at the next blank line.
  */
 export const PROMPT_WIDGET_TYPES =
-  'bar-list, source-bar-list, area-chart, cost-table, data-table, progress-table, activity-feed, thread-feed';
-export const PROMPT_RESERVED_TYPES = 'board, calendar';
+  'bar-list, source-bar-list, area-chart, cost-table, data-table, progress-table, activity-feed, thread-feed, calendar';
+export const PROMPT_RESERVED_TYPES = 'board';
 
 export function buildPromptFor(panel: Panel): string {
   const intent = panel.buildPrompt.trim();
@@ -48,7 +48,7 @@ export function buildPromptFor(panel: Panel): string {
     'Rules:',
     '- Dashboards are data, not code. Do not add a React component for this center.',
     `- Only these widget types: ${PROMPT_WIDGET_TYPES}. Everything else composes from them (ADR-028).`,
-    `- ${PROMPT_RESERVED_TYPES} are reserved names with no schema yet — do not use them, and never invent a new type.`,
+    `- Reserved names with no schema yet, do not use: ${PROMPT_RESERVED_TYPES}. Never invent a new type.`,
     '- sql queries are registered names only. Never inline SQL.',
     '- No fabricated numbers. A signal with a digit must carry a query and a pending sentence.',
     '- sql-backed widgets must set emptyState naming the agent that will fill them.',

@@ -7,7 +7,7 @@
   "provider": "langfuse",
   "department": ["operations"],
   "order": 1,
-  "buildPrompt": "the agent-ops command center: run volume, spend, p50 latency and error rate across every agent in the tree, plus the live feed of runs — all Langfuse-backed, nothing static",
+  "buildPrompt": "the agent-ops command center: run volume, spend, p50 latency and error rate across every agent in the tree, plus the live feed of runs — all Langfuse-backed, nothing static — and one week grid of what is scheduled to run, read from ops.schedule through a registered query, monochrome and annotated with an occurrence count rather than a cost",
   "filters": { "type": "range", "options": ["7d", "14d", "28d"], "default": "7d" },
   "kpis": [
     {
@@ -187,6 +187,17 @@
       ],
       "query": { "source": "langfuse", "metric": "runs", "shape": "list", "limit": 10, "range": "$range" },
       "emptyState": "No runs in this window."
+    },
+    {
+      "id": "schedule-week",
+      "type": "calendar",
+      "title": "The week ahead",
+      "subtitle": "Every schedule that fires, by the thread it addresses",
+      "span": 2,
+      "query": { "source": "sql", "name": "schedule_week" },
+      "emptyState": "No schedules yet — the coordinator writes ops.schedule when an agent is first put on a clock, and the library half cannot be written at all until an agent's schedule: carries a zone and its two policies.",
+      "unplaceableState": "Schedules with no occurrence computed for this week, so none of them can be placed on a day: {value}. The coordinator owns the clock and has never run — this is the scheduler being unwired, not a quiet week.",
+      "projectionState": "Occurrences on this grid: {value}. No spend is projected beside them: no run has ever completed, so there is nothing to average and a per-occurrence figure would be invented."
     }
   ],
   "footer": {

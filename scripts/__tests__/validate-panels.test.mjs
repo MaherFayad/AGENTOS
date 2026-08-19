@@ -61,9 +61,12 @@ test('seven canonical types, and at most three extensions, ever', () => {
   assert.ok(ENUMS.EXTENSION_WIDGET_TYPES.length <= ENUMS.EXTENSION_CAP);
   // The three names are the whole allowance. A fourth need does not spend a spare.
   assert.deepEqual(ENUMS.EXTENSION_WIDGET_TYPES, ['thread-feed', 'board', 'calendar']);
-  // Only the built ones are usable in a panel; the rest are named and refused.
-  assert.deepEqual(ENUMS.WIDGET_TYPES.length, 8);
-  assert.deepEqual(ENUMS.RESERVED_WIDGET_TYPES, ['board', 'calendar']);
+  // Only the built ones are usable in a panel; the rest are named and refused. Two of the
+  // three are spent — `thread-feed` (M16) and `calendar` (M18) — and `board` waits on
+  // ADR-029's drag primitive, which is unwritten.
+  assert.deepEqual(ENUMS.BUILT_EXTENSION_WIDGET_TYPES, ['thread-feed', 'calendar']);
+  assert.deepEqual(ENUMS.WIDGET_TYPES.length, 9);
+  assert.deepEqual(ENUMS.RESERVED_WIDGET_TYPES, ['board']);
 });
 
 test('a fourth widget type fails the parity gate — the enforcer, falsified', () => {
@@ -235,6 +238,103 @@ test('unthreadedState must show the count it claims, and invent no other number'
       m.includes('standing rule 9'),
     ),
     'a hardcoded figure beside the observed one was accepted',
+  );
+});
+
+/* --------------------------------------------------- calendar (ADR-028) */
+
+const calendar = (over = {}) => {
+  const panel = base();
+  panel.widgets.push({
+    id: 'schedule-week',
+    type: 'calendar',
+    title: 'The week ahead',
+    query: { source: 'sql', name: 'schedule_week' },
+    emptyState: 'No schedules yet — the coordinator writes ops.schedule when an agent is put on a clock.',
+    unplaceableState: 'Schedules with no occurrence computed for this week: {value}.',
+    projectionState: 'Occurrences on this grid: {value}. Nothing is projected beside them, because no run has completed.',
+    ...over,
+  });
+  return errors(validatePanel(panel, { fileName: 'sample-center.json' }));
+};
+
+test('a calendar is valid with its three sentences and a registered query name', () => {
+  assert.deepEqual(calendar(), []);
+});
+
+test('a calendar reads ops.schedule, so its source must be sql', () => {
+  // A run ledger cannot answer what has not run. Accepting `langfuse` here would print a
+  // future off the past plane, which is the wrong table wearing the right number.
+  assert.ok(
+    calendar({ query: { source: 'langfuse', metric: 'runs', range: '7d' } }).some((m) =>
+      m.includes('must be "sql" on a calendar'),
+    ),
+  );
+  assert.ok(
+    calendar({ query: { source: 'static', value: 3, note: 'a literal standing in for a week of schedules' } }).some(
+      (m) => m.includes('must be "sql" on a calendar'),
+    ),
+  );
+});
+
+test('a calendar carries three separate claims, and none of them is optional', () => {
+  // "no schedules exist", "schedules exist that nobody can place on a day", and "here is
+  // what the grid totals" are three different facts. The second is the true one today,
+  // because nothing computes an occurrence (scheduling.md §6).
+  assert.ok(calendar({ emptyState: undefined }).some((m) => m.includes('emptyState is required')));
+  assert.ok(calendar({ unplaceableState: undefined }).some((m) => m.includes('unplaceableState')));
+  assert.ok(calendar({ projectionState: undefined }).some((m) => m.includes('projectionState')));
+});
+
+test('a calendar sentence must print the count it claims, and invent no other number', () => {
+  assert.ok(calendar({ unplaceableState: 'Some schedules could not be placed.' }).some((m) => m.includes('{value}')));
+  assert.ok(
+    calendar({ projectionState: '{value} of 40 occurrences this week.' }).some((m) => m.includes('standing rule 9')),
+  );
+});
+
+test('no money figure reaches a calendar, in any of its three sentences', () => {
+  // `Plan §14` asks for the grid "annotated with projected cost" and there is no cost: zero
+  // runs have completed, so there is nothing to average, and a calendar multiplies a guessed
+  // figure by every cell on screen. `CalendarProjection.estimatedUsd` is typed `null` so the
+  // number cannot compile; this is the same refusal where the copy lives.
+  for (const [key, sentence] of [
+    ['projectionState', 'Occurrences: {value}, about $4 each.'],
+    ['unplaceableState', 'Unplaceable: {value}. Roughly two dollars a run.'],
+    ['emptyState', 'No schedules yet — projected spend is USD zero.'],
+  ]) {
+    assert.ok(
+      calendar({ [key]: sentence }).some((m) => m.includes('names money')),
+      `${key}: a money figure was accepted`,
+    );
+  }
+});
+
+test('a calendar refuses a tone — colour is data ink, and this grid has no value to ink', () => {
+  // BOARD rule 1 at the data layer. `Plan §14` asks for a grid coloured by department;
+  // seven departments against seven hues is where that rule dies first (scheduling.md §10).
+  // The renderer would silently ignore a tone, which is worse than refusing it.
+  assert.ok(calendar({ tone: 'coral' }).some((m) => m.includes('tone is not accepted on a calendar')));
+});
+
+test('a calendar refuses a limit — a hidden lane is an undercount that looks like data', () => {
+  assert.ok(calendar({ limit: 5 }).some((m) => m.includes('limit is not accepted on a calendar')));
+});
+
+test('the built-extension count is read out of panels.ts, not mirrored here', () => {
+  // Falsified with a hand-edited count that still satisfies `0 | 1 | 2 | 3`: the type alone
+  // cannot see a number that disagrees with the array it is supposed to be counting.
+  const planted = `
+export const PANEL_SCHEMA_VERSION = 1;
+export const CANONICAL_WIDGET_TYPES = ${JSON.stringify(ENUMS.CANONICAL_WIDGET_TYPES).replace(/"/g, "'")} as const;
+export const EXTENSION_WIDGET_TYPES = ['thread-feed', 'board', 'calendar'] as const;
+export const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed', 'calendar'] as const;
+export const WIDGET_TYPE_EXTENSIONS_BUILT: 0 | 1 | 2 | 3 = 1;
+`;
+  const found = errors(checkContractParity(planted));
+  assert.ok(
+    found.some((m) => m.includes('WIDGET_TYPE_EXTENSIONS_BUILT is "1"')),
+    found.join('\n'),
   );
 });
 

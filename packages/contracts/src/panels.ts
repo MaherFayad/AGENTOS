@@ -47,12 +47,17 @@ export const EXTENSION_WIDGET_TYPES = ['thread-feed', 'board', 'calendar'] as co
 
 /**
  * The extensions that have a schema and a renderer. The rest are **named and reserved**:
- * `board` needs ADR-029's drag primitive, `calendar` reads `ops.schedule`, and neither
- * exists. A schema written for a table that does not exist is a plausible spec, and a
- * `WidgetView` arm for a type nothing can render spends the `never` fallthrough — the
- * compiler naming every render site — on nothing. See ADR-028.
+ * `board` needs ADR-029's drag primitive, which is unwritten. A schema written for a
+ * primitive that does not exist is a plausible spec, and a `WidgetView` arm for a type
+ * nothing can render spends the `never` fallthrough — the compiler naming every render
+ * site — on nothing. See ADR-028.
+ *
+ * `calendar` joined this list in M18, and only because the thing ADR-028 said it was
+ * waiting for arrived: `ops.schedule` exists (`0011_scheduling.sql`,
+ * `comms/contracts/scheduling.md`). The second of three, spent deliberately rather than
+ * early. **One extension remains reserved and that is the whole remaining allowance.**
  */
-export const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed'] as const;
+export const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed', 'calendar'] as const;
 
 /**
  * ADR-028's cap, enforced by the compiler rather than by a comment. A fourth entry in
@@ -61,6 +66,18 @@ export const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed'] as const;
  */
 export const WIDGET_TYPE_EXTENSION_BUDGET = 3;
 export const WIDGET_TYPE_EXTENSIONS_USED: 0 | 1 | 2 | 3 = EXTENSION_WIDGET_TYPES.length;
+
+/**
+ * How many of the three are **built** — 1 in M16, 2 in M18.
+ *
+ * The same instrument as the line above, aimed one step in: a fourth *built* extension is
+ * unassignable here even if someone widened `EXTENSION_WIDGET_TYPES` and its cap in the
+ * same edit, and `checkContractParity()` reads this number out of the source and compares
+ * it with the array, so a hand-edited count is red too. It is a separate constant rather
+ * than a comment because "which extensions can actually be drawn" is the number that
+ * decides how much of the `never` fallthrough is left.
+ */
+export const WIDGET_TYPE_EXTENSIONS_BUILT: 0 | 1 | 2 | 3 = BUILT_EXTENSION_WIDGET_TYPES.length;
 
 /**
  * What a panel may declare and `WidgetView` renders: the canonical seven plus the built
@@ -315,6 +332,132 @@ export interface ThreadGroup {
   latestAt: string;
 }
 
+/* ---------------------------------------------------------------- calendar */
+
+/**
+ * One row of the week grid: **one `ops.schedule` row**, labelled by the address it stores.
+ *
+ * The lane label is `kind` + `addressed_to` as written — `#sales`, `@sales/digest`, or the
+ * project default — because those are columns the table actually has
+ * (`scheduling.md` §3.4). A department lane would need a join from an agent-addressed
+ * schedule through the library to a department, and for a project-addressed schedule there
+ * is no answer at all; two thirds of a lane axis is not a lane axis. See `CALENDAR_INK`.
+ */
+export interface CalendarLane {
+  /** `ops.schedule.id`. Identity for keying, never rendered as a name. */
+  id: string;
+  /** The address as stored. Supplied by the source; never composed here. */
+  label: string;
+  /** `ops.schedule.trigger_kind`, verbatim, as a wide-tracked sub-label. */
+  trigger?: string;
+  /**
+   * `false` ⇒ every count in this lane is a **lower bound** (`scheduling.md` §6: only
+   * `cron` and `interval` have a count derivable from the trigger). Absent means `false`:
+   * the renderer never promotes a bound it was not told is exact.
+   */
+  firesAreExact?: boolean;
+}
+
+/**
+ * One placed occurrence bucket: a lane, a day of the week, and how many times it fires.
+ *
+ * `day` is an **offset from `weekStart`, 0..6, computed by the source in the schedule's own
+ * zone**. The widget performs no timezone arithmetic and parses no cron: nothing in this
+ * repo computes an occurrence (`scheduling.md` §6), and a browser that computed one would
+ * be a second occurrence engine disagreeing with the coordinator's — the same argument
+ * ADR-023 used to keep one run and one trace.
+ */
+export interface CalendarCell {
+  laneId: string;
+  /** 0..6 from `weekStart`. */
+  day: number;
+  /** Occurrences on that day. Counted, never averaged. */
+  fires: number;
+}
+
+/**
+ * What a `calendar` query returns. **`ops.schedule` + occurrences the coordinator computed**
+ * — never a run, never a cost.
+ *
+ * A lane that arrives with no cell is not drawn as an empty row: it is counted into
+ * `unplaceableState`. An empty row would say *this schedule fires nothing this week*, and
+ * the true statement is *nobody has computed when this schedule fires*. Unknown is not zero.
+ */
+export interface CalendarWeek {
+  /** ISO calendar date (`YYYY-MM-DD`) of the grid's first column, as the source computed it. */
+  weekStart: string;
+  lanes: CalendarLane[];
+  cells: CalendarCell[];
+}
+
+/**
+ * `Plan §14` asks for the week grid *"annotated with projected cost"*. This is that
+ * annotation, and it carries **no money**.
+ *
+ * `estimatedUsd` is typed `null`, exactly as `ScheduleCostProjection.estimatedUsd` is
+ * (`scheduling.md` §6) and `TurnCost.estimatedUsd` before it. Zero runs have completed, so
+ * there is nothing to average — and a calendar is the surface that multiplies a guessed
+ * per-run figure by every cell on screen. The day a real figure exists, widening this type
+ * is the diff that has to say where it came from.
+ *
+ * The count is the honest half and it is what the grid prints: occurrences, observed from
+ * the cells that were placed.
+ */
+export interface CalendarProjection {
+  /** Occurrences placed in the grid. Real — summed from `cells`. */
+  fires: number;
+  /** `false` ⇒ a lower bound, because at least one lane said its own count was. */
+  firesAreExact: boolean;
+  /** No completed run exists to average. Typed `null`, not commented `null`. */
+  estimatedUsd: null;
+  estimateBasis: 'no-completed-runs';
+}
+
+/**
+ * **The colour ruling for the calendar, as a value rather than a paragraph.**
+ *
+ * `Plan §14` asks for a week grid *"coloured by department"*. It does not get one.
+ * CLAUDE.md rule 1 — chrome is monochrome, colour is data ink — is §1.3's *"90% of why it
+ * looks expensive"*, and `scheduling.md` §10 says where it dies first: seven departments
+ * against a data-ink palette of seven hues, tiled across a dense grid, is a chart legend
+ * wearing a product.
+ *
+ * So three things are decided here, and the third is the one that makes the first two hold:
+ *
+ * 1. **Department is not a hue.** `byDepartment: false`, and it is a literal type: turning
+ *    it on is a diff that argues in public rather than a class name someone adds.
+ * 2. **Department is not the lane axis either**, so this is not hue-avoidance dressed as
+ *    position. A schedule addresses a thread, and `ops.schedule` stores `kind` /
+ *    `addressed_to` (`scheduling.md` §3.4) — `#sales` names its department, `@sales/digest`
+ *    would need a library join, and a project-default schedule has no department to name.
+ *    The lane is the address the row actually holds. Department is a **filter** on the
+ *    query, which is selection, not decoration.
+ * 3. **Colour carries nothing today**, because the only value in this widget that would
+ *    earn data ink is an *outcome* — an occurrence that failed or was missed — and
+ *    `ops.schedule_fire` has never held a row (`scheduling.md` §4). One hue is reserved for
+ *    that and it is off. A grid whose cells are counts of things that have not happened yet
+ *    has no value to colour, and colouring the axis instead is exactly the mistake.
+ *
+ * `Calendar.test.tsx` reads the component's source and fails on any data-ink class, so this
+ * is enforced where it can actually be broken.
+ */
+export interface CalendarInkRule {
+  byDepartment: false;
+  huesUsed: 0;
+  /** What the one reserved hue would mean, named so "which value?" is not a research task. */
+  reservedFor: 'a fire that failed or was missed — ops.schedule_fire.state';
+  liveToday: false;
+  unblockedBy: 'one recorded fire outcome';
+}
+
+export const CALENDAR_INK: CalendarInkRule = {
+  byDepartment: false,
+  huesUsed: 0,
+  reservedFor: 'a fire that failed or was missed — ops.schedule_fire.state',
+  liveToday: false,
+  unblockedBy: 'one recorded fire outcome',
+};
+
 /* ------------------------------------------------------------------- panel */
 
 export interface Sparkline {
@@ -457,6 +600,62 @@ export interface ThreadFeedWidget extends WidgetBase {
   unthreadedState: string;
 }
 
+/**
+ * ADR-028 · `Plan §14` — *"a week grid of what will run"*. The second of the three
+ * extensions, built in M18 because `ops.schedule` finally exists. A week of *future*
+ * occurrences is the one thing no arrangement of the canonical seven can draw: every one of
+ * them reports something that has already happened.
+ *
+ * **Its query is `sql` and nothing else.** `langfuse` is an aggregate over the agent-run
+ * ledger (§3.5) and a run is a thing that ran; a schedule is a thing that has not. Reading
+ * a future from the past plane would be the wrong table dressed as the right number, so the
+ * validator refuses any other source. The registered query is the runner's — a panel names
+ * it and never contains SQL.
+ *
+ * **It renders nothing today, and which nothing is the point.** `ops.schedule` has never
+ * held a row, no `source: 'library'` row is even *writable* (`AgentFrontmatter.schedule` is
+ * a bare cron that cannot satisfy the mandatory policy columns — ADR-024,
+ * `SCHEDULE_LIBRARY_MATERIALIZATION.possibleToday: false`), and nothing computes an
+ * occurrence. So all three sentences below are required and they are three different
+ * claims — see `unplaceableState`, which is the true one for the foreseeable future.
+ *
+ * Deliberately absent: **drag-to-reschedule.** `Plan §14` mentions it; ADR-029's drag
+ * primitive is unwritten, which is exactly why `board` is still reserved. Adding a pointer
+ * interaction here would decide that ADR by accident, so the test suite fails on one.
+ */
+export interface CalendarWidget extends WidgetBase {
+  type: 'calendar';
+  /**
+   * No `limit`, deliberately. Every lane the source returns is drawn: a truncation rule
+   * would silently hide schedules, and *"which schedules are worth showing"* is a policy
+   * invented for a table that has never held a row. The day one has too many lanes, the
+   * fix is a `params` filter in the panel file — data, not a renderer default.
+   *
+   * Required: the source answered and there are no schedules at all.
+   */
+  emptyState: string;
+  /**
+   * Required: schedules exist, and **none of them arrived with an occurrence in this
+   * week**, so nothing can be placed on a day. Carries `{value}`, the count observed in the
+   * payload — the same substitution grammar `unthreadedState` and a signal's `lead` use.
+   *
+   * This is the true state today for every row that could ever exist, because nothing in
+   * this repo parses a cron or computes a next occurrence (`scheduling.md` §6). It is also
+   * rendered *under a drawn grid* whenever some lanes placed and others did not: a hidden
+   * lane is an undercount that looks like data.
+   */
+  unplaceableState: string;
+  /**
+   * Required: `Plan §14`'s *"annotated with projected cost"*, answered with the half that
+   * is real. Carries `{value}` — the occurrence count summed from the placed cells — and
+   * must say what the figure is not. A digit outside the token is a fabricated number and
+   * **a currency symbol or code is refused outright**: `CalendarProjection.estimatedUsd` is
+   * typed `null` so a money figure cannot compile, and this is the same refusal one layer
+   * out, where the copy lives.
+   */
+  projectionState: string;
+}
+
 export type Widget =
   | BarListWidget
   | SourceBarListWidget
@@ -465,7 +664,8 @@ export type Widget =
   | DataTableWidget
   | ProgressTableWidget
   | ActivityFeedWidget
-  | ThreadFeedWidget;
+  | ThreadFeedWidget
+  | CalendarWidget;
 
 export interface PanelFilters {
   type: FilterType;

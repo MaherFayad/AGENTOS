@@ -49,8 +49,11 @@ const CANONICAL_WIDGET_TYPES = [
 /** ADR-028's whole allowance: three names, ever. Not a budget of slots. */
 const EXTENSION_WIDGET_TYPES = ['thread-feed', 'board', 'calendar'];
 
-/** The extensions with a schema and a renderer. The rest are named and reserved. */
-const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed'];
+/**
+ * The extensions with a schema and a renderer — `thread-feed` (M16) and `calendar` (M18,
+ * once `ops.schedule` existed). The rest are named and reserved.
+ */
+const BUILT_EXTENSION_WIDGET_TYPES = ['thread-feed', 'calendar'];
 
 /** ADR-028's cap. A fourth extension is a reversal of that ADR, not an application of it. */
 const EXTENSION_CAP = 3;
@@ -88,6 +91,17 @@ export const ENUMS = {
     'back-office',
   ],
 };
+
+/**
+ * A currency symbol, code or money word — refused in a `calendar`'s copy.
+ *
+ * Not a general rule: a `cost-table` prints money it read from the ledger. It is the
+ * calendar's rule because a week grid is the one surface that multiplies a per-run figure
+ * by every cell on screen before anyone checks it, and no completed run exists to derive
+ * that figure from (`comms/contracts/scheduling.md` §6). The word "cost" is deliberately
+ * legal: the honest sentence has to be able to say there is no cost projection.
+ */
+const MONEY_PATTERN = /[$€£¥₹﷼]|\b(usd|sar|eur|gbp|dollars?|cents?|riyals?)\b/i;
 
 const ID = /^[a-z][a-z0-9-]{2,63}$/;
 const SQL_NAME = /^[a-z][a-z0-9_]{2,63}$/;
@@ -375,6 +389,73 @@ function validateWidget(widget, at, out, seenIds) {
       }
       break;
     }
+    case 'calendar': {
+      // A schedule is a thing that has not run. `langfuse` is an aggregate over the
+      // agent-run ledger (§3.5) and `static` is a literal — either would be a future
+      // printed off the wrong table. `ops.schedule` is reached by a registered query name
+      // owned by the runner, and a panel never carries SQL.
+      if (source !== undefined && source !== 'sql')
+        err(
+          out,
+          `${at}.query.source must be "sql" on a calendar — the grid reads ops.schedule, and a run ledger cannot answer what has not run yet (contracts/scheduling.md §3)`,
+        );
+
+      if (widget.limit !== undefined)
+        err(
+          out,
+          `${at}.limit is not accepted on a calendar — every lane the source returns is drawn, because a truncation rule would hide schedules and "which ones matter" is a policy invented for a table that has never held a row. Narrow it with query.params instead.`,
+        );
+
+      // BOARD rule 1, at the data layer. `Plan §14` asks for a grid coloured by department;
+      // ADR-028's `CALENDAR_INK` rules that it does not get one, and a `tone` here is how
+      // that arrives anyway — silently ignored by the renderer, which is worse than refused.
+      if (widget.tone !== undefined)
+        err(
+          out,
+          `${at}.tone is not accepted on a calendar — chrome is monochrome and colour is data ink (§1.3), seven departments against seven hues is where that dies first (scheduling.md §10), and the only value here that would earn ink is a fire outcome, which has never been recorded`,
+        );
+
+      if (!widget.emptyState)
+        err(
+          out,
+          `${at}.emptyState is required on a calendar — ops.schedule has never held a row and no source:'library' row is even writable (ADR-024), so this is the sentence it actually renders`,
+        );
+
+      // Three sentences, three different claims, and the second is the true one today:
+      // nothing computes an occurrence (scheduling.md §6), so a schedule can exist and
+      // still be unplaceable on a week. Collapsing them would let "you have nothing
+      // scheduled" stand for "nobody has worked out when your schedules fire".
+      for (const key of ['unplaceableState', 'projectionState']) {
+        const sentence = requireString(out, widget, key, at);
+        if (!sentence) continue;
+        if (!sentence.includes('{value}'))
+          err(
+            out,
+            `${at}.${key} must carry {value} — it reports a count observed in the payload, and a sentence that cannot show that count is claiming something it did not count`,
+          );
+        if (/\d/.test(sentence.split('{value}').join('')))
+          err(
+            out,
+            `${at}.${key} contains a digit outside {value} — the only number in it is the one observed in the payload (standing rule 9)`,
+          );
+      }
+
+      // `Plan §14` wants the grid "annotated with projected cost". There is no cost:
+      // `CalendarProjection.estimatedUsd` is typed `null` so a money figure cannot compile,
+      // and this is that refusal one layer out, where the copy lives. A calendar multiplies
+      // a guessed per-run figure by every cell on screen, and zero runs have completed.
+      for (const key of ['emptyState', 'unplaceableState', 'projectionState']) {
+        const sentence = widget[key];
+        if (typeof sentence !== 'string') continue;
+        const money = sentence.match(MONEY_PATTERN);
+        if (money)
+          err(
+            out,
+            `${at}.${key} names money ("${money[0]}") — a calendar prints occurrence counts, which are real, and no cost, which has no source: zero runs have completed so there is nothing to average (contracts/scheduling.md §6). CalendarProjection.estimatedUsd is typed null for the same reason.`,
+          );
+      }
+      break;
+    }
     default:
       break;
   }
@@ -634,6 +715,19 @@ export function checkContractParity(tsSource) {
   for (const name of built)
     if (!extensions.includes(name))
       err(out, `"${name}" is built but was never reserved by ADR-028 — it cannot be rendered into existence`);
+
+  // `WIDGET_TYPE_EXTENSIONS_BUILT` is the compiler's copy of "how many of the three can
+  // actually be drawn" — 1 in M16, 2 in M18. It is typed `0 | 1 | 2 | 3`, so a fourth stops
+  // `tsc`; this reads the number out of the source and compares it with the array, so a
+  // hand-edited count that satisfies the type is red here. Two enforcers, one fact.
+  const builtCount = tsSource.match(/export const WIDGET_TYPE_EXTENSIONS_BUILT: [^=]+= ([^;]+);/);
+  if (!builtCount)
+    err(out, 'packages/contracts/src/panels.ts: WIDGET_TYPE_EXTENSIONS_BUILT not found — the built-extension count is one of ADR-028\'s two enforcers');
+  else if (builtCount[1].trim() !== 'BUILT_EXTENSION_WIDGET_TYPES.length')
+    err(
+      out,
+      `WIDGET_TYPE_EXTENSIONS_BUILT is "${builtCount[1].trim()}" — it must be BUILT_EXTENSION_WIDGET_TYPES.length, or the count and the list can disagree while both compile`,
+    );
 
   return out;
 }

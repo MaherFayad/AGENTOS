@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 
 import { areaPath, barWidths, linePath, progressWidth, sparklinePath } from '../lib/geometry.ts';
 import { groupByThread, toBarRows, toScalar, toSeries, toActivityRows, unthreadedCount } from '../lib/rows.ts';
+import { toCalendarWeek, weekColumns } from '../lib/calendar.ts';
 import { bindRange } from '../data/bind.ts';
 import { normalizePanelPayload } from '../data/normalize.ts';
 import { buildPromptFor, PROMPT_RESERVED_TYPES, PROMPT_WIDGET_TYPES } from '../lib/prompt.ts';
@@ -24,6 +25,7 @@ import {
   RESERVED_WIDGET_TYPES,
   WIDGET_TYPES,
   WIDGET_TYPE_EXTENSION_BUDGET,
+  WIDGET_TYPE_EXTENSIONS_BUILT,
   WIDGET_TYPE_EXTENSIONS_USED,
 } from '../../../../../packages/contracts/src/panels.ts';
 
@@ -36,11 +38,13 @@ test('seven canonical types plus at most three extensions, and the guard knows e
 });
 
 test('a reserved type is never renderable — that is what keeps the never fallthrough honest', () => {
-  // `board` and `calendar` are named by ADR-028 and absent from `WidgetType`, so they reach
-  // `WidgetView` through `isWidgetType` returning false and land on the placeholder. An arm
-  // for them would spend the compiler's exhaustiveness guarantee on something nothing can
-  // draw.
-  assert.deepEqual(RESERVED_WIDGET_TYPES, ['board', 'calendar']);
+  // `board` is named by ADR-028 and absent from `WidgetType`, so it reaches `WidgetView`
+  // through `isWidgetType` returning false and lands on the placeholder. An arm for it would
+  // spend the compiler's exhaustiveness guarantee on something nothing can draw: ADR-029's
+  // drag primitive is unwritten. `calendar` left this list in M18 when `ops.schedule`
+  // landed — two of the three are spent, one remains.
+  assert.deepEqual(RESERVED_WIDGET_TYPES, ['board']);
+  assert.equal(WIDGET_TYPE_EXTENSIONS_BUILT, 2);
   for (const t of RESERVED_WIDGET_TYPES) {
     assert.equal(isReservedWidgetType(t), true);
     assert.equal(isWidgetType(t), false);
@@ -154,6 +158,88 @@ test('groupByThread over a fully unthreaded feed reports nothing, not an empty t
   const rows = toActivityRows([{ at: '2026-08-18T09:00:00Z', event: 'A', agent: 'ops' }]);
   assert.deepEqual(groupByThread(rows), []);
   assert.equal(unthreadedCount(rows), 1);
+});
+
+/* ---------------------------------------------------- calendar (ADR-028) */
+
+const week = (over = {}) => ({
+  weekStart: '2026-08-17',
+  lanes: [
+    { id: 's-1', label: '#sales', trigger: 'cron', firesAreExact: true },
+    { id: 's-2', label: '@ops/digest', trigger: 'event' },
+  ],
+  cells: [
+    { laneId: 's-1', day: 0, fires: 1 },
+    { laneId: 's-1', day: 4, fires: 2 },
+  ],
+  ...over,
+});
+
+test('a lane with no occurrence is counted, never drawn as a row of blanks', () => {
+  // The load-bearing distinction: an empty row would say "this schedule fires nothing this
+  // week"; the true statement is "nobody has computed when this schedule fires". Nothing in
+  // this repo computes an occurrence (scheduling.md §6), so today that is every lane.
+  const view = toCalendarWeek(week());
+  assert.deepEqual(view.lanes.map((l) => l.id), ['s-1']);
+  assert.equal(view.unplaceable, 1);
+  assert.deepEqual(view.lanes[0].days, [1, 0, 0, 0, 2, 0, 0]);
+  assert.equal(view.projection.fires, 3);
+});
+
+test('with no week start nothing is placeable — a day offset with no origin places nothing', () => {
+  const view = toCalendarWeek(week({ weekStart: undefined }));
+  assert.equal(view.weekStart, null);
+  assert.deepEqual(view.lanes, []);
+  assert.equal(view.unplaceable, 2);
+  assert.equal(view.projection.fires, 0);
+  assert.deepEqual(weekColumns(null, 'en'), []);
+});
+
+test('the annotation counts occurrences and carries no money, ever', () => {
+  // `Plan §14` wants the grid "annotated with projected cost". Zero runs have completed, so
+  // there is nothing to average; `estimatedUsd` is typed `null` and the basis says why.
+  const { projection } = toCalendarWeek(week());
+  assert.equal(projection.estimatedUsd, null);
+  assert.equal(projection.estimateBasis, 'no-completed-runs');
+  assert.ok(!Object.keys(projection).some((k) => /usd|cost|spend/i.test(k) && projection[k] !== null));
+});
+
+test('exactness is never promoted — a missing flag is a lower bound, not a claim', () => {
+  // Only `cron` and `interval` have a count derivable from the trigger (scheduling.md §6).
+  // A renderer that read a missing flag as "exact" would print a confident number under a
+  // Gmail filter.
+  const view = toCalendarWeek(
+    week({
+      lanes: [{ id: 's-2', label: '@ops/digest', trigger: 'event' }],
+      cells: [{ laneId: 's-2', day: 2, fires: 1 }],
+    }),
+  );
+  assert.equal(view.lanes[0].firesAreExact, false);
+  assert.equal(view.projection.firesAreExact, false);
+});
+
+test('an occurrence for a lane nobody declared is dropped, not given a lane of its own', () => {
+  const view = toCalendarWeek(week({ cells: [{ laneId: 'ghost', day: 1, fires: 9 }] }));
+  assert.deepEqual(view.lanes, []);
+  assert.equal(view.projection.fires, 0);
+});
+
+test('week columns are dates in UTC, so the grid does not shift when read from Riyadh', () => {
+  // The source placed each occurrence on a day in the schedule's own zone; this module
+  // refuses to redo that arithmetic, and the widget prints no clock time anywhere.
+  const columns = weekColumns('2026-08-17', 'en');
+  assert.equal(columns.length, 7);
+  assert.deepEqual(columns.map((c) => c.iso).slice(0, 2), ['2026-08-17', '2026-08-18']);
+  assert.equal(columns[6].iso, '2026-08-23');
+  assert.equal(columns[0].dayOfMonth, '17');
+});
+
+test('a malformed calendar payload renders nothing rather than throwing', () => {
+  for (const payload of [null, 'x', [], {}, { weekStart: '2026-13-99' }, { lanes: 'no' }]) {
+    const view = toCalendarWeek(payload);
+    assert.deepEqual(view.lanes, []);
+    assert.equal(view.projection.fires, 0);
+  }
 });
 
 test('neighbours wrap so the rail ring has no dead end', () => {
