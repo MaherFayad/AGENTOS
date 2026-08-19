@@ -6,14 +6,14 @@ than the work. If this disagrees with BOARD, **BOARD wins** and this file is sta
 
 ## Where the build is
 
-- **Done:** M0, M1, M2, **M5**, **M6**, **M15**, **M16** (eleven slices, PASSED 2026-08-18).
-- **M17 and M18 are open and both stopped mid-flight** — four agents cut off by a session limit
-  2026-08-19, not by a defect. Foundations landed, `verify` exits 0, **two slices have no
-  handoff and are unreviewed**. No surface for M17; nothing fires on a timer for M18. Also open:
-  **M3** (API key), **M4** (relay unverified), **M8**.
+- **Done:** M0, M1, M2, **M5**, **M6**, **M15**, **M16**, **M17**, **M18** — the last two PASSED
+  2026-08-19 after each failed once and was re-gated. Still open: **M3** (API key), **M4** (relay
+  unverified), **M8**. **Nothing fires on a timer**; the coordinator's clock is a computation.
 - **Phase 0 is still open**, and it blocks *validation* of everything, not construction.
-  **Six milestones are done and none is validated** — every PASS covers source, tokens and a
-  real page load. Never let a done row read as a working feature.
+  **Eight milestones are done and none is fully validated** — a PASS covers source, tokens and a
+  real page load, and **the 1440px side-by-side has never been performed** because the reference
+  frames do not exist. M17's inert/Tab half was proved in real Chrome via a CDP probe; that is the
+  browser half of Part VI solved. Never let a done row read as a working feature.
 
 > **Completed is not validated.** Zero agent runs have ever executed. `runnerConfigured` is
 > false, the ledger is empty, and `0005`–`0008` have never met a live Postgres. What you
