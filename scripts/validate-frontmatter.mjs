@@ -111,7 +111,22 @@ const LUCIDE_FALLBACK = [
   'waves', 'workflow', 'wrench', 'zap',
 ];
 
-/** Five-field cron only — see the contract's isCronExpression for why six is rejected. */
+/**
+ * Five-field cron only — **ADR-040**, and the reason is not the one this comment used to give.
+ *
+ * It said ofelia's Go parser would read a six-field expression differently. Ofelia left the
+ * stack at `e4e0bff` (ADR-024 moved the clock to the coordinator), so that reason no longer
+ * describes anything. The rule is kept because of a stronger one: `parseCron` in
+ * `apps/runner/src/lib/cron.ts` is the **only** code in this repo that turns a cron expression
+ * into an occurrence — `nextRunAt` (the MAP's clock badge) and `scheduleClock.ts` (what the
+ * coordinator plans with) both share it — and it takes exactly five fields. A six-field
+ * `schedule:` would validate here, commit, render a clock badge, and be unplannable forever.
+ *
+ * The reason is enforced rather than asserted:
+ * `apps/runner/src/lib/__tests__/cron-dialect.test.ts` runs every `schedule:` string in the real
+ * library through `parseCron`. **Known divergence, pinned in that file and owned elsewhere:**
+ * `[0, 7]` below accepts POSIX's `7` for Sunday and `parseCron` throws on it.
+ */
 const CRON_BOUNDS = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 7]];
 
 export function isCronExpression(value) {
@@ -778,7 +793,7 @@ export async function validateAll() {
 
     if (fm.schedule !== undefined) {
       if (!isStr(fm.schedule)) err('schedule must be a quoted 5-field cron string');
-      else if (!isCronExpression(fm.schedule)) err(`schedule "${fm.schedule}" is not a valid 5-field cron (ofelia would silently take a 6-field one to mean something else)`);
+      else if (!isCronExpression(fm.schedule)) err(`schedule "${fm.schedule}" is not a valid 5-field cron — the coordinator's parser takes exactly five fields, so anything else is a clock badge for a job that can never be planned (ADR-040)`);
     }
 
     // Invariant 6, as amended by ADR-014 (accepted 2026-08-17). This used to warn. It is an

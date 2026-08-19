@@ -431,6 +431,55 @@ test('no source: library row is writable, because frontmatter carries a cron and
   assert.equal(SCHEDULE_LIBRARY_MATERIALIZATION.possibleToday, false);
 });
 
+/**
+ * The same refusal, pinned where it can actually be widened — **the value, not the key list.**
+ *
+ * The assertion above watches the *top-level keys* of the frontmatter shape, and there are two
+ * ways `schedule:` could grow the intent §3.3 needs. Only one of them changes that key list:
+ *
+ *   1. four new sibling keys (`tz:`, `follow_me:`, …) — caught above;
+ *   2. **`schedule:` becoming an object** that carries them — **`schedule` is still exactly one
+ *      key, the set above is unchanged, and that test stays green while a `source: library` row
+ *      becomes writable.**
+ *
+ * Shape (2) is the likelier design and it is the one the pin was blind to. This is tonight's
+ * standing finding in its own costume: *a pin comparing two declarations is satisfiable by a
+ * lie* — the key set and `possibleToday` can agree perfectly while the schema underneath has
+ * moved. So this test asks the **live schema** a question and reads its answer, rather than
+ * comparing two things that were written down.
+ *
+ * The day `agent-library-curator` widens `schedule:` (their contract, their ADR — §11.1), the
+ * second assertion goes red and points here.
+ */
+test('the schedule: field itself still takes a bare cron string and refuses an object', () => {
+  const field = agentFrontmatterSchema.shape.schedule;
+
+  // Graded from the permissive side too, because a field that refuses everything would satisfy
+  // the refusal below while having nothing to do with scheduling intent.
+  assert.equal(
+    field.safeParse('0 6 * * 1').success,
+    true,
+    'schedule: no longer accepts a plain five-field cron string — this pin lost its subject.',
+  );
+
+  const withIntent = field.safeParse({
+    cron: '0 6 * * 1',
+    tz: 'Asia/Riyadh',
+    follow_me: false,
+    missed_run_policy: 'catch_up_once',
+    overlap_policy: 'skip',
+  });
+  assert.equal(
+    withIntent.success,
+    false,
+    'schedule: now accepts an object carrying scheduling intent, so a source: library row may ' +
+      'finally be materializable and SCHEDULE_LIBRARY_MATERIALIZATION.possibleToday is stale. ' +
+      'Revisit ADR-024 and scheduling.md §3.3 before anything writes one — the failure this ' +
+      'refusal prevents is four invented policy values shipping as an author\'s choices, on the ' +
+      'two settings that decide whether a sleeping laptop costs nothing or costs four figures.',
+  );
+});
+
 /* -------------------------------------------------------------------------- *
  * 5b. The CHECKs, and the writer that has to satisfy them before Postgres can
  * -------------------------------------------------------------------------- */

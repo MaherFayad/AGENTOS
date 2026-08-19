@@ -74,6 +74,23 @@ be an **object** (`schedule_trigger_spec_is_object`) and never prose — an `eve
 Gmail filter or a JQL, which is somebody's correspondence, and composed into a sentence first,
 key-based redaction stops reaching it (§7).
 
+**`cron` means the five-field dialect `parseCron` accepts, and that is now a decision with a
+live reason — ADR-040.** `validate-frontmatter.mjs` refused six fields because *"ofelia would
+silently take a 6-field one to mean something else"*; ofelia left the stack at `e4e0bff`, so the
+rule was standing on a deleted component. It is kept, with the reason replaced: `parseCron` is
+the only code here that turns an expression into an occurrence — `nextRunAt` and `scheduleClock`
+both share it — and it takes exactly five fields, so a six-field `schedule:` is a clock badge for
+a job that can never be planned. `cron-dialect.test.ts` runs every `schedule:` string in the real
+library through the coordinator's parser, which is a committed value graded against the behaviour
+that has to consume it rather than two validators agreeing with each other.
+
+**One divergence is open and is not mine to close.** `isCronExpression` accepts `0 0 * * 7`
+(POSIX's Sunday); `parseCron` throws `day of week 7 is out of range`. Observed: with
+`schedule: "0 6 * * 7"` planted in a real agent file, `npm run validate:frontmatter` exits **0**.
+So an agent can be committed today with a schedule that validates, renders a badge and can never
+fire. The gate above catches it at commit; the fix is one line in `apps/runner/src/lib/cron.ts`
+(`runner-engineer`'s) and is filed to them, pinned meanwhile in `cron-dialect.test.ts`.
+
 **Event triggers arrive through the same MCP allowlist door as everything else** (M9's rule, and
 CLAUDE.md rule 4): a connector that can be read can be subscribed to. There is **no special-case
 capability for subscription**, and a schedule may not widen an agent's `wired_into`. A
@@ -113,6 +130,22 @@ four figures. `SCHEDULE_LIBRARY_MATERIALIZATION.possibleToday` is typed `false`,
 asserts the frontmatter schema still lacks the four keys, so **the day
 `agent-library-curator` widens `schedule:` the assertion goes red and points here.** Filed to
 them as a `decision-request`; it is their contract, not mine.
+
+**That tripwire had a blind spot and it has been closed, with the blindness demonstrated rather
+than argued.** The key-set assertion watches the *top-level keys* of the frontmatter shape, which
+catches four new sibling keys and **misses `schedule:` becoming an object that carries them** —
+`schedule` is still exactly one key, the set is unchanged, and a `source: library` row becomes
+writable under a green pin. Observed: widening the field to
+`z.union([z.string()…, z.object({cron}).passthrough()])` and re-running the suite, *"no source:
+library row is writable"* **passed**. The second assertion (`the schedule: field itself still
+takes a bare cron string and refuses an object`) asks the live schema a question and reads the
+answer, and it went red. This is the standing finding in a new costume: a pin comparing two
+declarations is satisfiable by a lie.
+
+**Wave 2's decision on §11.1 is therefore: it stays refused.** Not because an object-form
+`schedule:` is wrong — it is the likelier design — but because widening it is a frontmatter
+schema change and needs `agent-library-curator` and an ADR, not a scheduler quietly reading four
+fields into columns whose whole point is that no default is safe.
 
 `until_at` is **nullable** and `review_at` is **not**, and the asymmetry is deliberate — see
 ADR-024's *Consequences*. A review date is derivable at write time; an expiry cannot be invented
