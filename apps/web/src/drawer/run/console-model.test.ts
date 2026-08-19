@@ -23,6 +23,11 @@ describe('consoleReducer', () => {
         startedAt: '2026-08-15T21:00:00Z',
         tools: ['exa'],
         approvalRequired: false,
+        // And it happened a second time, to this same object, for the same reason: M17 made
+        // `threadId` required on `SseStartData` and no fixture here grew one. Invisible to
+        // vitest again, red under `typecheck:tests` again. The gate has now caught this
+        // exact class twice, which is the argument for keeping it in `verify`.
+        threadId: 'th_01JQ',
       },
       eventId: '1',
     });
@@ -64,6 +69,7 @@ describe('consoleReducer', () => {
         startedAt: '2026-08-17T01:00:00Z',
         tools: [],
         approvalRequired: false,
+        threadId: 'th_01JR',
       },
       eventId: '1',
     });

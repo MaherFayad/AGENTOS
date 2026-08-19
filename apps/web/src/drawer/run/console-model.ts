@@ -71,6 +71,16 @@ export interface ConsoleState {
    * agent other than the one named in `agent` above.
    */
   sourceRef?: string;
+  /**
+   * `ops.thread.id` from `start` — **the conversation this run is a turn of** (ADR-023,
+   * `SseStartData.threadId`). This is the address the mailbox composer sends to.
+   *
+   * `null` and absent are kept apart rather than collapsed into one falsy value, because
+   * they are different facts: `null` is a runner with no thread store at all
+   * (`--profile dev`, the same state that has no ledger row), while absent is a runner too
+   * old to say. Only the first is a configuration someone chose.
+   */
+  threadId?: string | null;
   /** The terminal outcome from `done`. Absent until the run ends. */
   status?: 'ok' | 'error' | 'denied' | 'canceled';
   /** Present when a human denied the plan and wrote why. */
@@ -197,11 +207,12 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
               phase: 'streaming',
               runId: event.runId,
               traceUrl: event.traceUrl ?? undefined,
-              // Both are read straight off the event and neither is defaulted: an older
+              // All three are read straight off the event and none is defaulted: an older
               // runner that does not send them leaves the header honestly unknown rather
               // than inheriting whatever the previous run said.
               agent: event.agent,
               sourceRef: event.sourceRef,
+              threadId: event.threadId,
             },
             { kind: 'notice', text: `Run ${event.runId} started.` },
           );

@@ -174,22 +174,23 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
   }, [run]);
 
   /**
-   * The mailbox composer's address — `null`, and honestly so (`Plan §12`).
+   * The mailbox composer's address — `ops.thread.id`, read off the run stream (`Plan §12`).
    *
-   * Every run opens or continues a thread (`runService.ts` step 0b), but `SseStartData`
-   * does not carry its id: `runId`, `agent`, `agentRef`, `sourceRef`, `traceUrl`,
-   * `startedAt`, `tools`, `approvalRequired` — and no `threadId`. So the drawer watches a
-   * run and cannot name the conversation it belongs to, and the composer renders disabled
-   * with that reason rather than pretending to an address it does not have.
+   * Every run opens or continues a thread (`runService.ts` step 0b) and `SseStartData` now
+   * carries its id, so a streaming run can finally name the conversation it belongs to.
+   * `null` keeps its old meaning and the composer keeps its old behaviour — **disabled with
+   * the reason** — for the two states that still have no address: no run has started in this
+   * drawer yet, or the runner has no thread store at all (`--profile dev`).
    *
-   * This is not left as a comment. `threads/mailbox.ts` declares
-   * `RUN_STREAM_CARRIES_THREAD_ID = false` and `mailbox.test.ts` reads
-   * `packages/contracts/src/api.ts` — the moment `runner-engineer` adds `threadId` to
-   * `SseStartData`, that test goes red and this line has to become
-   * `run.state.threadId ?? null` before the tree is green again. A producer landing
-   * without its consumer is how the header read SOURCE UNKNOWN for all of M15.
+   * **This line was `null` for the whole of M16, and the pin above it is why it is not now.**
+   * `threads/mailbox.ts` declared `RUN_STREAM_CARRIES_THREAD_ID = false` while
+   * `mailbox.test.ts` read `packages/contracts/src/api.ts` — so when M17 added `threadId` to
+   * `SseStartData`, the test went red *inside `runner-engineer`'s own commit*, and this line
+   * had to be wired before the tree was green again. M15 shipped a `sourceRef` producer whose
+   * consumer never landed and the header read SOURCE UNKNOWN for every agent with nothing red
+   * anywhere; that is the failure this collected instead.
    */
-  const mailboxThreadId: string | null = null;
+  const mailboxThreadId: string | null = run.state.threadId ?? null;
 
   const sendMessage = useCallback<Sender>(
     (threadId, input) => postThreadMessage(project, threadId, input),

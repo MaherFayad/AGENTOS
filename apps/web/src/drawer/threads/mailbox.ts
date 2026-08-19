@@ -110,27 +110,27 @@ export interface SendInput {
 export type Sender = (threadId: string, input: SendInput) => Promise<PostThreadMessageResponse>;
 
 /**
- * **Does the run stream say which thread a run is a turn of? It does not.**
+ * **Does the run stream say which thread a run is a turn of? As of M17, yes.**
  *
  * `POST /api/p/:project/run` opens or continues a thread for every run
- * (`runService.ts` step 0b) — but `SseStartData` carries `runId`, `agent`, `agentRef`,
- * `sourceRef`, `traceUrl`, `startedAt`, `tools` and `approvalRequired`, and **no
- * `threadId`**. So a run on screen cannot say which conversation it belongs to, and
- * the drawer has no address to send a note to while one streams.
+ * (`runService.ts` step 0b), and `SseStartData.threadId` now names it — `null` only on a
+ * runner with no thread store, which is the same state that has no ledger row. The composer
+ * is addressable from the moment `start` arrives.
  *
- * That is a missing producer, not a missing consumer, so it is not fixed here:
- * `packages/contracts/src/api.ts` is `runner-engineer`'s and a contract has one owner.
- * A `decision-request` is filed.
+ * **This constant is a two-way pin, and it is the reason this is wired at all.**
+ * `mailbox.test.ts` reads `packages/contracts/src/api.ts` and fails whenever the two
+ * disagree — in *either* direction. It was `false` for the whole of M16 while the producer
+ * was missing, which was correctly a missing producer and not this file's to fix. When M17
+ * added the field, the pin went red inside `runner-engineer`'s own commit, and
+ * `JobDrawer`'s `mailboxThreadId` was wired in the same change that made it green.
  *
- * **This constant is a two-way pin, not a note.** `mailbox.test.ts` reads
- * `packages/contracts/src/api.ts` and fails if `SseStartData` ever declares
- * `threadId` while this still says `false` — so the day the producer lands, the
- * wiring that consumes it is a build failure away, rather than a producer nobody
- * connected. M15 shipped `sourceRef` on the runner while this drawer's type dropped
- * it, and the header read SOURCE UNKNOWN for every agent with nothing red anywhere;
- * this is that lesson written as a gate instead of a paragraph.
+ * It still guards the other direction: drop `threadId` from `SseStartData` and this goes
+ * red again rather than leaving a composer addressing a field nobody sends. M15 shipped a
+ * `sourceRef` producer whose consumer never landed and the header read SOURCE UNKNOWN for
+ * every agent with nothing red anywhere; this is that lesson written as a gate instead of a
+ * paragraph, and it has now collected once.
  */
-export const RUN_STREAM_CARRIES_THREAD_ID = false;
+export const RUN_STREAM_CARRIES_THREAD_ID = true;
 
 /** Where the runner says the message went. `api-contracts.md`, `PostThreadMessageResponse`. */
 export type Disposition = 'queued' | 'delivered-to-run';
