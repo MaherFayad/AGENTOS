@@ -140,7 +140,7 @@ describe('provenance reaches the header from the agent read, with no run', () =>
   });
 
   /**
-   * Answers the three reads the drawer makes on open, by URL. LAST RUNS is empty and the
+   * Answers the four reads the drawer makes on open, by URL. LAST RUNS is empty and the
    * runner is unconfigured on purpose: this is the tree exactly as it stands — no run has
    * ever executed — and the header must still be able to say where the agent came from.
    */
@@ -151,6 +151,11 @@ describe('provenance reaches the header from the agent read, with no run', () =>
         const url = String(input);
         const body = url.includes('/metrics/runs')
           ? { runs: [] }
+          // M17's roster. Empty and NOT narrowed — the honest shape of a tree where no run
+          // has executed and no project has a repository. Answering the agent detail here
+          // instead would exercise the unreadable-body path and quietly stop testing this.
+          : url.includes('/work-products')
+            ? { workProducts: [], reviewQueue: false }
           : url === '/api/status'
             ? { runnerConfigured: false }
             : agent;

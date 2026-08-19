@@ -655,6 +655,111 @@ export const en = {
   'threads.mailbox.haltNotYetMoved':
     'A halt does not move the thread by itself. The run’s next drain reads it, stops the session, and moves the thread then.',
 
+  /* ---------------------------------------------------------------------------
+   * M17 · `Plan §13` — work products, the diff review screen, and the verdict.
+   *
+   * The register of this block is set by one fact, and every sentence in it is
+   * written for that fact rather than around it: **no agent run has ever executed
+   * and no project has a checked-out repository**, so `ops.work_product` has never
+   * held a row. The state a person will actually see is the empty one, so the
+   * empty sentence is the one that got the most attention.
+   *
+   * The distinction the rest of the block exists for is the house defect landing
+   * on the screen where it costs real work: a value that was **recorded** on a row
+   * versus a value something **observed**. `work.recorded` and `work.recordedWhy`
+   * are the qualifier, and they are attached at the point of display rather than
+   * written into the value — `contracts/work-product.md` §0.
+   * ------------------------------------------------------------------------ */
+  'drawer.section.work': 'Work products',
+  'work.scopeNote':
+    'The newest work products in this project. The route carries no per-agent filter, so this list is not narrowed to this agent.',
+  'work.filter.all': 'All',
+  'work.filter.review': 'Awaiting review',
+  'work.loading': 'Looking for work products…',
+  'work.empty':
+    'No run has left a work product behind. Nothing has executed and no project has a repository checked out, so this list is empty rather than filtered.',
+  'work.emptyReview': 'Nothing is waiting for review.',
+  'work.failed': 'Could not reach the runner, so this list is empty rather than wrong.',
+  /* Reached, and answered with something that is not a list. Distinct from `work.failed` on
+     purpose: "could not reach" and "answered wrongly" send a reader to different places, and
+     a shape mismatch that renders as a network problem wastes the hour spent looking at the
+     network. Nothing is invented to fill the gap. */
+  'work.unreadable':
+    'The runner answered, but not with a list of work products. Nothing is shown rather than something invented.',
+  'work.commits': { one: '{count} commit', other: '{count} commits' },
+  'work.files': { one: '{count} file', other: '{count} files' },
+  'work.lines': '+{insertions} −{deletions}',
+  'work.push.local': 'Unpushed',
+  'work.push.pushed': 'Pushed',
+  'work.push.none': 'Nothing to push',
+  'work.push.unknown': 'Push state unknown',
+  'work.push.observedAt': 'Looked at {time}.',
+  'work.push.unknownWhy':
+    'Nothing has ever looked at whether this branch left the machine. That is not the same as having nothing to push.',
+  'work.pr': 'PR {number}',
+  'work.pr.open': 'Pull request open',
+  'work.pr.merged': 'Pull request merged',
+  'work.pr.closed': 'Pull request closed',
+  'work.pr.draft': 'Pull request in draft',
+  'work.ci.pending': 'CI pending',
+  'work.ci.passing': 'CI passing',
+  'work.ci.failing': 'CI failing',
+  'work.ci.unknown': 'CI state unknown',
+  'work.tests': { one: '{passed} of {count} test passed', other: '{passed} of {count} tests passed' },
+  'work.recorded': 'Recorded',
+  'work.recordedWhy':
+    'Nothing in this build opens a pull request, runs CI or runs a test suite. This value was written on the row; nothing here watched it happen.',
+  'work.diffGone':
+    'The worktree for this run has been removed, so its diff can no longer be read.',
+  /* `Plan §13`'s fourth roster line. Its only representation is `done.threadState ===
+     'waiting'` — a question is a message kind in a thread, not a second flag that could
+     disagree with the row (§7). The roster route does not carry it, so a row read from
+     there draws no cell rather than a confident "not blocked". */
+  'work.blocked': 'Blocked — it asked you something',
+  'work.review.open': 'Review this change',
+  'work.thread.open': 'Open the conversation this run belongs to',
+
+  'work.diff.title': 'Review',
+  'work.diff.close': 'Close the review',
+  'work.diff.tree': 'Tree {sha}',
+  'work.diff.loading': 'Reading the diff…',
+  'work.diff.empty': 'This run changed no files.',
+  'work.diff.binary': 'Binary file. Flagged, never sent as bytes.',
+  'work.diff.withheld': {
+    one: '{count} further line in this file was not sent.',
+    other: '{count} further lines in this file were not sent.',
+  },
+  'work.diff.more': 'Show more files',
+  'work.diff.moved':
+    'The worktree moved while this was open. Load the diff again — half of one tree and half of another is not a change anyone should approve.',
+  'work.diff.unavailable':
+    'The worktree for this run is gone, so there is no diff to read. That is not the same as a run that changed nothing.',
+  'work.diff.status.added': 'Added',
+  'work.diff.status.modified': 'Modified',
+  'work.diff.status.deleted': 'Deleted',
+  'work.diff.status.renamed': 'Renamed',
+  'work.diff.status.binary': 'Binary',
+
+  /* The body a verdict carries when the reader typed no note. The machine-readable
+     verdict lives in the message's `payload` object and is never read back out of this
+     sentence: composing structured content into prose before storage is how four of five
+     denylisted keys leaked in M15, and it would also make the verdict untranslatable
+     back. Prose here, object there. */
+  'work.review.body.approved': 'Approved this change.',
+  'work.review.body.changes': 'Asked for changes to this change.',
+  'work.review.approve': 'Approve',
+  'work.review.changes': 'Request changes',
+  'work.review.note': 'A note for the next turn (optional)',
+  'work.review.approved': 'Approved. Recorded in this run’s thread, against tree {sha}.',
+  'work.review.requested': 'Changes requested. It reaches the agent on its next turn.',
+  'work.review.notMerge':
+    'This records a verdict in the run’s own thread. It does not push, open a pull request or merge — nothing in this build does.',
+  'work.review.noThread':
+    'This run’s thread is not known here, so there is nothing to record a verdict against.',
+  'work.review.noTree':
+    'This page cannot say which tree it read, and a verdict that cannot name what it looked at is a claim with no observation behind it.',
+  'work.review.failed': 'The verdict was not recorded. {message}',
+
   'a11y.mapCanvas': 'Agent galaxy. Use the arrow keys to move between departments.',
   'a11y.drawer': 'Agent detail',
   'a11y.carousel': 'Command centers',

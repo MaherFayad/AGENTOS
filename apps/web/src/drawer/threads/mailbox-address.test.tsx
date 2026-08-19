@@ -113,7 +113,7 @@ describe('the reducer keeps the address the runner sends', () => {
 });
 
 describe('the drawer hands that address to the composer', () => {
-  /** The three reads the drawer makes on open. No run has ever executed; that is the tree. */
+  /** The four reads the drawer makes on open. No run has ever executed; that is the tree. */
   function serve(): void {
     vi.stubGlobal(
       'fetch',
@@ -121,6 +121,11 @@ describe('the drawer hands that address to the composer', () => {
         const url = String(input);
         const body = url.includes('/metrics/runs')
           ? { runs: [] }
+          // M17's roster. Empty and NOT narrowed — the honest shape of a tree where no run
+          // has executed and no project has a repository. Answering the agent detail here
+          // instead would exercise the unreadable-body path and quietly stop testing this.
+          : url.includes('/work-products')
+            ? { workProducts: [], reviewQueue: false }
           : url === '/api/status'
             ? { runnerConfigured: false }
             : {

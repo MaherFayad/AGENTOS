@@ -51,6 +51,12 @@ const INK3_COLOR_ALLOWLIST: Record<string, string> = {
     'The §2.6.5 autonomy segments are literally `disabled` buttons (ChartSections.tsx:39) ' +
     'and this is literally the disabled token. WCAG 1.4.3 exempts inactive components; ' +
     'the selected segment overrides to --copper-ink on --copper.',
+  '.workCell + .workCell::before':
+    'Generated punctuation — the middot between roster cells. It carries no information and ' +
+    'survives §9.2’s delete-the-text test outright: remove it and a reader loses spacing, ' +
+    'not a fact. Every cell it separates is its own element with its own text, and the one ' +
+    'thing on that line that IS required reading — the recorded/unknown qualifier — is a ' +
+    'sentence in --ink-2 below it, never this glyph. M17.',
 };
 
 /** Strip comments, then split into `selector { declarations }` pairs. */

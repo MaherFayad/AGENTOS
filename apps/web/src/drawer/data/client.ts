@@ -32,7 +32,10 @@
 import {
   PROJECT_ROUTE_PREFIX,
   RUNNER_ROUTES,
+  type DiffPage,
   type PostThreadMessageResponse,
+  type WorkProductListResponse,
+  type WorkProductResponse,
 } from '@agnetos/contracts';
 import { NO_PROJECT_SENTENCE, projectApiUrl } from '@/components/shell/useSearchIndex';
 import { API_BASE } from '../run/transport';
@@ -47,10 +50,25 @@ export interface ApiFailure {
 
 export class ApiCallError extends Error {
   readonly hint?: string;
-  constructor(message: string, hint?: string) {
+  /**
+   * The runner's own `ApiErrorCode`, when it sent one.
+   *
+   * Added for M17: the diff screen has to tell `work_product_moved` (409) from
+   * `work_product_unavailable` (410), and those are two completely different pieces of
+   * news for the reader — *the tree changed under you, load it again* versus *the tree is
+   * gone and there is nothing left to read*. Deciding that from the message string would
+   * be a substring claim, which is the failure family this repo keeps paying for; the code
+   * is the field the contract put there for it.
+   *
+   * `undefined` when the runner sent no JSON body (a proxy 502, a transport failure). That
+   * is not a code and must not be turned into one.
+   */
+  readonly code?: string;
+  constructor(message: string, hint?: string, code?: string) {
     super(message);
     this.name = 'ApiCallError';
     this.hint = hint;
+    this.code = code;
   }
 }
 
@@ -64,14 +82,18 @@ async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
   if (!response.ok) {
     let message = `The runner answered ${response.status}.`;
     let hint: string | undefined;
+    let code: string | undefined;
     try {
-      const body = (await response.json()) as { error?: { message?: string; hint?: string } };
+      const body = (await response.json()) as {
+        error?: { message?: string; hint?: string; code?: string };
+      };
       if (body?.error?.message) message = body.error.message;
       hint = body?.error?.hint;
+      code = body?.error?.code;
     } catch {
       /* keep the status-line message */
     }
-    throw new ApiCallError(message, hint);
+    throw new ApiCallError(message, hint, code);
   }
   return response.json();
 }
@@ -90,14 +112,18 @@ async function postJson(path: string, payload: unknown): Promise<unknown> {
   if (!response.ok) {
     let message = `The runner answered ${response.status}.`;
     let hint: string | undefined;
+    let code: string | undefined;
     try {
-      const body = (await response.json()) as { error?: { message?: string; hint?: string } };
+      const body = (await response.json()) as {
+        error?: { message?: string; hint?: string; code?: string };
+      };
       if (body?.error?.message) message = body.error.message;
       hint = body?.error?.hint;
+      code = body?.error?.code;
     } catch {
       /* keep the status-line message */
     }
-    throw new ApiCallError(message, hint);
+    throw new ApiCallError(message, hint, code);
   }
   return response.json().catch(() => ({}));
 }
@@ -254,13 +280,89 @@ export async function postApproval(
 export async function postThreadMessage(
   project: string | null,
   threadId: string,
-  input: { body: string; interrupt: ComposableLevel },
+  input: { body: string; interrupt: ComposableLevel; payload?: Record<string, unknown> | null },
 ): Promise<PostThreadMessageResponse> {
   const path = scopedPath(RUNNER_ROUTES.threadMessage.path, project).replace(
     ':id',
     encodeURIComponent(threadId),
   );
   return (await postJson(path, input)) as PostThreadMessageResponse;
+}
+
+/**
+ * Work products — M17, `Plan §13`, ADR-026, `comms/contracts/work-product.md` §4.1.
+ *
+ * **Three routes, all project-scoped, and the frame's shorthand is not the route.** M17's
+ * frame named the boundary object `GET /api/work-product/:runId`; the contract now states
+ * outright that it *"is not unscoped"*, because behind this id are another project's file
+ * paths and file contents. That is stricter than the rule about opaque run ids, and it is
+ * why every path here comes out of `RUNNER_ROUTES` rather than being typed.
+ *
+ * **The roster reads one route for N runs.** Not one per run: a roster assembled from N
+ * fetches is a spinner, and every part of it is individually correct so no test catches it
+ * (§7). `fetchWorkProducts` is that one route, and nothing in the drawer calls
+ * `fetchWorkProduct` in a loop.
+ */
+export async function fetchWorkProducts(
+  project: string | null,
+  options: { limit?: number; review?: boolean } = {},
+  signal?: AbortSignal,
+): Promise<WorkProductListResponse> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  if (options.review) params.set('review', 'true');
+  const query = params.toString();
+  const path = scopedPath(RUNNER_ROUTES.workProducts.path, project);
+  return (await getJson(query ? `${path}?${query}` : path, signal)) as WorkProductListResponse;
+}
+
+/**
+ * `GET /api/p/:project/work-product/:runId` — one run, **or a discriminated absence**.
+ *
+ * A 200 with `workProduct: null` and a stated `absent` reason is the ordinary answer in
+ * this build and must be rendered as the sentence it is. It is not an error, and the
+ * caller must never collapse it into the empty roster: *this run touched no repository*
+ * and *this project has no work products* are different news.
+ */
+export async function fetchWorkProduct(
+  project: string | null,
+  runId: string,
+  signal?: AbortSignal,
+): Promise<WorkProductResponse> {
+  const path = scopedPath(RUNNER_ROUTES.workProduct.path, project).replace(
+    ':runId',
+    encodeURIComponent(runId),
+  );
+  return (await getJson(path, signal)) as WorkProductResponse;
+}
+
+/**
+ * `GET /api/p/:project/work-product/:runId/diff?cursor=&files=` — one page, pinned to a tree.
+ *
+ * **`cursor` is opaque and is passed back verbatim.** The contract's own words: *"Pass it
+ * back verbatim; do not construct one."* It is `<headSha>:<fileIndex>` today and the client
+ * knowing that would be a second implementation of the server's paging, which is the seam
+ * this contract was drawn to prevent. So it is `string` here, `encodeURIComponent`'d for
+ * transport and never parsed, split or compared.
+ *
+ * A cursor presented against a moved tree comes back `work_product_moved` (409) and reaches
+ * the caller as an `ApiCallError` carrying that code.
+ */
+export async function fetchWorkProductDiff(
+  project: string | null,
+  runId: string,
+  options: { cursor?: string | null; files?: number } = {},
+  signal?: AbortSignal,
+): Promise<DiffPage> {
+  const params = new URLSearchParams();
+  if (options.cursor) params.set('cursor', options.cursor);
+  if (options.files !== undefined) params.set('files', String(options.files));
+  const query = params.toString();
+  const path = scopedPath(RUNNER_ROUTES.workProductDiff.path, project).replace(
+    ':runId',
+    encodeURIComponent(runId),
+  );
+  return (await getJson(query ? `${path}?${query}` : path, signal)) as DiffPage;
 }
 
 /**

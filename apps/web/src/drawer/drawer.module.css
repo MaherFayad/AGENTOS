@@ -961,3 +961,313 @@
   @apply text-meta;
   color: var(--ink-2);
 }
+
+/* -----------------------------------------------------------------------------
+ * M17 · `Plan §13` — WORK PRODUCTS, the roster line, and the diff review screen.
+ *
+ * One rule governs the whole block and it is a sharpening of rule 1 rather than an
+ * exception to it. **Colour is data ink; data ink is only ever spent on an observation.**
+ * `pr_state`, `ci_state` and `tests_*` are recorded, not produced — nothing in this build
+ * sets them (`contracts/work-product.md` §0) — so painting `CI passing` in `--ink-teal`
+ * would make the qualifier beside it unreadable: the green *is* the claim, and no adjacent
+ * sentence out-argues a green tick. A structural value therefore gets no colour at all.
+ * Its entire visual budget is "one step quieter than the numbers next to it", which is the
+ * same treatment `unpriced` gets in LAST RUNS, for the same reason.
+ *
+ * Diff origins ARE observed values — real git produced them — so + and - do carry ink, and
+ * each also carries its origin character, so the value never lives in colour alone.
+ * -------------------------------------------------------------------------- */
+.workList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workRow {
+  padding: 9px 8px;
+  margin-inline: -8px;
+  border-radius: var(--r-card-sm);
+  background: transparent;
+}
+
+.workRow:hover {
+  background: var(--card-2);
+}
+
+.workCells {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  @apply text-meta;
+  line-height: 1.5;
+}
+
+/* The middot between cells is punctuation the layout owns, not copy — it is never read as
+ * a word and never translated. Generated rather than rendered, which keeps it out of the
+ * accessible name instead of relying on an aria-hidden span per cell. */
+.workCell + .workCell::before {
+  content: '\00B7';
+  margin-inline-end: 6px;
+  color: var(--ink-3);
+}
+
+.workCell {
+  color: var(--ivory-2);
+}
+
+.workCell[data-evidence='observed'] {
+  color: var(--ivory-2);
+}
+
+/* Recorded, not observed. Dimmer, and dotted — a mark that says "there is something to read
+ * about this value" without saying anything false about the value itself. */
+.workCell[data-evidence='recorded'] {
+  color: var(--ink-2);
+  text-decoration: underline dotted var(--line-2);
+  text-underline-offset: 3px;
+}
+
+/* Nobody has ever looked. Dashed rather than dotted, so the two qualified states are
+ * distinguishable without colour — and neither is distinguishable BY colour, which is the
+ * point: the difference between them is a sentence, and the sentence is rendered. */
+.workCell[data-evidence='unknown'] {
+  color: var(--ink-2);
+  text-decoration: underline dashed var(--line-2);
+  text-underline-offset: 3px;
+}
+
+.workBranch {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ivory);
+}
+
+/* The visible half of the qualifier. The dotted underline and the title attribute are for
+ * the reader who is looking at one cell; this is for the reader who is not, and it is the
+ * one that has to survive being the only thing they read. */
+.workRecorded {
+  margin-block-start: 6px;
+  @apply text-chip;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.workActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block-start: 8px;
+}
+
+.workFilters {
+  display: flex;
+  gap: 6px;
+  margin-block-end: 10px;
+}
+
+.workFilter[aria-pressed='true'] {
+  background: var(--card-2);
+  color: var(--ivory);
+}
+
+/* -----------------------------------------------------------------------------
+ * The diff review screen — the second thing that slides over the drawer.
+ *
+ * Full height rather than the console's 62%: a reviewer reading a diff on a phone needs the
+ * panel, and unlike a live run there is nothing underneath worth keeping in view.
+ * -------------------------------------------------------------------------- */
+.review {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--screen);
+  transform: translateY(100%);
+  transition: transform var(--dur-drawer) var(--ease-drawer);
+  z-index: 2;
+}
+
+.review[data-state='open'] {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review {
+    transition: none;
+  }
+}
+
+.reviewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-block-end: var(--border-w) solid var(--line);
+}
+
+.reviewTitle {
+  @apply text-label-sm;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--track-2);
+  color: var(--ink-2);
+}
+
+/* The tree this page was read from. A sha is machine text: LTR in any UI direction. */
+.reviewTree {
+  @apply text-chip;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ink-2);
+  direction: ltr;
+}
+
+.reviewBody {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.reviewFoot {
+  padding: 10px 12px;
+  border-block-start: var(--border-w) solid var(--line);
+}
+
+.diffFile {
+  margin-block-end: 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card-sm);
+  overflow: hidden;
+}
+
+.diffFileHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-block-end: var(--border-w) solid var(--line);
+}
+
+.diffPath {
+  flex: 1 1 auto;
+  @apply text-chip;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ivory);
+  overflow-wrap: anywhere;
+  /* A repo path is machine text and does not reverse — the same ruling the run console
+   * already carries. It is an LTR island inside whatever direction the UI is in. */
+  direction: ltr;
+  text-align: start;
+}
+
+.diffStat {
+  @apply text-chip;
+  font-weight: 400;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.diffHunkHeader {
+  padding: 5px 10px;
+  @apply text-chip;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ink-2);
+  background: var(--card-2);
+  direction: ltr;
+  text-align: start;
+}
+
+.diffLine {
+  display: flex;
+  gap: 8px;
+  padding-inline: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  @apply text-meta;
+  line-height: 1.5;
+  color: var(--ivory-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  direction: ltr;
+  text-align: start;
+}
+
+/* The origin character is rendered, not implied by the colour beside it. Colour-only status
+ * is the defect LAST RUNS already fixed once; a diff is the surface where it would cost the
+ * most, because "added" and "removed" are opposite instructions to a reviewer. */
+.diffOrigin {
+  flex: 0 0 auto;
+  /* No colour of its own: it inherits the line's, so the origin character is exactly as
+   * legible as the code it belongs to. `--ink-3` here would have put the one carrier of
+   * "added versus removed" that is not colour into the disabled token, at 3.57:1 — the
+   * defect `.empty` was found with, on the surface where it decides what gets approved. */
+  user-select: none;
+}
+
+/* Data ink on TEXT, which needs no exemption and deliberately does not carry one:
+ * `chrome-is-monochrome` flags a data-ink `background` or `border` on chrome, and its own
+ * hint says "text-only data ink is fine; fills and borders are not". An inert
+ * `token-exempt:` marker here would look like a granted exemption for a rule that was never
+ * tripped, which is worse than no comment at all.
+ *
+ * The colour is legitimate either way: an origin IS the value "this line was added", and
+ * unlike the PR and CI cells above, real git observed it. */
+.diffLine[data-origin='+'] {
+  color: var(--ink-teal);
+}
+
+.diffLine[data-origin='-'] {
+  color: var(--ink-coral);
+}
+
+/* A cut that does not say it was cut is the declared-value defect wearing diff clothing:
+ * on this screen it means a reviewer approves code they were never shown. So it is a
+ * sentence with a number in it, in the flow, not a fading gradient. */
+.diffWithheld {
+  padding: 7px 10px;
+  @apply text-chip;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-2);
+  background: var(--card);
+  border-block-start: var(--border-w) solid var(--line);
+}
+
+.diffBinary {
+  padding: 8px 10px;
+  @apply text-chip;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.reviewNote {
+  inline-size: 100%;
+  padding: 8px 10px;
+  background: var(--card);
+  border: var(--border-w) solid var(--line-2);
+  border-radius: var(--r-card-sm);
+  color: var(--ivory);
+  font: inherit;
+  @apply text-meta;
+  resize: vertical;
+}
+
+.reviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+
+.reviewCaveat {
+  margin-block-start: 8px;
+  @apply text-chip;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-2);
+}

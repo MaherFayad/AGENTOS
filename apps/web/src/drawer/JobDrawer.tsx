@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { DEFAULT_LOCALE, translate, type StringKey, type Vars } from '@/i18n';
-import { useProjectSegment } from '@/components/shell';
+import { useProjectSegment, withProject } from '@/components/shell';
 import { useFocusTrap } from './a11y/useFocusTrap';
 import {
   ApiCallError,
@@ -27,6 +27,7 @@ import { initialValues, toRunPayload, validateInputs, type InputValues } from '.
 import { projectAgent, type DrawerModel } from './data/project';
 import { drawerProvenance, type DrawerProvenance } from './data/provenance';
 import type { AgentDoc } from './data/types';
+import type { WorkProductSummary } from '@agnetos/contracts';
 import { openDrawer } from './events';
 import { GlassPanel } from './primitives';
 import { useRunStream } from './run/useRunStream';
@@ -42,6 +43,10 @@ import { RunConsole } from './sections/RunConsole';
 import { Section } from './sections/Section';
 import { SkillFileCard } from './sections/SkillFileCard';
 import type { Sender } from './threads/MailboxComposer';
+import { DiffScreen } from './work/DiffScreen';
+import { useDiffReview } from './work/useDiffReview';
+import { WorkProducts, type WorkProductsState } from './work/WorkProducts';
+import { useWorkProducts } from './work/useWorkProducts';
 import s from './drawer.module.css';
 
 export type DrawerSide = 'left' | 'right';
@@ -86,8 +91,38 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleResult, setScheduleResult] = useState<string | null>(null);
   const [consoleHeld, setConsoleHeld] = useState(false);
+  /**
+   * M17 — the roster's filter and the run whose diff is being reviewed.
+   *
+   * `reviewFilter` is what is being *asked for*; whether the list actually came back
+   * narrowed is `state.reviewQueue`, off the response, and the two are deliberately not the
+   * same variable.
+   */
+  const [reviewFilter, setReviewFilter] = useState(false);
+  const [reviewing, setReviewing] = useState<WorkProductSummary | null>(null);
 
-  useFocusTrap(panelRef, { active: open, onClose });
+  const workProducts: WorkProductsState = useWorkProducts(project, {
+    enabled: Boolean(slug) && open,
+    review: reviewFilter,
+  });
+  const diffReview = useDiffReview(project, reviewing);
+
+  /**
+   * Esc closes the topmost thing, which is the review screen when one is open.
+   *
+   * The focus trap listens on `document` in the capture phase, so a handler on the review
+   * element would run only after the drawer had already closed underneath it. One layer of
+   * state here is the whole fix, and it keeps a single owner for "what does Esc mean".
+   */
+  const onEscape = useCallback(() => {
+    if (reviewing) {
+      setReviewing(null);
+      return;
+    }
+    onClose();
+  }, [reviewing, onClose]);
+
+  useFocusTrap(panelRef, { active: open, onClose: onEscape });
 
   useEffect(() => {
     if (!slug || !open) {
@@ -197,6 +232,19 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
     [project],
   );
 
+  /**
+   * `/p/:project/threads/:id` — where *"asked you something"* goes.
+   *
+   * `null` when the address bar names no project, and the roster then renders no link rather
+   * than one at the unscoped legacy path. Same rule the API client follows: a `null` project
+   * means *do not ask*, never *ask the unscoped one*.
+   */
+  const threadHref = useCallback(
+    (threadId: string): string | null =>
+      project ? withProject(`/threads/${encodeURIComponent(threadId)}`, project) : null,
+    [project],
+  );
+
   const model = agent.kind === 'ready' ? agent.model : null;
   /**
    * `Plan §23.6` — which library this agent came from.
@@ -282,6 +330,11 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
                   scheduleResult={scheduleResult}
                   downloadHref={downloadUrl(project, model.slug)}
                   runs={runs}
+                  workProducts={workProducts}
+                  reviewFilter={reviewFilter}
+                  onReviewFilter={setReviewFilter}
+                  onOpenDiff={setReviewing}
+                  threadHref={threadHref}
                 />
               ) : (
                 <MapAnatomy
@@ -300,6 +353,11 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
                   scheduleResult={scheduleResult}
                   downloadHref={downloadUrl(project, model.slug)}
                   runs={runs}
+                  workProducts={workProducts}
+                  reviewFilter={reviewFilter}
+                  onReviewFilter={setReviewFilter}
+                  onOpenDiff={setReviewing}
+                  threadHref={threadHref}
                 />
               )
             ) : null}
@@ -313,6 +371,23 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
             onDecide={(decision) => void run.decide(decision)}
             onCancel={run.cancel}
             onDismiss={onDismissConsole}
+          />
+
+          {/* The diff review screen, over the drawer and over the console. Mounted rather
+            * than conditionally rendered so the slide-up has something to animate from,
+            * and `inert` while closed so its controls are not in the tab order. */}
+          <DiffScreen
+            open={Boolean(reviewing)}
+            state={diffReview.state}
+            loadingMore={diffReview.loadingMore}
+            onLoadMore={diffReview.loadMore}
+            onClose={() => setReviewing(null)}
+            note={diffReview.note}
+            onNoteChange={diffReview.setNote}
+            onVerdict={diffReview.submit}
+            result={diffReview.result}
+            reviewRefusal={diffReview.refusal}
+            busy={diffReview.busy}
           />
         </GlassPanel>
       </aside>
@@ -338,6 +413,12 @@ interface AnatomyProps {
   /** `null` when the URL names no project, so there is no address to link at. */
   downloadHref: string | null;
   runs: RunsState;
+  /** M17 — the project's roster (`Plan §13`). One route for N runs, never one per row. */
+  workProducts: WorkProductsState;
+  reviewFilter: boolean;
+  onReviewFilter: (review: boolean) => void;
+  onOpenDiff: (summary: WorkProductSummary) => void;
+  threadHref: (threadId: string) => string | null;
 }
 
 function MapAnatomy({
@@ -356,6 +437,11 @@ function MapAnatomy({
   scheduleResult,
   downloadHref,
   runs,
+  workProducts,
+  reviewFilter,
+  onReviewFilter,
+  onOpenDiff,
+  threadHref,
 }: AnatomyProps) {
   return (
     <>
@@ -414,6 +500,11 @@ function MapAnatomy({
         scheduleResult={scheduleResult}
         downloadHref={downloadHref}
         runs={runs}
+        workProducts={workProducts}
+        reviewFilter={reviewFilter}
+        onReviewFilter={onReviewFilter}
+        onOpenDiff={onOpenDiff}
+        threadHref={threadHref}
         includeSkillCard={false}
       />
     </>
@@ -436,6 +527,11 @@ function ChartAnatomy({
   scheduleResult,
   downloadHref,
   runs,
+  workProducts,
+  reviewFilter,
+  onReviewFilter,
+  onOpenDiff,
+  threadHref,
 }: AnatomyProps) {
   return (
     <>
@@ -492,6 +588,11 @@ function ChartAnatomy({
         scheduleResult={scheduleResult}
         downloadHref={downloadHref}
         runs={runs}
+        workProducts={workProducts}
+        reviewFilter={reviewFilter}
+        onReviewFilter={onReviewFilter}
+        onOpenDiff={onOpenDiff}
+        threadHref={threadHref}
         includeSkillCard
       />
     </>
@@ -511,6 +612,11 @@ function Additions({
   scheduleResult,
   downloadHref,
   runs,
+  workProducts,
+  reviewFilter,
+  onReviewFilter,
+  onOpenDiff,
+  threadHref,
   includeSkillCard,
   // `provenance` is omitted, not passed and ignored: it belongs to the header and the
   // sections below it must not grow a second opinion about where the agent came from.
@@ -535,6 +641,17 @@ function Additions({
 
       <Section label={t('drawer.section.lastRuns')}>
         <LastRuns state={runs} />
+      </Section>
+      {/* M17 · `Plan §13`. Rendered in both anatomies from one component set, like every
+        * other section here — two drawers, one component set, a `side` prop. */}
+      <Section label={t('drawer.section.work')}>
+        <WorkProducts
+          state={workProducts}
+          review={reviewFilter}
+          onReviewFilter={onReviewFilter}
+          onOpenDiff={onOpenDiff}
+          threadHref={threadHref}
+        />
       </Section>
       <Section label={t('drawer.section.inputs')} when={hasInputs}>
         <InputsForm
