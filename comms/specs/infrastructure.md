@@ -9,9 +9,18 @@
 
 ## Spec sections covered
 
-PART V — ARCHITECTURE & COMPOSE: the six-service topology, the Tailscale/MagicDNS access
-model, the Caddy edge, the ofelia cron path, the billing split, and the portability rule
-("Docker on your machine — later: identical compose on a VPS").
+PART V — ARCHITECTURE & COMPOSE: the service topology, the Tailscale/MagicDNS access
+model, the Caddy edge, the billing split, and the portability rule ("Docker on your machine
+— later: identical compose on a VPS").
+
+**Amended 2026-08-18 by [ADR-024](../decisions/ADR-024-scheduler-ownership.md):** the cron
+sidecar the spec of record names in its run-semantics section is removed from the stack.
+(The section number is deliberately not written here — this heading is what the coverage
+gate reads as a *claim*, and that section belongs to `runner-engineer`.) This spec no longer covers a scheduling
+container, because there is not one; the clock is `scheduler-engineer`'s
+(`contracts/scheduling.md`). What is still mine is the *absence* — two conformance
+assertions that keep it absent (REQ-INF-76, REQ-INF-77) — and, when the clock exists as a
+process, wherever it is defined to run.
 
 That is the whole claim, and deliberately so.
 
@@ -25,7 +34,8 @@ the agent BOARD.md names, and each of them still owes their own spec:
 |---|---|---|---|
 | 3.6 | `shell-navigation-engineer` | the bind address and the proof it holds | the PWA, and everything that assumes tailnet-only |
 | 3.1 | `sessions-relay-engineer` | the relay *container* and its route | the E2E protocol and the client-side keys |
-| 3.2 | `runner-engineer` | the ofelia→runner wiring and the generated-file contract | run semantics, the allowlist, the git path check |
+| 3.2 | `runner-engineer` | the runner *container* and the proof that no scheduler container exists (ADR-024) | run semantics, the allowlist, the git path check |
+| `Plan §14` | `scheduler-engineer` | where the clock process is defined to run, once it exists | the clock itself, the fire ledger, every scheduling decision |
 | 3.5 | `observability-engineer` | the Langfuse and Postgres *containers* | instrumentation, redaction, the cost ticker |
 | VII.4 | `rtl-arabic-pdpl-specialist` | volume locality and the backup procedure | PDPL policy and what counts as egress |
 | IV | `agent-library-curator` | the read-only mount and the CI validation step | the frontmatter schema itself |
@@ -45,10 +55,11 @@ BOARD constraint 2 — this spec only guarantees the images those choices are bu
 
 2. **Three profiles, and `up` with no profile starts nothing.**
    `dev` = web + runner (M0 deliverable 3 — front-end agents are not blocked on the full
-   stack). `obs` = dev + postgres + langfuse + ofelia + caddy. `full` = obs + happy.
+   stack). `obs` = dev + postgres + langfuse + caddy. `full` = obs + happy.
    `happy` is split out on its own because the relay image is unverified until ADR-005 lands
-   at M4; a bad pull must not take the other five services down with it. Booting six
-   services should be a sentence you meant to type.
+   at M4; a bad pull must not take the other services down with it. Booting the whole stack
+   should be a sentence you meant to type. (`obs` lost a sixth service on 2026-08-18 —
+   Decision 11.)
 
 3. **The bind address is the entire security model, and it is verified by asking Docker.**
    §3.6 says the app has no auth in v1 *because* it is unreachable off the tailnet. That
@@ -99,10 +110,22 @@ BOARD constraint 2 — this spec only guarantees the images those choices are bu
     machine running it. If a runaway scheduled agent could spend the subscription, it would
     take out the interactive sessions you need to fix it.
 
-11. **`ofelia/config.ini` is generated and says so in its first line.** Frontmatter is the
-    source of truth (§3.2, BOARD constraint 4). The committed file contains one *commented*
-    example job and no live job, because `agents/` has no scheduled agent yet and a job that
-    actually fired would put a fake number in the run history (CLAUDE.md rule 9).
+11. **There is no scheduler in this stack, and that is enforced rather than described**
+    ([ADR-024](../decisions/ADR-024-scheduler-ownership.md), `Plan §14`, 2026-08-18). The
+    cron sidecar, its generated config, its image pin and its generator script are gone. Two
+    assertions in `scripts/__tests__/repo-conformance.test.mjs` keep them gone: no reference
+    to the removed scheduler survives under `infra/`, and no service mounts
+    `/var/run/docker.sock` — which every label-driven cron container needs and which is root
+    on the host. The second is the general one: naming cron images would be an include-list,
+    blind to every image nobody thought of.
+
+    **What the stack cannot do because of this, stated plainly:** nothing fires on a timer.
+    A frontmatter `schedule:` is still committed by `POST /api/schedule` and then fires
+    nothing, and the nightly ADR-008 retention prune has no trigger — `POST /api/ops/prune`
+    exists and is now manual. Nothing *regressed*: the sidecar never fired once in this
+    repo's life and zero agent runs have ever executed. The gap closes when the coordinator's
+    clock runs as a process; where it runs is a compose question and is mine, and it is open
+    (see *Deliberately not done*).
 
 12. **Line endings are a correctness issue on this project.** The human develops on Windows
     11. `.gitattributes` forces LF on everything a Linux container executes or parses; CRLF
@@ -113,14 +136,13 @@ BOARD constraint 2 — this spec only guarantees the images those choices are bu
 
 | ID | Spec § | Requirement | Implemented in | Verified by |
 |---|---|---|---|---|
-| REQ-INF-01 | PART V | One compose file defines all six Part V services — `web` `runner` `happy` `langfuse` `ofelia` `caddy` — plus the `postgres` Langfuse and Happy depend on | `infra/compose.yaml` | `.github/workflows/ci.yml` |
+| REQ-INF-01 | PART V | One compose file defines every Part V service — `web` `runner` `happy` `langfuse` `caddy` — plus the `postgres` Langfuse and Happy depend on. The sixth, a cron sidecar, was removed by ADR-024 | `infra/compose.yaml` | `.github/workflows/ci.yml` |
 | REQ-INF-02 | PART V | Nothing exists outside compose: no manually-created container and no host-installed tool is required to run the stack | `infra/compose.yaml` | manual — see Test plan |
 | REQ-INF-03 | PART V | Every volume and build context is a path relative to the compose file; no absolute host path appears anywhere | `infra/compose.yaml` | `.github/workflows/ci.yml` |
 | REQ-INF-04 | PART V | `web` is built from the repo root as a Next.js standalone bundle that carries its own traced `node_modules` | `infra/web.Dockerfile` | `.github/workflows/ci.yml` |
 | REQ-INF-05 | PART V | `runner` image ships `git` (needed for §3.2 schedule commits) and `ca-certificates` (outbound TLS to the Anthropic API) | `infra/runner.Dockerfile` | manual — see Test plan |
 | REQ-INF-06 | PART V | Both app images run as a non-root user (`nextjs` / `runner`, uid 1001) | `infra/web.Dockerfile` · `infra/runner.Dockerfile` | manual — see Test plan |
 | REQ-INF-07 | PART V | `web` `runner` `postgres` `langfuse` `happy` `caddy` each declare a healthcheck with an interval, a timeout, retries and a start period | `infra/compose.yaml` | manual — see Test plan |
-| REQ-INF-08 | PART V | `ofelia` declares **no** healthcheck, and the file says why — the image has no HTTP surface, and a probe that cannot fail is a lie | `infra/compose.yaml` | manual — see Test plan |
 | REQ-INF-09 | PART V | `--profile dev` starts `web` + `runner` alone, so front-end agents are not blocked on the full stack | `infra/compose.yaml` | manual — see Test plan |
 | REQ-INF-10 | PART V | `docker compose up` with no profile starts nothing | `infra/compose.yaml` | manual — see Test plan |
 | REQ-INF-11 | PART V | `happy` is confined to the `full` profile so an unverified relay image cannot take the rest of the stack down (Decision 2) | `infra/compose.yaml` | manual — see Test plan |
@@ -154,11 +176,6 @@ BOARD constraint 2 — this spec only guarantees the images those choices are bu
 | REQ-INF-39 | PART V | `TLS_MODE=tailscale` serves the real MagicDNS certificate, written to a shared volume by the `tailscale` service and mounted read-only into Caddy | `infra/caddy/tls/tailscale.caddy` · `infra/compose.yaml` | manual — see Test plan |
 | REQ-INF-40 | PART V | `TLS_MODE=internal` is the default and boots with **zero secrets**, so no agent is blocked on a Tailscale auth key | `infra/caddy/tls/internal.caddy` · `infra/Caddyfile` | manual — see Test plan |
 | REQ-INF-41 | PART V | Caddy never reaches Let's Encrypt: TLS comes from its internal CA or from Tailscale, honouring BOARD constraint 7 (no external network at runtime) | `infra/Caddyfile` | manual — see Test plan |
-| REQ-INF-42 | §3.2 | `ofelia/config.ini` is marked GENERATED in its first line and names its generator, its trigger and its source of truth | `infra/ofelia/config.ini` | manual — see Test plan |
-| REQ-INF-43 | §3.2 | The job shape is `job-run` firing `POST /api/run` — the same endpoint the drawer's ▶ Run now button calls, so scheduled and manual runs share one code path | `infra/ofelia/config.ini` | manual — coordinated with `runner-engineer` |
-| REQ-INF-44 | §3.2 | The compose network name is pinned to `agnetos_cc` so the generated job spec never has to guess a project-name prefix | `infra/compose.yaml` · `infra/ofelia/config.ini` | manual — see Test plan |
-| REQ-INF-45 | §3.2 | The committed config contains no live job — `agents/` has no `schedule:` yet, and a job that fired would put a fake number in the run history | `infra/ofelia/config.ini` | manual — see Test plan |
-| REQ-INF-46 | §3.2 | No secret appears in the ofelia config; it is committed, and the runner reads its own key from the environment | `infra/ofelia/config.ini` | manual — see Test plan |
 | REQ-INF-47 | PART V | The runner's `ANTHROPIC_API_KEY` is fed from `RUNNER_ANTHROPIC_API_KEY` — a key issued in a dedicated hard-capped Console workspace | `infra/compose.yaml` · `.env.example` | manual — see Test plan |
 | REQ-INF-48 | PART V | The human's Claude subscription is **absent** from compose and from `.env.example`, and the file says why adding it would be a design drift | `.env.example` | manual — see Test plan |
 | REQ-INF-49 | PART V | `RUNNER_MONTHLY_CAP_USD` gives the runner a self-enforced soft cap beneath the workspace's hard cap, so the failure mode is a readable refusal rather than an invoice | `infra/compose.yaml` · `.env.example` | manual — coordinated with `runner-engineer` |
@@ -182,9 +199,10 @@ BOARD constraint 2 — this spec only guarantees the images those choices are bu
 | REQ-INF-67 | PART V | Every repo script is plain Node ESM invoked as `node <path>`, so it runs identically under PowerShell and bash with no shebang, no `sh`, and no host tool | `scripts/check-comms.mjs` · `infra/check-bind.mjs` | `.github/workflows/ci.yml` |
 | REQ-INF-68 | PART V | `.dockerignore` keeps `node_modules`, `.next`, `comms/`, `audit/`, backups and every `.env` out of both build contexts | `.dockerignore` | manual — see Test plan |
 | REQ-INF-69 | PART V | The comms channel itself is validated in CI — message frontmatter, contract ownership, ADR status, and a status file per rostered agent | `scripts/check-comms.mjs` · `.github/workflows/ci.yml` | `scripts/__tests__` |
-| REQ-INF-70 | §3.2 | `scripts/sync-ofelia.mjs` regenerates `ofelia/config.ini` from frontmatter after a schedule commit and HUPs the container | — | — |
-| REQ-INF-71 | §3.2 | A job present in `ofelia/config.ini` but absent from frontmatter fails a check, rather than merely being documented as a bug | — | — |
-| REQ-INF-72 | PART VII | The encrypted backup runs on a schedule from a compose service, with a tested restore | — | — |
+| REQ-INF-72 | PART VII | The encrypted backup runs on a schedule, with a tested restore. **No recurring trigger exists in this stack at all** since ADR-024 | — | — |
+| REQ-INF-76 | PART V · `Plan §14` | The removed cron sidecar leaves no reference anywhere under `infra/`, and `infra/ofelia` does not exist — a stale comment is how the next reader concludes the scheduler still runs there | `infra/compose.yaml` · `.env.example` | `scripts/__tests__/repo-conformance.test.mjs` |
+| REQ-INF-77 | PART V · `Plan §14` | No compose service mounts `/var/run/docker.sock`. Every label-driven cron container needs it, it is root on the host, and the removed sidecar was the only service that ever had it | `infra/compose.yaml` | `scripts/__tests__/repo-conformance.test.mjs` |
+| REQ-INF-78 | PART V · `Plan §14` | The coordinator's clock has somewhere to run — a compose definition, or a documented in-process home in an existing service | — | — |
 | REQ-INF-73 | PART V | Tailscale certificates renew automatically before the 90-day expiry rather than on container restart | — | — |
 | REQ-INF-74 | PART V | The tailnet path is verified end to end: MagicDNS resolves, the Tailscale cert is trusted, and the PWA installs from the phone | — | — |
 | REQ-INF-75 | PART V | A `compose.vps.yaml` overlay proves the portability claim on a second host | — | — |
@@ -262,15 +280,26 @@ service it is documented under. Adding a key is a PR to that file, not an inline
   documented manual procedure. **Before any client data touches this stack, automate it and
   test a restore.** An untested backup is a belief.
 
-- **`scripts/sync-ofelia.mjs`.** The generated-file contract, the exact emitted job shape and
-  the reload trigger are all written down in `infra/ofelia/config.ini`; the generator itself
-  is `runner-engineer`'s at M7, because it must run inside the same transaction as the
-  frontmatter commit that causes it. Writing a competing generator here would create two
-  writers for one file.
+- **Retired by ADR-024, so an older handoff citing them is not a live claim:** REQ-INF-08,
+  42, 43, 44, 45, 46, 70 and 71. Every one described the cron sidecar or its generated
+  config. `infra/ofelia/config.ini`, `scripts/sync-ofelia.mjs` and its test were deleted in
+  the same commit; the *only* consumer of the generator was the runner's `syncOfelia()`,
+  which already treats a missing script as `synced: false` with a reason, so its absence
+  degrades honestly instead of throwing.
 
-- **A drift check for ofelia.** REQ-INF-71 — "a job in the config but not in frontmatter is a
-  bug" is currently enforced by the file being wholly regenerated. That is true only once the
-  generator exists; until then it is a comment, and comments are not checks.
+- **A home for the clock process — open, and mine.** The clock does not exist yet, so this
+  file defines no service for it (REQ-INF-78). Writing a `scheduler:` service around a
+  command that nobody has written would be compose pretending a capability exists, which is
+  the same defect as the removal pretending one was lost. Two shapes are on the table and
+  the choice is `scheduler-engineer`'s entrypoint to make, not mine to guess: **(a)** the
+  clock ticks inside the existing `runner` process — zero new infra, one Postgres pool,
+  dies with the runner; **(b)** a `scheduler` service reusing `infra/runner.Dockerfile` with
+  a different `command:` and no published port — separately restartable, separately logged,
+  needs its own DB env. Filed to them.
+
+- **Wake-on-LAN (`Plan §14`).** Refused, with reasons, in
+  [ADR-039](../decisions/ADR-039-wake-on-lan-refused.md). Nothing was built. A `wakeHost()`
+  that returned success without putting a frame on a wire would be worse than the gap.
 
 - **Langfuse v3.** Decision 8. Three more services to keep local under Part VII.4 is an ADR,
   not an image bump.

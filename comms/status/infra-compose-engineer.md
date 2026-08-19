@@ -1,31 +1,34 @@
 # status — infra-compose-engineer
 
-**Updated:** 2026-08-16T21:47
-**Milestone:** M0 (Phase 0 steps 0.2, 0.6 + three coordinator follow-ups)
+**Updated:** 2026-08-18T23:59
+**Milestone:** M18 (slice: remove the scheduler container) · M0 still closed
 **State:** review
 
 ## Now
-Nothing in flight. Six services healthy on loopback. Since the handoff: `/workspaces` now
-seeds as uid 1001 from the image — that silently disabled the Part V spend ledger, so the
-monthly cap was resetting every restart; verified persistent across restart AND recreate.
-Langfuse org/project/key seeded headlessly, **no volume reset needed** (migrated-but-empty
-seeds fine), keys authenticate with a negative control. `happy` commented out of compose —
-its image never existed anywhere; absence is now explicit rather than fictional.
+Nothing in flight. The cron sidecar is out of `infra/compose.yaml` under ADR-024 — service,
+config, image pin, generator and profile lines all deleted — and two falsified assertions in
+`repo-conformance.test.mjs` keep it out (no reference under `infra/`; no service mounts
+`/var/run/docker.sock`). **The stack now fires nothing on a timer**, which costs nothing today
+(the sidecar never fired once, zero runs have executed) except the ADR-008 nightly prune's
+only trigger — filed to its two possible owners rather than left to be rediscovered.
+Wake-on-LAN is **refused** and nothing was built: ADR-039, three conditions to reopen.
 
 ## Blocked on
-The user, for both. No agent can unblock either.
-1. `RUNNER_ANTHROPIC_API_KEY` — the only thing left between here and step 0.3.
-2. Tailscale credentials + the host-install vs `network_mode: service:tailscale` decision.
-   **Parked at the coordinator's instruction. Not acting on it.**
+1. `scheduler-engineer` — which entrypoint the clock will be, so I can write its compose home
+   (REQ-INF-78). Two shapes offered; I will not guess one.
+2. The user, unchanged: `RUNNER_ANTHROPIC_API_KEY`, and Tailscale credentials + the
+   host-install vs `network_mode: service:tailscale` decision (parked at the coordinator's
+   instruction, not acting on it).
 
 ## Last handoff
-`comms/handoffs/M0-infra-compose-engineer-full-stack-up.md` (+ 21:46 addendum)
+`comms/handoffs/M18-infra-compose-engineer-scheduler-removal.md`
 
 ## Next
-1. Nothing of mine until a secret lands. Not idle-waiting — no unblocked Part V work left.
-2. On the API key: restart runner, hand 0.3 to `runner-engineer`, watch the first
-   `spend.json` persist (the one link in the billing chain I could not test).
-3. When `sessions-relay-engineer` asks: write `infra/happy.Dockerfile` around
-   `happy-server-self-host` and uncomment the block; first boot decides the PGlite footprint.
-4. Not mine, filed, do not duplicate: the `langfuse.tailnet` null-sink URL and
-   `/api/status`'s fake `tailscale: online` are both runner code.
+1. On `scheduler-engineer`'s answer: the clock's compose definition, no published port.
+2. **Accepted and owed: the non-superuser Postgres role** (RLS is inert under the superuser
+   connection). Answered in the archived message with the four things that have to land
+   together — password, where the role is created given `01-databases.sh` only runs on an
+   empty volume, `ALTER DEFAULT PRIVILEGES`, and `runner-engineer`'s write-path audit first.
+   Best done *before* the API key lands, while zero runs exist.
+3. Not mine, filed, do not duplicate: the runner-side ofelia symbols (`runner-engineer`,
+   with line numbers) and whether `ops.schedule` carries system jobs (`scheduler-engineer`).

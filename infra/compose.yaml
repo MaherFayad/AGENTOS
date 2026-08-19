@@ -4,8 +4,25 @@
 #   runner     Node + @anthropic-ai/claude-agent-sdk — /api/run (SSE), /api/schedule
 #   happy      slopus/happy-server — E2E session relay (§3.1)
 #   langfuse   + postgres — traces, cost, run history (§3.5)
-#   ofelia     cron — fires runner from frontmatter schedules (§3.2)
 #   caddy      one entry point, routes / /api /traces /relay
+#
+# SCHEDULING IS NOT IN THIS FILE, AND THAT IS DELIBERATE (ADR-024, `Plan §14`).
+# Spec §3.2 specifies a cron sidecar container that reads Docker labels on one host. It was
+# removed on 2026-08-18 — ADR-024 is the amendment; a commit message would not have been
+# enough to amend a spec — because label-driven cron on one host cannot express N projects,
+# N execution hosts, catch-up after a sleeping laptop, timezone intent, budget refusal, or a
+# UI. **The coordinator owns the clock:** `ops.schedule` + `ops.schedule_fire`
+# (`0011_scheduling.sql`), fired by a process `scheduler-engineer` is building.
+#
+# Until that process exists, NOTHING IN THIS STACK FIRES ON A TIMER. Nothing regresses (the
+# sidecar never fired once and zero runs have ever executed), but two things are now manual:
+# a frontmatter `schedule:` is committed and never fires, and the nightly ADR-008 retention
+# prune has no trigger — `POST /api/ops/prune` still exists and someone has to call it.
+#
+# Do not add a cron sidecar back. Two assertions in
+# `scripts/__tests__/repo-conformance.test.mjs` go red if you do: no reference to the removed
+# scheduler survives anywhere under `infra/`, and no service here mounts the Docker daemon
+# socket — which every label-driven cron container needs, and which is root on the host.
 #
 # PORTABILITY (Part V: "later: identical compose on a VPS"). Nothing here may depend on
 # this machine: no absolute host paths, no host-installed tools, no manually-created
@@ -19,13 +36,13 @@
 #
 # Profiles, and why there are three:
 #   dev   web + runner only. Front-end agents are not blocked on the full stack (M0 #3).
-#   obs   dev + postgres + langfuse + ofelia + caddy. Every image here is known-good.
+#   obs   dev + postgres + langfuse + caddy. Every image here is known-good.
 #   full  obs + happy. Split out because the happy-server image is unverified until
 #         `sessions-relay-engineer` files the Happy-vs-Omnara ADR at M4 — a bad pull
 #         would otherwise take the whole stack down with it.
 #
-# `docker compose up` with NO profile starts nothing. That is deliberate: booting six
-# services should be a sentence you meant to type.
+# `docker compose up` with NO profile starts nothing. That is deliberate: booting the whole
+# stack should be a sentence you meant to type.
 
 name: agnetos
 
@@ -385,30 +402,11 @@ services:
   #     start_period: 60s
   #   networks: [cc]
 
-  # =========================================================================
-  # ofelia — cron (Part V, §3.2)
-  # =========================================================================
-  ofelia:
-    <<: *logging
-    profiles: [obs, full]
-    # Tags on this repo have NO `v` prefix — `v0.3.16` never existed and made the whole
-    # `obs` profile unpullable (compose aborts the other pulls when one reference fails).
-    image: ${OFELIA_IMAGE:-mcuadros/ofelia:0.3.22}
-    restart: unless-stopped
-    depends_on:
-      runner:
-        condition: service_healthy
-    command: daemon --config=/etc/ofelia/config.ini
-    volumes:
-      - ./ofelia/config.ini:/etc/ofelia/config.ini:ro
-      # ofelia's job-run type starts containers, which needs the daemon socket. :ro limits
-      # it to what the API allows read-side; it is still a privileged mount, which is why
-      # ofelia runs no user code — it only POSTs to the runner.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    # No healthcheck: the image has no HTTP surface and no shell utilities to probe a PID
-    # with. A healthcheck that cannot fail is a lie, so there isn't one. Liveness is
-    # observed through the runner's run history instead (§3.5).
-    networks: [cc]
+  # The cron sidecar that used to sit here is gone — see the ADR-024 note in the header.
+  # It also took a `/var/run/docker.sock` mount with it, which is worth one sentence: the
+  # only container in this file with the Docker daemon socket was the scheduler, and the
+  # clock that replaces it needs no socket at all. Anything that asks for one to "run jobs"
+  # is asking for root on the host; make it argue for that in an ADR first.
 
   # =========================================================================
   # caddy — the one entry point (Part V, §3.6)

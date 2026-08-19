@@ -278,6 +278,85 @@ test('no two migrations share a number — the second shared-integer namespace',
   );
 });
 
+/**
+ * ADR-024 — the coordinator owns the clock. The two tests below are the enforcement half of
+ * a removal, and they exist because the removal itself is the easy part: the next person who
+ * wants a nightly job will reach for a cron container, find nothing in `infra/`, and add one
+ * back in ten minutes. `Plan §14` is explicit about why that is wrong — a label-driven cron
+ * sidecar reads one host and cannot express N projects, N execution hosts, catch-up after a
+ * sleeping laptop, timezone intent, budget refusal, or a UI.
+ *
+ * They are filed here rather than in an infra-owned test file for this file's stated reason:
+ * this is an invariant no single agent owns. The person who re-adds a scheduler will not be
+ * `infra-compose-engineer`.
+ */
+const REMOVED_SCHEDULER = /ofelia/i;
+
+test('the removed cron sidecar leaves no reference under infra/ (ADR-024)', async () => {
+  const files = await walk('infra');
+
+  // Blindness guard. `walk()` returns [] for a directory that does not exist, and an empty
+  // corpus makes the loop below vacuously green — the exact family BRIEF records as the
+  // largest here (a comment-stripper that deleted half its corpus and passed). Assert the
+  // instrument can see the one file the assertion is actually about.
+  assert.ok(
+    files.includes('infra/compose.yaml'),
+    `this test read ${files.length} file(s) under infra/ and infra/compose.yaml was not among ` +
+      `them — the corpus moved and the assertion below is proving nothing`,
+  );
+
+  const offenders = [];
+  for (const f of files) {
+    const text = await readFile(join(ROOT, f), 'utf8');
+    text.split(/\r?\n/).forEach((line, i) => {
+      if (REMOVED_SCHEDULER.test(line)) offenders.push(`${f}:${i + 1}  ${line.trim()}`);
+    });
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `The cron sidecar was removed from the stack by ADR-024 and these lines put it back, or ` +
+      `describe it as if it were still there:\n${offenders.join('\n')}\n\n` +
+      `Scheduling belongs to the coordinator's clock (ops.schedule + ops.schedule_fire, ` +
+      `0011_scheduling.sql), not to a container in infra/. The history lives in ` +
+      `comms/decisions/ADR-024-scheduler-ownership.md — infra/ carries the mechanism, not the ` +
+      `obituary, which is why even a comment naming it fails here.`,
+  );
+
+  assert.equal(await exists('infra/ofelia'), false, 'infra/ofelia must not exist');
+});
+
+test('no compose service mounts the Docker daemon socket', async () => {
+  // The companion to the test above, and the more general half of it. The name test is blind
+  // to a cron container with a *different* name — chronos, deck-chores, a bare `crond` image —
+  // and naming every one of them would be an include-list, which is a decision to be blind to
+  // everything unnamed. What that whole class shares is `/var/run/docker.sock`: to start jobs
+  // as containers you need the daemon, and the daemon socket is root on the host.
+  //
+  // The removed sidecar was the only service in this file that ever had it. The clock that
+  // replaces it needs no socket at all, so the honest state of this file is "nobody has it",
+  // and a diff that changes that should have to argue for root in an ADR.
+  //
+  // What this cannot see: a cron container that does not need the socket (one that only makes
+  // HTTP calls), and anything outside infra/compose.yaml. It is one of two assertions for
+  // that reason.
+  const text = await readFile(join(ROOT, 'infra/compose.yaml'), 'utf8');
+  assert.match(text, /^services:/m, 'infra/compose.yaml has no services: block — has it moved?');
+  const offenders = text
+    .split(/\r?\n/)
+    .map((line, i) => [line, i])
+    .filter(([line]) => /\/var\/run\/docker\.sock/.test(line) && !/^\s*#/.test(line))
+    .map(([line, i]) => `infra/compose.yaml:${i + 1}  ${line.trim()}`);
+  assert.deepEqual(
+    offenders,
+    [],
+    `A service mounts the Docker daemon socket:\n${offenders.join('\n')}\n\n` +
+      `That is root on the host, granted to a container. The one service that used to have it ` +
+      `was the cron sidecar ADR-024 removed. If a service genuinely needs the daemon, that is ` +
+      `an ADR, not a volume line.`,
+  );
+});
+
 test('the layout artifact is gitignored, not committed', async () => {
   // ADR-003: graph.json is reproducible from agents/**. Committing it invites drift.
   const ignore = await readFile(join(ROOT, '.gitignore'), 'utf8');

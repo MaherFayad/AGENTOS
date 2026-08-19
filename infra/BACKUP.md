@@ -49,11 +49,15 @@ loses the backups, which is the intended property.
 This is a documented manual procedure, not a scheduled job. It is tracked as
 `REQ-INF-25` in `comms/specs/infrastructure.md` with `Implemented in: —`.
 
-Automating it means adding a service to `infra/compose.yaml` that runs on a cron and needs
-`openssl` in whatever image it uses. That is a real decision (which image, which retention,
-where the ciphertext goes, who holds the passphrase) and it belongs to M7 alongside the
-rest of the schedule work — not to a foundations milestone that would have to guess at all
-four answers. Writing an automated backup that silently produces unencrypted or
+Automating it means a recurring trigger and `openssl` in whatever image runs it. That is a
+real decision (which image, which retention, where the ciphertext goes, who holds the
+passphrase) and it belongs alongside the rest of the schedule work — not to a foundations
+milestone that would have to guess at all four answers.
+
+**As of 2026-08-18 there is no recurring trigger in this stack at all.** The cron sidecar
+was removed under ADR-024 and the coordinator's clock (`ops.schedule`, `0011_scheduling.sql`)
+does not yet run as a process. So this procedure is manual for a second reason now, and the
+paragraph above describes a service that no longer has anywhere to be scheduled from. Writing an automated backup that silently produces unencrypted or
 unrestorable files would be worse than this file.
 
 **Before any client data touches this stack, automate the above and test a restore.** An
