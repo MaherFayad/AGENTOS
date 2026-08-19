@@ -144,11 +144,15 @@ sentence. "Approved" with no tree state names nothing.
    server default (20) is what paginates. A page-size control with no user asking for one is a
    knob, not a feature.
 
-5. **No virtualisation on the diff screen.** The console virtualises past ~2k lines; the diff
-   does not. It is bounded by the server at 20 files × 400 lines per page, but a reader who
-   presses "show more files" ten times has 200 files in the DOM. Not observed as a problem
-   because nothing has ever produced a diff here; named so the first person with a real one
-   knows where to look.
+5. ~~**No virtualisation on the diff screen.**~~ **DONE in `45aa518`** — see the addendum at the
+   foot of this file. `fidelity-qa-reviewer` graded this a FAIL rather than a known gap, and
+   they were right to: the ceiling is not ten *Show more* presses, it is **8,000 line rows on
+   page one**, before anybody presses anything. Naming a defect in a handoff is not the same as
+   bounding it. The original text is kept below because the misjudgement is the useful part.
+
+   > The console virtualises past ~2k lines; the diff does not. It is bounded by the server at
+   > 20 files × 400 lines per page, but a reader who presses "show more files" ten times has 200
+   > files in the DOM. Not observed as a problem because nothing has ever produced a diff here.
 
 6. **`work_product_moved` offers no reload button.** It renders the sentence and asks the reader
    to load the diff again by reopening. A retry button that silently re-requests page 1 while the
@@ -260,3 +264,83 @@ the roster renders: it is whether anything on it reads as an observation that no
 
 **`runner-engineer`** — the `agent=` decision-request, and §9.4's derived `review` state, which
 is specified and unbuilt and which this slice's "Awaiting review" filter is standing in for.
+
+
+---
+
+# Addendum — 2026-08-19T22:50, commit `45aa518`
+
+`fidelity-qa-reviewer` returned **FAIL ×3** on this slice (foundation PASS). All three are fixed,
+plus a fourth routed by the coordinator mid-slice and one defect found while fixing the first.
+The reasoning is in the `## Closed by the sender` block of
+`comms/inbox/fidelity-qa-reviewer/20260819-2205-drawer-engineer-review-m17-wave-2-the-work-product-surface.md`;
+what belongs here is what a later reader needs.
+
+**`drawer.module.css` has no diff.** The windowing was built so that the CSS the reviewer graded
+— `.diffFile`, `.diffFileHead`, `.diffLine`, the `data-origin` ink, the evidence-tier underlines —
+did not have to change.
+
+## What was wrong, in one line each
+
+1. **The review screen was a modal that trapped nothing.** `.review` is an opaque `inset: 0`
+   overlay; `useFocusTrap` was keyed on `open`, not `reviewing`. Focus never entered it and
+   **eight controls behind it stayed tabbable**.
+2. **`focusables()` could not see an `inert` ancestor** — `closest()` for two attributes,
+   `getAttribute()` for the third. `DiffScreen` was the first inert container ever mounted inside
+   an *active* trap root, which is why it had never fired.
+3. **The diff mounted every row it was given.** A full server page is 20 × 400 = 8,000 line rows.
+4. **The schedule save said `Saved. Next run {nextRunAt}.`** while `firedBy` is `'nobody'`.
+5. **Found on the way:** `useFocusTrap` kept `onClose` in its dependency array. `onEscape` is a
+   `useCallback` keyed on `reviewing`, so the drawer's own trap **tore down, re-ran and
+   re-autofocused every time the review opened or closed** — closing the review threw focus onto
+   the drawer's ✕ rather than back to the `Review` pill. Held in a ref now.
+
+## Two findings worth carrying past this slice
+
+**An instrument that checks ancestry for two attributes and the element alone for a third is the
+include-list family.** It is blind to exactly the case nobody wrote down. That is finding 2's
+whole shape, and it is now in `focus-trap.ts`'s header rather than only here.
+
+**Naming a defect in *Deliberately not done* does not bound it.** Item 5 above named the diff's
+unbounded DOM and got the magnitude wrong by two orders, because it reasoned about repeated
+*Show more* presses instead of measuring one page. A gate would have said `8000`. It now does.
+
+## Deliberately not done, still
+
+- **No test anywhere asserts that the browser agrees with `focusables()`.** jsdom implements
+  neither `inert` nor Tab navigation. What is proven is our traps' behaviour — the list they
+  cycle and where they send focus at a boundary. This is the largest residual risk in the a11y
+  fix and it is written into `review-focus.test.tsx`'s header too.
+- **A window opening mid-file draws a card with no path header.** `groupWindow` does not invent
+  one. Judged the honest rendering of a window; a sticky path header is the alternative and was
+  not built.
+- **`MAX_DIFF_ROWS_HELD = 20,000` is a chosen number**, not a contract's. Reasoning is in
+  `diff-model.ts`: ~2½ pages, deliberately far above one, because a ceiling a normal review meets
+  is one people learn to ignore.
+- **Memory still grows with *Show more* up to that ceiling.** The DOM does not.
+- **Two new sentences are uncatalogued English** — the schedule fallback in `JobDrawer.tsx`, and
+  the frontmatter line in `SkillFileCard.tsx`, which is uncatalogued end to end. Net RTL debt went
+  down and the ratchet is green. `work.diff.holdFull` is in both catalogues; its Arabic is mine
+  and is filed with the other 60 for a native pass.
+- **`work.scopeNote` renders only on the populated branch**, so the empty state does not say the
+  list was project-wide. The reviewer's observation, unfixed: harmless while both empties are
+  true, not harmless the moment one row exists for a sibling agent.
+- **No 1440px side-by-side.** Reference frames still missing repo-wide.
+
+## Falsification, and where the greens were observed
+
+Nine plants, each verified applied before its suite ran; the table with exact failure text is in
+`comms/inbox/fidelity-qa-reviewer/20260819-2250-drawer-engineer-re-review-m17-surface-three-findings-fixed.md`.
+The one worth quoting is C1, which reproduces the reviewer's own number:
+`expected 8000 to be less than 400`.
+
+`npm run verify` **exit 0** and `npm run smoke:browser` **exit 0**, 2026-08-19 22:41–22:44 +03, at
+`f3180b9` with only the sixteen files of `45aa518` dirty. `check-tokens`, verbatim:
+`scanned at 2026-08-19 22:39 +03:00 · f3180b9 · 16 uncommitted under apps/web`, `violations 0`.
+**The tree moved under this slice** — it began at `e99de62` and `runner-engineer` landed `4937d0b`
+and `f3180b9` during it, which is why finding 4 changed shape halfway through. `smoke:browser` ran
+with the backend absent for the whole run (20 absences across 13 routes), which is what its banner
+says it means.
+
+`typecheck:tests` caught a `TS2559` in the new schedule suite that vitest had run green — the
+second time that gate has caught a fixture of mine that vitest could not see.

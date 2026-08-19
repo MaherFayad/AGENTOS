@@ -1,40 +1,48 @@
 # status — drawer-engineer
 
-**Updated:** 2026-08-19T22:00
-**Milestone:** M17 (wave 2) · M18 schedule dialog accepted, not started
+**Updated:** 2026-08-19T22:52
+**Milestone:** M17 (wave 2, re-review filed) · M18 schedule dialog accepted, not started
 **State:** review
 
 ## Now
-**M17 wave 2 is landed and filed.** `14f0a36` — the roster line, the diff review screen and
-approve, against `contracts/work-product.md` §4/§7/§8 with nothing forked and no contract edited.
-93 tests under `drawer/work`. `678e407` — `design-system-guardian`'s three-day-old re-ruling
-landed, plus the same §9.4b defect it exposed in the roster line I had just written.
+**The three surface FAILs from `fidelity-qa-reviewer` are fixed in `45aa518`,** plus the schedule
+sentence the coordinator routed mid-slice and one defect found while fixing the first.
 
-Everything is **structural**: `ops.work_product` has never held a row, and the empty state is
-the state a human will actually see. `PR #42 · CI green` renders and nothing claims anything
-observed it.
+- The review screen is a modal that now takes focus and confines it. Eight controls behind it
+  were tabbable; a plant names all eight in its failure text.
+- `focusables()` asks the ancestor chain for `inert` too. The include-list family again.
+- The diff is windowed through `sessions/lib/virtual.ts`. The falsification reproduces the
+  reviewer's number: `expected 8000 to be less than 400`. **`drawer.module.css` has no diff** —
+  rows flatten and fold back into the same per-file cards.
+- ⏰ Schedule renders `runner-engineer`'s `executionNote` and draws **no instant at all**. Their
+  `4937d0b` had already made the false sentence unreachable — but by accident of absence, with our
+  local type still declaring `nextRunAt`. That is closed too.
+- Found on the way: `useFocusTrap` had `onClose` in its deps, so the drawer's own trap re-armed
+  and re-autofocused on every review open/close.
 
-`npm run verify` exit 0 at **2026-08-19 21:44 +03 on a still tree** — `git status --porcelain`
-empty before and after, at `7a1bbc4`. An earlier exit 0 at 21:35 was on a tree
-`scheduler-engineer` was moving under; both are in the handoff, because a green on a moving
-tree is a green about a tree nobody can reconstruct.
+Twelve plants across the slice, each verified applied before its suite ran.
+
+`npm run verify` exit 0 **and** `smoke:browser` exit 0 at **2026-08-19 22:41–22:44 +03**, at
+`f3180b9`, only my sixteen files dirty. `check-tokens`:
+`scanned at 2026-08-19 22:39 +03:00 · f3180b9 · 16 uncommitted under apps/web`, `violations 0`.
+**The tree moved under this slice** — `runner-engineer` landed `4937d0b` and `f3180b9` during it.
 
 ## Blocked on
-**Nothing blocking code.** Blocking the *review* of this slice: §9.5's sigil-gate `todo()` and
-`rtl.css`'s `.u-auto`, both `rtl-arabic-pdpl-specialist`'s. The diff screen is now the real
-largest English-in-RTL surface, not a hypothetical one.
+**Nothing blocking code.** Still blocking a *complete* verdict on this surface: no test anywhere
+asserts that the browser agrees with `focusables()` (jsdom implements neither `inert` nor Tab),
+and §9.5's `todo()` and `rtl.css`'s `.u-auto` remain `rtl-arabic-pdpl-specialist`'s.
 
-Inbox is **empty** — four answered and archived tonight.
+Inbox is **empty**.
 
 ## Last handoff
-`comms/handoffs/M17-drawer-engineer-work-product-surface.md` — read *Deliberately not done*,
-it is ten items. `review-request` filed to `fidelity-qa-reviewer`.
+`comms/handoffs/M17-drawer-engineer-work-product-surface.md` — read the **Addendum** at the foot
+and *Deliberately not done*, which now records that naming the diff's unbounded DOM in a handoff
+got its magnitude wrong by two orders. `review-request` filed 20260819-2250.
 
 ## Next
-1. **The schedule editor and save dialog** (§2.3 line 217). Accepted from `scheduler-engineer`
-   20260819-2230: their client, `saveGuard` and contracts §11 are landed and waiting. Local wall
-   clock, both DST lists on screen, and **no currency symbol at all** beside a `null` budget.
-2. **LAST RUNS stops blaming the runner for a Postgres outage.** `shell-navigation-engineer`
-   20260816-2246, answered, not fixed. `ApiCallError.code` landed in `14f0a36` and is the seam.
-3. Remove `work.scopeNote` **the day `runner-engineer` lands `agent=`** on the roster route. No
-   test catches that sentence going stale; their reply is the trigger.
+1. **The schedule editor and save dialog** (§2.3 line 217) — `scheduler-engineer`'s client,
+   `saveGuard` and contracts §11 are landed and waiting. Local wall clock, both DST lists on
+   screen, no currency symbol at all beside a `null` budget.
+2. **LAST RUNS stops blaming the runner for a Postgres outage.** `ApiCallError.code` is the seam.
+3. Remove `work.scopeNote` **the day `runner-engineer` lands `agent=`**, and put it on the empty
+   branch too until then — the reviewer's observation, unfixed.
