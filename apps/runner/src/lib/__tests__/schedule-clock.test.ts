@@ -310,3 +310,43 @@ test('follow_me on an interval is refused, because it would change nothing', () 
     (err: { code?: string }) => err.code === 'schedule_zone_intent_incoherent',
   );
 });
+
+/**
+ * The receipt's canonical form, pinned as **behaviour** — and a note about how it was stored.
+ *
+ * `fireTimePreviewToken` joins its parts with `U+0000`, which is the one character a cron
+ * expression, an IANA zone name and an ISO instant can none of them contain. With an ordinary
+ * separator the fields run together and two genuinely different confirmations collide: a preview
+ * of `0 6 * * 1` in `UTC` and a preview of `0 6 * *` in a zone literally named `1 UTC` are the
+ * same string under a space. A collision here is not cosmetic — it is `schedule_preview_stale`
+ * failing to refuse the save it exists to refuse.
+ *
+ * The first version of this test used an *empty* second field for the collision and stayed green
+ * under a planted space separator, because an empty field still contributes its own separator.
+ * The plant had applied; the assertion was simply not aimed at the boundary. Recorded because a
+ * falsification that passes is worth more than one that was never run.
+ *
+ * **The separator was a literal NUL byte in the source until 2026-08-19**, which made the whole
+ * of `packages/contracts/src/scheduling.ts` a binary file to ripgrep — `grep -n` answered
+ * *"Binary file matches"* instead of showing a line, so every content search over the scheduling
+ * contract silently returned nothing. It is `'\u0000'` now: identical string, identical digest,
+ * and a file a search can see. Same family as the comment-stripper that deleted half its corpus
+ * and passed — an instrument that goes blind without saying so.
+ */
+test('the preview receipt cannot be collided by moving a field boundary', () => {
+  const fireTimes = [{ utc: '2026-08-24T06:00:00.000Z' }];
+  const honest = fireTimePreviewToken({ expression: '0 6 * * 1', tz: 'UTC', followMe: false, fireTimes });
+  const smuggled = fireTimePreviewToken({ expression: '0 6 * *', tz: '1 UTC', followMe: false, fireTimes });
+  assert.notEqual(
+    honest,
+    smuggled,
+    'Two different confirmations produce the same receipt, so the field separator is a character ' +
+      'that can appear inside a field. schedule_preview_stale cannot refuse a save it cannot ' +
+      'distinguish.',
+  );
+
+  // The same fields in the same order must be stable across processes — the browser previews and
+  // the runner recomputes, and a receipt that depends on anything else is not a receipt.
+  assert.equal(honest, fireTimePreviewToken({ expression: '0 6 * * 1', tz: 'UTC', followMe: false, fireTimes }));
+  assert.match(honest, /^pv1_[0-9a-f]{8}$/);
+});

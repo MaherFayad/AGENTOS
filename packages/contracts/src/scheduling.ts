@@ -808,11 +808,230 @@ export function fireTimePreviewToken(input: {
     input.tz,
     String(input.followMe),
     ...input.fireTimes.map((t) => t.utc),
-  ].join(' ');
+  ].join('\u0000');
   let hash = 0x811c9dc5;
   for (let i = 0; i < canonical.length; i += 1) {
     hash ^= canonical.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return `pv1_${hash.toString(16).padStart(8, '0')}`;
+}
+
+/* -------------------------------------------------------------------------- *
+ * 11. The wire — M18 wave 2. `contracts/scheduling.md` §13.
+ *
+ * The route table lives in `./api` (`runner-engineer`'s file); the payloads live here,
+ * because their shapes are this contract's argument and not the transport's.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * A trigger as it crosses the wire, and as `ops.schedule.trigger_spec` stores it.
+ *
+ * **`spec` is an object, never prose** (`schedule_trigger_spec_is_object`, PDPL rule 2). An
+ * `event` spec holds a Gmail filter or a JQL, which is somebody's correspondence; composed into
+ * a sentence first, key-based redaction stops reaching it. The per-kind keys are:
+ *
+ * | kind | keys | computable? |
+ * |---|---|---|
+ * | `cron` | `expression` | yes |
+ * | `interval` | `everySeconds`, `anchor` — **the anchor has no default and is never `now`** | yes |
+ * | `event` · `condition` · `chain` · `manual` | connector-specific | no — see `scheduleFiresAreExact` |
+ */
+export interface ScheduleTriggerInput {
+  kind: TriggerKind;
+  spec: Record<string, unknown>;
+}
+
+/** `POST /api/p/:project/schedules/preview`. Idempotent, writes nothing, needs no database. */
+export interface SchedulePreviewRequest {
+  trigger: ScheduleTriggerInput;
+  tz: string;
+  followMe: boolean;
+  /**
+   * The zone the person is standing in. **Only meaningful with `followMe: true`, and the only
+   * value anything in this build can supply is `null`** — see `SCHEDULE_FOLLOW_ME`. A client
+   * that omits it on a follow-me schedule gets `schedule_zone_unresolved` (422), which is a
+   * refusal and not a fallback to `tz`.
+   */
+  standingIn?: string | null;
+}
+
+/**
+ * `POST /api/p/:project/schedules` — create a `source: 'ops'` row.
+ *
+ * **Every mandatory column of `0011` is a required property here, with no `?` and no default**,
+ * and that is the type doing the job the missing SQL `DEFAULT`s do: `skip` silently loses a
+ * briefing and `catch_up_all` silently spends four figures on a laptop that slept a week, so a
+ * writer that never considered the question must not be able to look like one that did. A body
+ * missing one is `schedule_policy_missing` (400) and **the hint does not suggest a value** (§8).
+ *
+ * **`source` is deliberately not a field.** A request cannot claim to be `library`; that
+ * authority is frontmatter's and arrives by commit.
+ */
+export interface CreateScheduleRequest {
+  /**
+   * The target, in `thread-model.md` §3's grammar and no second one — `@sales/digest`,
+   * `#sales`, or empty for the Chief of Staff. `@@` and a session are refused by
+   * `assertScheduleAddressable` **before the database is reached** (§3.4).
+   */
+  line: string;
+  trigger: ScheduleTriggerInput;
+  tz: string;
+  followMe: boolean;
+  jitterSeconds: number;
+  missedRunPolicy: MissedRunPolicy;
+  overlapPolicy: OverlapPolicy;
+  enabled: boolean;
+  autoDisableAfter: number;
+  reviewAt: string;
+  /** Nullable, unlike `reviewAt` — an expiry cannot be invented (`0011` §1, ADR-024). */
+  untilAt?: string | null;
+  /** Mandatory whenever `enabled` is false (`schedule_disabled_names_a_reason`). */
+  disabledReason?: string | null;
+  /**
+   * The receipt from `…/schedules/preview`. **Required for `cron` and `interval`**, and the
+   * server recomputes it from the trigger it was actually sent, refusing `schedule_preview_stale`
+   * (409) on a mismatch.
+   *
+   * This is `Plan §14`'s *"never save an unpreviewed cron expression"* as a mechanism rather than
+   * a sentence in a design document. It is **not** a security boundary (BOARD rule 6): anyone on
+   * the tailnet can compute one. What it catches is the ordinary bug — a dialog that previewed
+   * Mondays, a field edited before the button, and a schedule that fires monthly under a
+   * confirmation screen that said weekly.
+   *
+   * `null` is legal only for the four kinds with no clockable occurrence, where there is nothing
+   * to preview and nothing to be quietly wrong about.
+   */
+  previewToken: string | null;
+  /**
+   * As on the preview request, and it has to be here too: the token is recomputed at save, and a
+   * recomputation in a different zone from the preview is a different set of ten times. The only
+   * value anything in this build can supply is `null` (`SCHEDULE_FOLLOW_ME`).
+   */
+  standingIn?: string | null;
+}
+
+/** `PATCH /api/p/:project/schedules/:id`. Every field optional; absent means unchanged. */
+export interface UpdateScheduleRequest {
+  enabled?: boolean;
+  /** Required by `schedule_disabled_names_a_reason` when `enabled` becomes false. */
+  disabledReason?: string | null;
+  untilAt?: string | null;
+  reviewAt?: string;
+  missedRunPolicy?: MissedRunPolicy;
+  overlapPolicy?: OverlapPolicy;
+  jitterSeconds?: number;
+  autoDisableAfter?: number;
+}
+
+/**
+ * When a schedule next fires — **or the fact that nobody can say.**
+ *
+ * Four cases, kept apart on purpose. `unknown` is not `zero` (BRIEF): a strip that printed a
+ * dash for a Gmail trigger, for a follow-me schedule with no zone signal, and for a schedule
+ * that will never fire again would be making one claim about three different situations.
+ */
+export type ScheduleNextFire =
+  | { at: string; local: string }
+  /** A `cron` or `interval` whose occurrences have run out — past `until_at`, or `0 0 30 2 *`. */
+  | { at: null; because: 'no-further-occurrence' }
+  /** `event` · `condition` · `chain` · `manual`. Fires on the world or on a person. */
+  | { at: null; because: 'not-clockable' }
+  /** `follow_me: true` with nothing reporting a current zone (§9.6). */
+  | { at: null; because: 'zone-unresolved' };
+
+/** One row of `ops.schedule`, as a reader sees it. **No money field, ever** (§6). */
+export interface ScheduleView {
+  id: string;
+  /** `library` rows are read-only in the UI and edited by PR. Today there are none (§3.3). */
+  source: ScheduleSource;
+  libraryRef: string | null;
+  triggerKind: TriggerKind;
+  triggerSpec: Record<string, unknown>;
+  kind: ScheduleThreadKind;
+  delivery: ScheduleDelivery;
+  addressedTo: string;
+  tz: string;
+  followMe: boolean;
+  jitterSeconds: number;
+  missedRunPolicy: MissedRunPolicy;
+  overlapPolicy: OverlapPolicy;
+  enabled: boolean;
+  autoDisableAfter: number;
+  consecutiveFailures: number;
+  disabledReason: string | null;
+  untilAt: string | null;
+  reviewAt: string;
+  createdBy: string;
+  createdAt: string;
+  nextFire: ScheduleNextFire;
+}
+
+export interface SchedulesResponse {
+  schedules: readonly ScheduleView[];
+  /**
+   * The other authority, reported rather than left to be inferred from an absence.
+   *
+   * A list showing only `ops` rows and saying nothing looks exactly like a library that declares
+   * no schedules. It does not: three agents declare one and **none of them can be materialized**,
+   * because `schedule:` is a bare cron with no zone, no intent and no policy (§3.3). An honest
+   * empty state beats a plausible one (BOARD rule 9).
+   */
+  library: {
+    materialized: 0;
+    possibleToday: false;
+    reason: 'frontmatter schedule: carries a cron and nothing else';
+  };
+}
+
+/** One row of `ops.schedule_fire`. The calendar's read and the ledger's. **No money field.** */
+export interface ScheduleFireView {
+  id: string;
+  scheduleId: string;
+  occurrenceTime: string;
+  state: ScheduleFireState;
+  catchUp: boolean;
+  attempts: number;
+  recordedAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  threadId: string | null;
+  refusalCode: string | null;
+  questionMessageId: string | null;
+}
+
+export interface ScheduleFiresResponse {
+  scheduleId: string;
+  fires: readonly ScheduleFireView[];
+}
+
+/**
+ * What the save dialog is allowed to show about money — `Plan §14`: *"before you save, the
+ * dialog shows projected monthly spend for this schedule and the project's total scheduled burn
+ * against `budget_monthly`."*
+ *
+ * **Every figure in it is `null`, and each `null` carries its own reason rather than sharing
+ * one.** `thisSchedule.fires` is real and derived from the trigger; the money is not, because
+ * zero runs have ever completed. `capUsd` is `null` because `ProjectSummary.budgetMonthlyUsd` is
+ * hardcoded `null` (`apps/runner/src/lib/project.ts:261`) and no caller has ever seen a cap.
+ *
+ * `enforced: false` is the load-bearing field, and it is why this is a type rather than three
+ * loose numbers: **a dialog rendering this must not read as though a cap is protecting the user
+ * today.** It is not. Arming it is a type-level diff at `SCHEDULE_BUDGET_ENFORCEMENT`.
+ */
+export interface ScheduleBudgetPreview {
+  thisSchedule: ScheduleCostProjection;
+  /** Occurrences per 30 days across every enabled schedule in the project, this one included. */
+  projectScheduledFiresPerMonth: number;
+  /** `false` ⇒ a lower bound: some schedule in the project has no clockable occurrence. */
+  projectFiresAreExact: boolean;
+  projectedMonthlyUsd: null;
+  capUsd: null;
+  capBasis: 'ops.project.budget_monthly is declared and never read';
+  enforced: false;
+}
+
+export interface CreateScheduleResponse {
+  schedule: ScheduleView;
+  budget: ScheduleBudgetPreview;
 }

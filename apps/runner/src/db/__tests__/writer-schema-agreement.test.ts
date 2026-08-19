@@ -63,6 +63,7 @@ import {
   setThreadState,
 } from '../threads.ts';
 import { recordWorkProduct } from '../workProducts.ts';
+import { insertSchedule, recordFire } from '../schedules.ts';
 import type { DbClient } from '../../observability/types.ts';
 import { projectIdForSlug } from '../../lib/project.ts';
 
@@ -197,9 +198,28 @@ async function readSchema(): Promise<Schema> {
         const name = definition.split(/\s+/)[0]?.toLowerCase();
         if (!name) continue;
         if (NOT_A_COLUMN.has(name)) {
-          // Table-level `PRIMARY KEY (a, b)` / `UNIQUE (a, b)` — both are things
-          // `ON CONFLICT` can infer, and `PRIMARY KEY (run_id, seq)` is one the writer uses.
-          const constraint = definition.match(/^(primary\s+key|unique)\s*\(([^)]*)\)/i);
+          /**
+           * Table-level `PRIMARY KEY (a, b)` / `UNIQUE (a, b)` — both are things `ON CONFLICT`
+           * can infer, and `PRIMARY KEY (run_id, seq)` is one the writer uses.
+           *
+           * **The optional `CONSTRAINT <name>` prefix is the third shape this parser could not
+           * see, and 0011 is where it went red.** `0011_scheduling.sql` writes the idempotency
+           * key as `CONSTRAINT schedule_fire_idempotent UNIQUE (schedule_id, occurrence_time)`
+           * — named, because detail 2 wanted the constraint to be findable by name from the
+           * code that depends on it. The unnamed form on the line above it
+           * (`UNIQUE (id, project_id)`) parsed; the named one did not, so the parser reported
+           * *"no unique index or constraint to infer"* against the single most load-bearing
+           * UNIQUE in the scheduling plane.
+           *
+           * Same direction and same lesson as 0010's column-level `UNIQUE`: this **cries wolf**
+           * rather than passing a broken writer, and a checker that cries wolf gets its
+           * assertion loosened within a week — which is how a gate stops catching the real
+           * thing. A named CHECK cannot match, because the keyword has to sit where the regex
+           * puts it: `CONSTRAINT x CHECK (…)` has `check` in that position, not `unique`.
+           */
+          const constraint = definition.match(
+            /^(?:constraint\s+[a-z_][a-z0-9_]*\s+)?(primary\s+key|unique)\s*\(([^)]*)\)/i,
+          );
           if (constraint) {
             const columns = IDENTIFIERS(constraint[2]);
             addUnique(table, `constraint:${key(columns)}`, {
@@ -433,6 +453,61 @@ async function harvestWrites(): Promise<Statement[]> {
     deletions: 4,
     pushState: 'local',
     pushCheckedAt: now,
+  });
+
+  /**
+   * The scheduling plane (M18, ADR-024, `0011_scheduling.sql`).
+   *
+   * Extended here rather than in a parallel file, for the reason the thread block above gives:
+   * one parser, falsified once, applied to every writer this repo has.
+   *
+   * `ops.schedule` carries **seventeen** NOT NULL columns with no default, and six of them are
+   * mandatory *because* no answer is safe — `missed_run_policy` and `overlap_policy` most of
+   * all, where one silent wrong choice loses a briefing and the other spends four figures
+   * catching up after a laptop slept a week. `0011` was written before any writer existed and
+   * said so out loud: *"the `ops` writer CAN satisfy all of them."* This is where that sentence
+   * stops being a claim. If `insertSchedule` ever stops naming one, the first schedule anybody
+   * saves is refused by Postgres — M15's failure with the word "run" replaced by "schedule",
+   * and with the twist that a schedule nobody could save looks exactly like a product nobody
+   * has used yet.
+   */
+  label = 'insertSchedule — ops.schedule';
+  await insertSchedule(db, {
+    source: 'ops',
+    projectId: projectIdForSlug('agentos'),
+    triggerKind: 'cron',
+    triggerSpec: { expression: '0 6 * * 1' },
+    kind: 'agent',
+    delivery: 'direct',
+    addressedTo: 'sales/probe',
+    tz: 'Asia/Riyadh',
+    followMe: false,
+    jitterSeconds: 0,
+    missedRunPolicy: 'skip',
+    overlapPolicy: 'skip',
+    enabled: true,
+    autoDisableAfter: 3,
+    reviewAt: now,
+    untilAt: null,
+    disabledReason: null,
+    createdBy: 'human:unattributed',
+  });
+
+  /**
+   * `Plan §14` detail 1 — the row exists before the run does.
+   *
+   * `recordFire` names six columns and leans on three defaults (`attempts`, `recorded_at`,
+   * `consecutive_failures` is on the other table). The mandatory-column half of the assertion
+   * is what matters here: `state` and `catch_up` have **no** default, deliberately, so a writer
+   * that never named the state cannot produce a row that looks deliberate and a catch-up storm
+   * cannot read as normal traffic on a graph.
+   */
+  label = 'recordFire — ops.schedule_fire';
+  await recordFire(db, {
+    scheduleId: '00000000-0000-4000-8000-00000000f11e',
+    projectId: projectIdForSlug('agentos'),
+    occurrenceTime: now,
+    catchUp: false,
   });
 
   return statements;

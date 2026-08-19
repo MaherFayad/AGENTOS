@@ -35,6 +35,7 @@ import {
 } from '../lib/threadService.ts';
 import { sendApiError } from './http.ts';
 import { registerMetricsRoutes } from './register-metrics.ts';
+import { registerScheduleRoutes } from './schedules.ts';
 import { ApiError, badRequest } from '../lib/errors.ts';
 import { assertArtifactInProject } from '../lib/artifacts.ts';
 import { listWorkProducts, readWorkProduct } from '../db/workProducts.ts';
@@ -601,6 +602,17 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
    * Registered from `LEGACY_UNSCOPED_PATHS` rather than by hand so the contract is the
    * thing that decides which paths exist. Deleting a row there deletes the route here.
    */
+  /**
+   * The scheduling plane (M18, ADR-024, `contracts/scheduling.md` §13) — six routes, registered
+   * from `routes/schedules.ts` so the handlers sit beside the contract that argues them.
+   *
+   * `scheduler-engineer`'s slice; the entries are in `RUNNER_ROUTES` and the error codes in
+   * `API_ERROR_STATUS`, both of which are this file's owner's to accept or rename (§11.2, §11.7).
+   * The one-line registration is here rather than in `server.ts` for the same reason every other
+   * route is: a route not mounted from this function is a route nothing lists.
+   */
+  registerScheduleRoutes(app, ctx);
+
   for (const legacy of LEGACY_UNSCOPED_PATHS) {
     const handler = async (_request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       sendApiError(reply, scopeMissing(config, RUNNER_ROUTES[legacy.scopedKey].path));

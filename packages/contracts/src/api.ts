@@ -170,6 +170,33 @@ export type ApiErrorCode =
   | 'brain_write_refused'
   | 'git_failed'
   | 'ofelia_sync_failed'
+  /**
+   * The coordinator's scheduling plane (ADR-024, `contracts/scheduling.md` §8, M18 wave 2).
+   *
+   * **Proposed by `scheduler-engineer`, landed here because a route without a code is a 500.**
+   * `contracts/scheduling.md` §8 argues each of these and §11.2/§11.7 ask `runner-engineer`, who
+   * owns this file, to accept or rename them. They are added rather than left open because the
+   * alternative is what `toApiError`'s comment below already describes: an error carrying an
+   * undeclared code arrives at the client as **500 `internal`**, discarding both the code a UI
+   * branches on and a sentence written for a human. Renaming any of them is a rename, not a
+   * rewrite — the throwing code is in `apps/runner/src/lib/scheduleClock.ts`,
+   * `schedulePlan.ts`, `db/schedules.ts` and `routes/schedules.ts`.
+   *
+   * `ofelia_sync_failed` above now describes a sidecar removed from `infra/compose.yaml` at
+   * `e4e0bff`. It is deliberately **not** deleted here: `POST /api/p/:project/schedule` still
+   * calls `syncOfelia`, and both the route and the code are `runner-engineer`'s to sequence.
+   */
+  | 'schedule_not_found'
+  | 'schedule_address_not_schedulable'
+  | 'schedule_policy_missing'
+  | 'schedule_preview_stale'
+  | 'schedule_tz_unknown'
+  | 'schedule_zone_unresolved'
+  | 'schedule_zone_intent_incoherent'
+  | 'schedule_trigger_not_computable'
+  | 'schedule_fire_transition_refused'
+  | 'schedule_fire_row_invalid'
+  | 'schedule_read_only'
   // reads
   | 'graph_not_built'
   | 'panel_not_found'
@@ -235,6 +262,31 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   brain_write_refused: 403,
   git_failed: 500,
   ofelia_sync_failed: 502,
+
+  // `contracts/scheduling.md` §8, statuses as proposed there. Three are worth the sentence:
+  //
+  //   `schedule_address_not_schedulable` is 422 and deliberately **not** `fanout_dispatch_refused`
+  //   (503). That one says *you did nothing wrong and it lifts when the cap fires*; this one
+  //   refuses a **stored** intent, and the hint names the two address forms that do work.
+  //
+  //   `schedule_zone_unresolved` is 422 and **not 500**: the request is well-formed and it is the
+  //   build that is incomplete — nothing here reports which zone a person is standing in.
+  //
+  //   `schedule_read_only` is 409 on a `PATCH` of a `source = 'library'` row. It is edited by PR,
+  //   which makes this a conflict with where the truth lives, not a permission problem — there is
+  //   no auth in v1 (BOARD rule 6) and 403 would imply one.
+  schedule_not_found: 404,
+  schedule_address_not_schedulable: 422,
+  schedule_policy_missing: 400,
+  schedule_preview_stale: 409,
+  schedule_tz_unknown: 422,
+  schedule_zone_unresolved: 422,
+  schedule_zone_intent_incoherent: 422,
+  schedule_trigger_not_computable: 422,
+  schedule_fire_transition_refused: 409,
+  schedule_fire_row_invalid: 422,
+  schedule_read_only: 409,
+
   graph_not_built: 503,
   panel_not_found: 404,
   runner_not_configured: 503,
@@ -1120,6 +1172,45 @@ export const RUNNER_ROUTES = {
   workProducts: { method: 'GET', path: '/api/p/:project/work-products', scope: 'project' },
   workProduct: { method: 'GET', path: '/api/p/:project/work-product/:runId', scope: 'project' },
   workProductDiff: { method: 'GET', path: '/api/p/:project/work-product/:runId/diff', scope: 'project' },
+
+  /**
+   * The scheduling plane (M18, ADR-024, `contracts/scheduling.md` §13).
+   *
+   * **Plural, and the singular `schedule` above is left exactly as it is.** §13 spelled these
+   * `/api/p/:project/schedule`, which collides with a live route — and the collision is the
+   * interesting part rather than an inconvenience. `POST .../schedule` writes an agent's
+   * **frontmatter** and commits it; these write **`ops.schedule` rows**. Those are precisely the
+   * two authorities of ADR-024's *"one table, two authorities"*: `source = 'library'` is the
+   * frontmatter side and `source = 'ops'` is this one. Serving both from one path would make a
+   * request ambiguous about which authority it is addressing, which is the ambiguity `source`
+   * exists to remove. §13 is corrected in `contracts/scheduling.md` with that reasoning.
+   *
+   *   `schedulePreview` — `{trigger, tz, followMe}` → `FireTimePreview`. **Writes nothing and
+   *                       needs no database.** It is the only one of the six that works on this
+   *                       stack today, and it is the one the save is not allowed to skip:
+   *                       `Plan §14` — *never save an unpreviewed cron expression*.
+   *   `schedules`       — POST creates an `ops` row; the body carries `previewToken` and the
+   *                       server recomputes it, refusing `schedule_preview_stale` on a mismatch.
+   *                       GET lists this project's rows with `source`, so a UI can render the
+   *                       `library` half read-only — today that half is always empty and says so.
+   *   `schedule`(PATCH) — `enabled`, `until_at`, `review_at` and the policies. A `library` row is
+   *                       `schedule_read_only` (409): it is edited by PR.
+   *   `scheduleFires`   — one schedule's fire ledger, newest first. The calendar's read. **No
+   *                       money field**, ever (`scheduling.md` §6).
+   *   `scheduleFireNow` — fire out of band. Writes a `pending` row **before** starting, like
+   *                       every other path, so a manual fire is not a second unrecorded way to
+   *                       start a run.
+   *
+   * Every path carries the project segment (ADR-015 Q1). A schedule id is opaque across
+   * projects and a lookup-then-scope route would let a caller-supplied id choose its own scope —
+   * the same argument as `threadMessage`.
+   */
+  schedulePreview: { method: 'POST', path: '/api/p/:project/schedules/preview', scope: 'project' },
+  scheduleCreate: { method: 'POST', path: '/api/p/:project/schedules', scope: 'project' },
+  schedules: { method: 'GET', path: '/api/p/:project/schedules', scope: 'project' },
+  scheduleUpdate: { method: 'PATCH', path: '/api/p/:project/schedules/:id', scope: 'project' },
+  scheduleFires: { method: 'GET', path: '/api/p/:project/schedules/:id/fires', scope: 'project' },
+  scheduleFireNow: { method: 'POST', path: '/api/p/:project/schedules/:id/fire', scope: 'project' },
 
   panels: { method: 'GET', path: '/api/p/:project/panels', scope: 'project' },
   panel: { method: 'GET', path: '/api/p/:project/panels/:id', scope: 'project' },
