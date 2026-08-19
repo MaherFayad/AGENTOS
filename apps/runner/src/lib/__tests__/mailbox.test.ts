@@ -202,3 +202,83 @@ test('the console line a drained message produces says who and at what level', (
   // output from the runner talking about it.
   assert.equal(line.startsWith('['), true);
 });
+
+/**
+ * **The drain line** (`observability-engineer` → `runner-engineer`, 2026-08-18, taken as
+ * proposed and closed with M17's contract).
+ *
+ * The gap it closes, in their words: the sanctioned trace path projects
+ * `messageSpanAttributes(message)`, which has no `body` field — correct, and the consequence is
+ * that the withheld-literal register never *learns* the body. A run that drains a message and
+ * then interpolates it into an error string ten lines later emits it verbatim, and no key rule
+ * or type reaches an interpolated string. One call at the point the body is read is the only
+ * thing that can close it.
+ *
+ * Two properties, and the second is the one that only exists because the register changed:
+ * `withhold()` returns `boolean` since it began **refusing at capacity rather than evicting**
+ * (the old bound silently un-protected the oldest literal — fail-open). `false` is a real
+ * answer and must be surfaced, because it means this run cannot protect that text.
+ */
+test('a drained body is registered as withheld at the moment it is read', () => {
+  const withheld: string[] = [];
+  const message = {
+    id: 'm1',
+    threadId: THREAD,
+    projectId: PROJECT,
+    seq: 1,
+    kind: 'human' as const,
+    interrupt: 'note' as const,
+    author: 'human:unattributed',
+    body: 'Chase Fatima Al-Harbi about the Olaya lease',
+    payload: null,
+    inReplyTo: null,
+    expiresAt: null,
+    deliveredAt: null,
+    createdAt: '2026-08-17T21:00:00.000Z',
+  };
+
+  const line = renderDrainedMessage(message, {
+    withhold: (text: string) => {
+      withheld.push(text);
+      return true;
+    },
+  });
+
+  assert.deepEqual(withheld, [message.body], 'the body itself, not a projection of it');
+  assert.match(line, /Fatima Al-Harbi/, 'and the console line inside the project is unchanged');
+});
+
+test('a refusal from the register is surfaced, and the surfacing carries no body', () => {
+  const refusals: Array<{ messageId: string; bodyChars: number }> = [];
+  const message = {
+    id: 'm2',
+    threadId: THREAD,
+    projectId: PROJECT,
+    seq: 2,
+    kind: 'human' as const,
+    interrupt: 'note' as const,
+    author: 'human:unattributed',
+    body: 'a body the register is full for',
+    payload: null,
+    inReplyTo: null,
+    expiresAt: null,
+    deliveredAt: null,
+    createdAt: '2026-08-17T21:00:00.000Z',
+  };
+
+  renderDrainedMessage(message, {
+    withhold: () => false,
+    onRefusal: (messageId, bodyChars) => refusals.push({ messageId, bodyChars }),
+  });
+
+  assert.deepEqual(refusals, [{ messageId: 'm2', bodyChars: message.body.length }]);
+  assert.equal(
+    JSON.stringify(refusals).includes('register is full for'),
+    false,
+    'the refusal names the message and a length — logging the text would be the leak it reports',
+  );
+
+  // And a drain with no observability plane at all (`--profile dev`) still renders. An
+  // optional trace is a plane that does not exist, not a caller opting out of redaction.
+  assert.doesNotThrow(() => renderDrainedMessage(message));
+});

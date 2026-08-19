@@ -673,7 +673,21 @@ async function execute(
     }
 
     for (const message of drained.messages) {
-      state.stream.emit('token', { text: renderDrainedMessage(message) });
+      // **The drain line.** The body is registered as withheld at the moment it is read, which
+      // is the only point where provenance still exists — an interpolated body in an error
+      // string ten lines later is a string no key rule and no type can reach. `withhold()`
+      // answering `false` means this run cannot protect it, and that answer is logged rather
+      // than dropped (`observability-engineer`, 2026-08-18, taken as proposed).
+      state.stream.emit('token', {
+        text: renderDrainedMessage(message, obsTrace && {
+          withhold: (text: string) => obsTrace.withhold(text),
+          onRefusal: (messageId, bodyChars) =>
+            logger.warn(
+              { runId: state.runId, messageId, bodyChars },
+              'the withheld-literal register refused this message body: if anything interpolates it into an error, this run will emit it verbatim',
+            ),
+        }),
+      });
       // Keys and counts, never the body. `messageSpanAttributes` is a type with no `body`
       // field to add back, which is the mechanism — a comment asking the next author to
       // omit it is not (Part VII.4, and M15 proved the difference twice).

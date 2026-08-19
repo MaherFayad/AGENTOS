@@ -144,7 +144,52 @@ export async function drainMailbox(
  * own project** — the same boundary that lets `GET /api/p/:project/approvals` carry `inputs`.
  * It is not the boundary a span or a push payload crosses, and neither of those ever sees it.
  */
-export function renderDrainedMessage(message: ThreadMessage): string {
+export function renderDrainedMessage(message: ThreadMessage, trace?: WithholdingTrace): string {
+  /**
+   * **The drain line** — `observability-engineer`'s open decision-request, taken as proposed.
+   *
+   * Their argument, and it is correct: the sanctioned trace path projects
+   * `messageSpanAttributes(message)`, which carries `bodyChars` and deliberately no body. So
+   * the register never *learns* the body on that path, and a run that drains a message and then
+   * writes `` `halted: ${message.body}` `` into an error string ten lines later emits it
+   * verbatim. Interpolation destroys provenance before any type or key rule can see the
+   * string, so **one call at the point the body is read is the only thing that closes it** —
+   * and this function is that point: it is the one place that holds `message.body`.
+   *
+   * `withhold()` returns `boolean` since the register began **refusing at capacity rather than
+   * evicting** (the old bound silently un-protected the oldest literal — a fail-open). `false`
+   * means this run cannot protect that text, which is a real answer and is why it is logged
+   * rather than discarded: it says this run will emit that body if anything interpolates it.
+   * A `warn` and not a refusal, because a run that has already been paid for must not be killed
+   * by a redaction register being full.
+   *
+   * **The trace is optional and the parameter is last.** A drain without one is a drain with no
+   * observability plane (`--profile dev`), not a drain that opted out — and typing it as
+   * optional keeps every existing caller and test compiling while making the omission visible
+   * at the one call site that matters.
+   */
+  if (trace) {
+    const protectedNow = trace.withhold(message.body);
+    if (!protectedNow) {
+      // Deliberately not the body, and deliberately not silent. Naming the message is enough to
+      // find it; logging the text here would be the leak this line exists to prevent.
+      trace.onRefusal?.(message.id, message.body.length);
+    }
+  }
   const level = message.interrupt ? message.interrupt : message.kind;
   return `[${level} from ${message.author}: ${message.body}]\n`;
+}
+
+/**
+ * The slice of `RunTrace` this module needs, structurally typed.
+ *
+ * Narrower than importing `RunTrace`: this file has no business being able to open a span or
+ * finish a run, and a parameter typed to what it uses cannot grow a second responsibility by
+ * accident.
+ */
+export interface WithholdingTrace {
+  /** `false` ⇒ the text is not protected — under `MIN_LITERAL`, or the register is full. */
+  withhold(text: string): boolean;
+  /** Called when the register refused. The runner logs it; nothing here writes the body. */
+  onRefusal?: (messageId: string, bodyChars: number) => void;
 }

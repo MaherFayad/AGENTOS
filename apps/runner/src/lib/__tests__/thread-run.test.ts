@@ -122,6 +122,12 @@ function threadStore(mailbox: Record<string, unknown>[]): { db: DbClient; calls:
   return { db, calls };
 }
 
+/**
+ * Every literal this run was told to withhold. Module-level because the trace double is built
+ * per run and the assertion is about what reached the register across one.
+ */
+const withheldByTrace: string[] = [];
+
 /** Just enough of the observability handle for `startRun` to take the thread path. */
 function fakeObs(db: DbClient): Observability {
   const trace: RunTrace = {
@@ -135,13 +141,17 @@ function fakeObs(db: DbClient): Observability {
     // Returns `boolean` since 2026-08-18: the register refuses at capacity rather than
     // evicting, so the caller is told whether the text is actually protected. `true` for a
     // double that never fills. One-token edit by `observability-engineer` for that change.
-    withhold: () => true,
+    withhold: (text: string) => {
+      withheldByTrace.push(text);
+      return true;
+    },
     finish: async () => ({}) as never,
   };
   return { startRun: () => trace, db, close: async () => {} } as unknown as Observability;
 }
 
 async function runWithMailbox(mailbox: Record<string, unknown>[]) {
+  withheldByTrace.length = 0;
   const root = await fixtureRepo();
   const previousRoot = process.env.AGNETOS_REPO_ROOT;
   const previousKey = process.env.ANTHROPIC_API_KEY;
@@ -320,4 +330,29 @@ test('a continued thread seeds the user turn, never the system prompt', async ()
     if (previous === undefined) delete process.env.AGNETOS_REPO_ROOT;
     else process.env.AGNETOS_REPO_ROOT = previous;
   }
+});
+
+/**
+ * **The drain line is wired, not merely written** (`observability-engineer`'s decision-request,
+ * closed with M17).
+ *
+ * `mailbox.test.ts` asserts that `renderDrainedMessage` registers the body when it is handed a
+ * trace. That is the unit; this is the wiring, and the two are different claims — deleting the
+ * argument at the call site in `runService` leaves every mailbox unit test green, which is
+ * precisely the *producer without a consumer* shape (a required `sourceRef` shipped while the
+ * drawer's type dropped it, and nothing was red).
+ *
+ * What it buys: a body that reaches an interpolated error string later in the run is scrubbed
+ * out of it, because the register learned the literal here. Nothing else can reach an
+ * interpolated string — not a key rule, not a type.
+ */
+test('the run registers a drained body with its trace, so an interpolation cannot leak it', async () => {
+  await runWithMailbox([halt]);
+  assert.deepEqual(
+    withheldByTrace,
+    [halt.body],
+    'the halt body did not reach RunTrace.withhold. The drain line in runService is the only ' +
+      'point where the body still has provenance — after an interpolation there is nothing left ' +
+      'for any rule to match on.',
+  );
 });
