@@ -8,11 +8,14 @@
 `frontmatter-schema.md` (`schedule:`) · ADR-015 (project scoping, `budget_monthly`) ·
 ADR-039 (wake-on-LAN refused)
 
-> **Nothing in this contract fires anything.** Wave 1 adds occurrence computation, the fire
+> **Nothing in this contract fires anything.** Wave 1 added occurrence computation, the fire
 > ledger's transitions, both mandatory policies, jitter, the concurrency cap and the ten-fire-time
 > preview — **as pure functions with no clock, no loop and no database.** `planTick` returns a
-> list of intentions; nothing executes them. No fire row has ever existed, no run has ever run,
-> and `0005`–`0011` have never met a live Postgres. Build against this file, not against
+> list of intentions; nothing executes them. Wave 2 added the six routes, the first writer either
+> table has ever had, and the browser client — so a schedule can now be *asked for* and refused.
+> **It still cannot be stored**: `0005`–`0011` have never met a live Postgres, so five of the six
+> routes answer `thread_store_unavailable` and the sixth, the preview, is the one that works.
+> No fire row has ever existed and no run has ever run. Build against this file, not against
 > `Plan §14`; the plan is not reviewed and this is.
 
 ---
@@ -29,7 +32,9 @@ Does not govern, with owners named so nobody assumes:
 |---|---|
 | Removing ofelia from `infra/compose.yaml:389`, and wake-on-LAN | `infra-compose-engineer` |
 | The `calendar` widget — **ADR-028 already caps the widget vocabulary at three new types ever**; M18 writes no second widget ADR | `dashboards-engineer` |
-| The schedule editor, the save dialog, the "next up" strip | later M18 slices |
+| The **schedule editor and the save dialog** — the chrome. Wave 2 found this row was wrong: the editor is not a new surface, it is the `⏰ Schedule` control that **already exists** in the map drawer (spec §2.3 line 217, `JobDrawer.tsx`'s `scheduleBusy` / `scheduleResult`), and today it writes frontmatter and pokes a removed sidecar | `drawer-engineer` — §2.3 is theirs. The rule, the receipt and the wire are mine and are built (`saveGuard.ts`, `data/client.ts`, §13) |
+| The **"next up" strip** — `Plan §14` puts the calendar *"inside the panel system, not new chrome"*, and the same argument applies here: it is a `data-table` fed by `GET …/schedules`, so it costs **no** widget type and ADR-028's last extension stays unspent. Ordering and the three absences are built (`nextUp.ts`) | `dashboards-engineer` — §2.4–2.5 is theirs |
+| The copy for all three | `rtl-arabic-pdpl-specialist` — the catalogue is theirs, and both halves of it must land together |
 | Where a fire's run is placed and how it is started | `runner-engineer` |
 | Fire metrics and their span attributes | `observability-engineer` |
 | Whether `schedule:` in frontmatter grows the mandatory intent (§3.3) | `agent-library-curator` |
@@ -402,7 +407,14 @@ Stated, because a contract that hides its own gaps is worse than one with gaps.
 1. **Nothing fires.** Occurrences are computed and policies are executed — **as decisions, not as
    actions.** There is no tick loop, no process, no timer, no executor. `planTick` returns a list
    of intentions and nothing in this repo consumes it. No `record` has become a row, no `start`
-   has become a run.
+   has become a run. `POST …/schedules/:id/fire` answers `started: false` with the reason, which
+   is the honest form of that gap on the one surface where believing otherwise costs money.
+1b. **The routes exist and five of six cannot complete.** `…/schedules/preview` needs no database
+   and works; create, list, PATCH, fires and fire-now answer `thread_store_unavailable` (503),
+   because `0011` has never been applied. So *"the scheduling API is built"* is true of the
+   surface and false of the round trip, and the difference is not visible in a route table.
+   `schedule-routes.test.ts` asserts the 503s deliberately, so the gap is a pinned fact rather
+   than an absence somebody has to notice.
 2. **Neither table has met a Postgres.** `0005`–`0011` have never been applied to a live
    database. Every constraint here is asserted as *text in a migration*, by
    `schedule-schema-pinning.test.ts`, which is a lower bound on agreement and not a proof of it.
@@ -556,7 +568,27 @@ consequence, stated because it cuts against detail 1: a system tick has **no fir
 prune never ran"* is not visible the way a schedule's miss is. That gap belongs with ADR-008's
 owner (`observability-engineer`) as a metric, and this contract does not close it.
 
-## 13. Routes — semantics proposed to `runner-engineer`, who owns `api-contracts.md`
+## 13. Routes — built in wave 2, and one spelling in this section was wrong
+
+**Everything below is implemented** in `apps/runner/src/routes/schedules.ts`, with the payload
+types in `packages/contracts/src/scheduling.ts` §11 and the browser client in
+`apps/web/src/schedules/data/client.ts`. Eleven error codes landed in `API_ERROR_STATUS`, which is
+`runner-engineer`'s file — §11.2 and §11.7 still ask them to accept or rename, and a rename is a
+rename rather than a rewrite.
+
+### 13.0 The path is plural, because §13's spelling collided with a live route
+
+This section said `POST /api/p/:project/schedule`. **That route already exists** and it writes an
+agent's **frontmatter**, commits it, and calls `syncOfelia` — a sidecar `e4e0bff` removed.
+
+The collision is the interesting part rather than an inconvenience. Those two writes are exactly
+§2's *one table, two authorities*: frontmatter is the `library` side and `ops.schedule` is the
+`ops` side. One path serving both would make a request **ambiguous about which authority it is
+addressing**, which is the ambiguity `source` exists to remove — and `source` is deliberately not
+a body field precisely so a request cannot claim to be `library`. So the new surface is
+`…/schedules` (plural), the old singular route is untouched, and it stays `runner-engineer`'s to
+sequence.
+
 
 Same split as `POST /api/p/:project/thread/:id/message`: the semantics are argued here, the
 transcription is theirs. **Every path carries the project segment** (ADR-015) — a lookup-then-scope

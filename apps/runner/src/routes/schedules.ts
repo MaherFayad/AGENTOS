@@ -669,7 +669,14 @@ export function registerScheduleRoutes(app: FastifyInstance, ctx: ApiContext): v
          * surface where believing it costs money.
          */
         started: false,
-        startedBecause: 'no executor exists — the fire is recorded and nothing reads it yet',
+        /**
+         * A **code, not a sentence.** The surface that renders this has to say it in the
+         * reader's language, and prose served from here is prose no catalogue covers —
+         * `check-rtl` cannot even see `apps/runner/**`, which it says out loud in its own
+         * unmeasurables. `hint` on an error envelope is the one exception the contract makes,
+         * and this is not one.
+         */
+        startedBecause: 'no-executor' as const,
       };
     } catch (err) {
       return sendApiError(reply, err);
