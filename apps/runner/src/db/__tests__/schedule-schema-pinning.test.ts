@@ -45,17 +45,25 @@ import {
   OVERLAP_POLICIES,
   SCHEDULE_BUDGET_ENFORCEMENT,
   SCHEDULE_DELIVERIES,
+  SCHEDULE_FIRE_BIRTH_STATE,
   SCHEDULE_FIRE_REQUIRED_COLUMNS,
+  SCHEDULE_FIRE_ROW_CHECKS,
   SCHEDULE_FIRE_STATES,
+  SCHEDULE_FIRE_TABLE_CONSTRAINTS,
+  SCHEDULE_FIRE_TERMINAL_STATES,
+  SCHEDULE_FIRE_TRANSITIONS,
   SCHEDULE_LIBRARY_MATERIALIZATION,
   SCHEDULE_REQUIRED_COLUMNS,
   SCHEDULE_SOURCES,
   SCHEDULE_THREAD_KINDS,
   TRIGGER_KINDS,
   agentFrontmatterSchema,
+  assertFireRowValid,
+  assertFireTransition,
   assertScheduleAddressable,
   scheduleCost,
   scheduleFiresAreExact,
+  type ScheduleFireRow,
 } from '@agnetos/contracts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -421,6 +429,137 @@ test('no source: library row is writable, because frontmatter carries a cron and
       'do not let four invented policy values ship as an author\'s choices.',
   );
   assert.equal(SCHEDULE_LIBRARY_MATERIALIZATION.possibleToday, false);
+});
+
+/* -------------------------------------------------------------------------- *
+ * 5b. The CHECKs, and the writer that has to satisfy them before Postgres can
+ * -------------------------------------------------------------------------- */
+
+/** Every `CONSTRAINT <name> CHECK` declared inside a table body, in declaration order. */
+function checkNames(sql: string, table: string): string[] {
+  const out: string[] = [];
+  const re = /CONSTRAINT\s+([a-z_]+)\s+CHECK/gi;
+  let m: RegExpExecArray | null;
+  const body = tableBody(sql, table);
+  while ((m = re.exec(body)) !== null) out.push((m[1] as string).toLowerCase());
+  return out;
+}
+
+test('every CHECK on ops.schedule_fire has a named mirror a writer can be graded against', async () => {
+  const sql = await load();
+  const inSql = new Set(checkNames(sql, 'ops.schedule_fire'));
+  // UNIQUE is not a CHECK, and `checkNames` will not see it. Named explicitly so the
+  // both-directions assertion below has somewhere to put it instead of tolerating a gap.
+  inSql.add('schedule_fire_idempotent');
+
+  assert.ok(inSql.size >= 7, `only ${inSql.size} constraints were parsed — the reader is blind.`);
+
+  const mirrored = new Set([
+    ...SCHEDULE_FIRE_ROW_CHECKS.map((c) => c.name),
+    ...SCHEDULE_FIRE_TABLE_CONSTRAINTS,
+  ]);
+
+  // → **A CHECK in `0011` that no writer knows about.** This is 0005's defect in its exact
+  // shape: four constraints the ledger writer never named, which would have failed to record a
+  // run *after* the model was paid for. `0005`–`0011` have never met a Postgres, so today these
+  // predicates are the only place the constraint is enforced at all.
+  assert.deepEqual(
+    [...inSql].filter((name) => !mirrored.has(name)).sort(),
+    [],
+    'a CHECK exists in 0011_scheduling.sql that SCHEDULE_FIRE_ROW_CHECKS does not mirror.',
+  );
+
+  // ← And the reverse: a mirror for a constraint the migration does not have is a writer being
+  // graded against a rule nobody enforces, which is how a schema and its contract drift apart
+  // while both look maintained.
+  assert.deepEqual(
+    [...mirrored].filter((name) => !inSql.has(name)).sort(),
+    [],
+    'SCHEDULE_FIRE_ROW_CHECKS names a constraint 0011_scheduling.sql does not declare.',
+  );
+});
+
+test('each mirrored CHECK actually rejects the row it exists to reject', () => {
+  const ok: ScheduleFireRow = {
+    scheduleId: 'sch-1',
+    projectId: 'proj-1',
+    occurrenceTime: '2026-08-18T09:00:00.000Z',
+    state: 'pending',
+    catchUp: false,
+    attempts: 0,
+    recordedAt: '2026-08-18T09:00:00.100Z',
+    startedAt: null,
+    endedAt: null,
+    threadId: null,
+    refusalCode: null,
+    questionMessageId: null,
+  };
+  assert.doesNotThrow(() => assertFireRowValid(ok));
+
+  // One violation per mirrored CHECK, so a predicate that silently returns `true` for everything
+  // cannot pass this test. The `recorded_before_run` case is the one that matters: it is detail
+  // 1 as a mechanism, and a row recorded after its own start is fire-then-record.
+  const violations: [string, ScheduleFireRow][] = [
+    ['schedule_fire_state_known', { ...ok, state: 'queued' as ScheduleFireRow['state'] }],
+    ['schedule_fire_attempts_sane', { ...ok, attempts: -1 }],
+    [
+      'schedule_fire_recorded_before_run',
+      { ...ok, state: 'running', recordedAt: '2026-08-18T09:05:00.000Z', startedAt: '2026-08-18T09:00:00.000Z' },
+    ],
+    [
+      'schedule_fire_ends_after_it_starts',
+      { ...ok, state: 'done', startedAt: null, endedAt: '2026-08-18T09:10:00.000Z' },
+    ],
+    ['schedule_fire_pending_has_not_started', { ...ok, startedAt: '2026-08-18T09:01:00.000Z' }],
+    [
+      'schedule_fire_finished_has_an_end',
+      { ...ok, state: 'done', startedAt: '2026-08-18T09:01:00.000Z', endedAt: null },
+    ],
+    ['schedule_fire_skip_names_a_reason', { ...ok, state: 'skipped', refusalCode: null }],
+  ];
+  assert.equal(
+    violations.length,
+    SCHEDULE_FIRE_ROW_CHECKS.length,
+    'a CHECK was mirrored without a row that violates it — the mirror is untested.',
+  );
+  for (const [name, row] of violations) {
+    assert.throws(
+      () => assertFireRowValid(row),
+      (err: { code?: string; message?: string }) =>
+        err.code === 'schedule_fire_row_invalid' && (err.message ?? '').includes(name),
+      name,
+    );
+  }
+});
+
+test('the transition table has no edge out of a terminal state, and one retry self-edge', () => {
+  for (const state of SCHEDULE_FIRE_TERMINAL_STATES) {
+    assert.deepEqual(SCHEDULE_FIRE_TRANSITIONS[state], [], `${state} is terminal`);
+  }
+  assert.equal(SCHEDULE_FIRE_BIRTH_STATE, 'pending');
+  // Every state in the vocabulary appears in the table, so a state added to `0011` and to
+  // `SCHEDULE_FIRE_STATES` cannot arrive with no transition rule at all.
+  for (const state of SCHEDULE_FIRE_STATES) {
+    assert.ok(state in SCHEDULE_FIRE_TRANSITIONS, `${state} has no transition rule`);
+  }
+
+  assert.throws(
+    () => assertFireTransition({ from: 'done', to: 'pending', attemptsBefore: 1, attemptsAfter: 1 }),
+    (err: { code?: string }) => err.code === 'schedule_fire_transition_refused',
+  );
+  assert.throws(
+    () => assertFireTransition({ from: 'pending', to: 'done', attemptsBefore: 0, attemptsAfter: 0 }),
+    (err: { code?: string }) => err.code === 'schedule_fire_transition_refused',
+  );
+  // The retry ladder: `running → running` is legal only when attempts increases, because a
+  // second fire row would carry the same (schedule_id, occurrence_time) and defeat the key.
+  assert.doesNotThrow(() =>
+    assertFireTransition({ from: 'running', to: 'running', attemptsBefore: 1, attemptsAfter: 2 }),
+  );
+  assert.throws(
+    () => assertFireTransition({ from: 'running', to: 'running', attemptsBefore: 1, attemptsAfter: 1 }),
+    (err: { code?: string }) => err.code === 'schedule_fire_transition_refused',
+  );
 });
 
 /* -------------------------------------------------------------------------- *
