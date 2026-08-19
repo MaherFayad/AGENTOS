@@ -6,11 +6,11 @@ than the work. If this disagrees with BOARD, **BOARD wins** and this file is sta
 
 ## Where the build is
 
-- **Done:** M0, M1, M2, **M5**, **M6**, **M15**, **M16** — M16's eleven slices PASSED
-  2026-08-18: ADR-023/028/036/037/038 · `thread-model.md` · `0008_threads.sql` · thread routes
-  + mailbox drain · both registers · `thread-feed` · the tab slot · both composers · erasure.
-- **No milestone is open.** Still open: **M3** (waits on the API key), **M4** (relay unverified),
-  **M8**. Next in the plan is **M17** (`Plan §13`) — nothing blocks opening it.
+- **Done:** M0, M1, M2, **M5**, **M6**, **M15**, **M16** (eleven slices, PASSED 2026-08-18).
+- **M17 and M18 are open and both stopped mid-flight** — four agents cut off by a session limit
+  2026-08-19, not by a defect. Foundations landed, `verify` exits 0, **two slices have no
+  handoff and are unreviewed**. No surface for M17; nothing fires on a timer for M18. Also open:
+  **M3** (API key), **M4** (relay unverified), **M8**.
 - **Phase 0 is still open**, and it blocks *validation* of everything, not construction.
   **Six milestones are done and none is validated** — every PASS covers source, tokens and a
   real page load. Never let a done row read as a working feature.
@@ -72,7 +72,9 @@ and failed the same one over WebSocket. **An include-list is a decision to be bl
 everything unnamed; a substring is a claim you did not narrow.** Ask what your instrument
 *cannot* see, write it down, and prefer a marker only the real thing can satisfy. Related:
 **a gate narrower than its authors' vocabulary silently edits them** — the coverage gate
-rejected `Plan §n` and two agents quietly rewrote their citations to pass.
+rejected `Plan §n` and two agents rewrote their citations to pass. Newest: **a pin comparing
+two declarations is satisfiable by a lie** — the thread-id pin fired when M17's producer landed,
+then stayed green once the constant flipped with the consumer still hardcoded `null`.
 
 **A test excluded from typecheck makes every type assertion inside it decorative.**
 `apps/web/tsconfig.json` excluded the suite and vitest does not typecheck, so six
@@ -97,13 +99,11 @@ red. It hides in tests too — one built a `start` event without fields M15 made
 forty lines above one that had been updated. **`unknown` is not `zero`**: a failed load
 dimmed seven CHART tabs, and dimming is a claim.
 
-**A gate loads a page now — it did not, and that is how a dead app passed everything.**
-`tsc`, three suites, every validator *and* `next build` were green while the app
-white-screened. `validate:barrel` + `smoke` observe the artifact; **`smoke:browser` runs it in
-Chrome**, failing on any uncaught throw, `console.error` or browser error. Our own absent
-backend (`/api/` 5xx, the `/ws/` handshake) is reported, not fatal. Before believing a red,
-`rm -rf apps/web/.next` — a stale build has faked a 404 on an untouched route. The 1440px
-side-by-side still needs **reference frames**, not a browser.
+**A gate loads a page now — it did not, and that is how a dead app passed everything.** `tsc`,
+three suites, every validator *and* `next build` were green while the app white-screened.
+**`smoke:browser` runs it in Chrome**, failing on any uncaught throw, `console.error` or browser
+error; our own absent backend (`/api/` 5xx, the `/ws/` handshake) is reported, not fatal. Before
+believing a red, `rm -rf apps/web/.next`. The 1440px side-by-side still needs **reference frames**.
 
 ---
 

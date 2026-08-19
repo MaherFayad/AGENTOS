@@ -12,10 +12,16 @@ a bare `§10` always means the spec of record, which has no §10.
 landed and were accepted across three verdicts (5 PASS / 2 FAIL → three fixes → re-gate → the
 rule-6 sweep). Done: M0, M1, M2, **M5**, **M6**, **M15**, **M16**.
 
-**`M17` is framed and not dispatched** (see the M17 section, below M16's). The frame rules
-ownership — `runner-engineer` leads the foundation, `drawer-engineer` owns the surface — claims
-**ADR-026**, ends the `0009_` migration race, and grades seven hazards. Nothing blocks opening
-it; the human dispatches.
+**`M17` and `M18` are both open, and both stopped mid-flight.** Four agents were terminated by
+an API session limit on 2026-08-19 — not by a defect, and not at a slice boundary. What each had
+finished is committed under its own name (`6f3abb2`, `94443e9`, `e4e0bff`, `51aba6f`, `03f04a2`,
+`3f810b8`) and `npm run verify` exits 0 on the result, observed 2026-08-19 20:35 +03:00.
+
+**Neither milestone is done, and two slices have no handoff** — the calendar widget and the
+scheduler's wave 1 both stopped at the point of writing one. Under the definition of done that
+makes them unreviewed, and the commit messages say so rather than leaving it to be inferred.
+Still missing: M17's whole surface (roster line, diff screen, approve) and M18's routes, schedule
+editor, save dialog and "next up" strip. **Nothing fires on a timer**; the clock is a computation.
 
 **Still open:** `M3 — Runner + Run now + Langfuse` (unblocked by M2; the runner half waits on
 the human for `RUNNER_ANTHROPIC_API_KEY`) · `M4 — SESSIONS` (relay unverified against a
@@ -330,8 +336,8 @@ a milestone still closes only on a `fidelity-qa-reviewer` PASS.
 |---|---|---|---|---|
 | 15 | Projects · cascade · identity | §9 · §10 · §11 · §23.12 | `runner-engineer` | **done 2026-08-17.** PASS `comms/handoffs/M15-fidelity-qa-reviewer-acceptance-2.md` at `eaca677`, source-and-token. Provenance of its mechanical checks: `scanned at 2026-08-17 20:34 +03:00 · eaca677 · clean` · 311 files · 0 violations · 2 exemptions. Prior FAIL at `8e77a23` kept as record. |
 | 16 | Threads · addressing · mailbox | §12 · §23.7 · §23.8 · §23.12 | `thread-model-engineer` | **open 2026-08-17. Foundation slice landed at `8a9bdf5`, awaiting review** — ADR-023 (`proposed`), `contracts/thread-model.md`, `0008_threads.sql`, grammar + writer. Ten slices still held; the `review-request` was itself blocked by the roster gate until 21:50 |
-| 17 | Presence · work products · diff review | §13 | **`runner-engineer`** (lead, foundation) · `drawer-engineer` (surface) | **framed 2026-08-18, not dispatched** — see the M17 section. Ownership **corrected**: the row said `drawer-engineer` outright and the §13 coverage row said *unclaimed, in trust*. Split at a named seam — the entity, the worktree mechanic and `0010_` are the runner's; the roster line, diff screen and approve are the drawer's; the read side of the contract has **one** author. ADR-**026** owner filled. `0009_` ruled to the thread-id `SET NOT NULL` so the migration namespace stops racing |
-| 18 | Time & triggers · the scheduler | §14 | **`scheduler-engineer`** | **open 2026-08-18, foundation slice only** — ADR-024 · `contracts/scheduling.md` · `0011_scheduling.sql` · `packages/contracts/src/scheduling.ts`. No UI, no `calendar`, no ofelia removal, no fan-out. **The migration number is `0011_`, not the `0010_` the dispatch assigned** — see the M18 block; `0010_` is M17's on this board and a collision is the race, not a tidy-up |
+| 17 | Presence · work products · diff review | §13 | **`runner-engineer`** (lead, foundation) · `drawer-engineer` (surface) | **open — foundation landed 2026-08-19, surface not started.** `worktree.ts` + `0010_work_products.sql` + the writer + `contracts/work-product.md` (`6f3abb2`, `03f04a2`). The lead was cut off by a session limit while writing the contract; the file was finished on disk and committed from there. **`drawer-engineer` has not been dispatched** — no roster line, no diff screen, no approve. See the M17 section. Ownership **corrected**: the row said `drawer-engineer` outright and the §13 coverage row said *unclaimed, in trust*. Split at a named seam — the entity, the worktree mechanic and `0010_` are the runner's; the roster line, diff screen and approve are the drawer's; the read side of the contract has **one** author. ADR-**026** owner filled. `0009_` ruled to the thread-id `SET NOT NULL` so the migration namespace stops racing |
+| 18 | Time & triggers · the scheduler | §14 | **`scheduler-engineer`** | **open — foundation + wave 1 landed 2026-08-19, no UI beyond the calendar** — the clock (`3f810b8`), the ofelia removal (`e4e0bff`) and the `calendar` widget (`51aba6f`) are in; the last two agents were cut off by a session limit before writing handoffs, so both are unreviewed. No routes, no schedule editor, no save dialog, no "next up" strip. Nothing fires on a timer. Foundation: ADR-024 · `contracts/scheduling.md` · `0011_scheduling.sql` · `packages/contracts/src/scheduling.ts`. No UI, no `calendar`, no ofelia removal, no fan-out. **The migration number is `0011_`, not the `0010_` the dispatch assigned** — see the M18 block; `0010_` is M17's on this board and a collision is the race, not a tidy-up |
 | 19 | Mobile (Expo) · real push · offline | §16 · §23.9 | *unassigned* — `client-platform-engineer` when spawnable | not started |
 | 20 | Memory 5-tier · KB index | §15 | *unassigned* — `memory-index-engineer` when spawnable | not started |
 | 21 | Tauri desktop · host daemon · sessions | §16 | *unassigned* — `client-platform-engineer` when spawnable | not started |
@@ -917,7 +923,7 @@ rule into three, and the rule is the valuable half.
 | **The cap** — exactly three new types ever; everything else composes from the existing seven (§23.7) | **yes, this is the decision** | — |
 | `thread-feed` — full schema | **yes** | **M16** |
 | `board` — named and reserved, schema deferred | named only | M17 / *Any* (§23.12) — needs ADR-029's drag primitive, which is unwritten |
-| `calendar` — named and reserved, schema deferred | named only | M18 / P4 — its data is `ops.schedule`, which does not exist |
+| `calendar` — full schema | **yes** | **M18** — the reservation is spent for the reason ADR-028 gave: `ops.schedule` now exists (`0011_scheduling.sql`). **One of the three extensions remains, and that is the whole remaining allowance** |
 
 Reason for the split, so it is not re-litigated: **writing a widget schema for a table that
 does not exist produces a plausible spec**, and `WidgetView`'s exhaustive `switch` with the
@@ -942,7 +948,7 @@ Nothing from `Plan §13`–§17. Specifically, and because each has already been
 
 ---
 
-### M17 — Presence · work products · diff review (`Plan §13`) — **FRAMED, NOT DISPATCHED**
+### M17 — Presence · work products · diff review (`Plan §13`) — **OPEN · FOUNDATION LANDED**
 
 > **Six milestones are done and not one is validated.** Zero agent runs have ever executed;
 > `0005`–`0008` have never met a live Postgres; the 1440px side-by-side has never been run.
