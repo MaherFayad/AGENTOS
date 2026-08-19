@@ -56,7 +56,7 @@ const INK3_COLOR_ALLOWLIST: Record<string, string> = {
     'survives §9.2’s delete-the-text test outright: remove it and a reader loses spacing, ' +
     'not a fact. Every cell it separates is its own element with its own text, and the one ' +
     'thing on that line that IS required reading — the recorded/unknown qualifier — is a ' +
-    'sentence in --ink-2 below it, never this glyph. M17.',
+    'sentence in --ivory-2 below it, never this glyph. M17.',
 };
 
 /** Strip comments, then split into `selector { declarations }` pairs. */
@@ -128,7 +128,12 @@ describe('drawer token contrast', () => {
   it('paints the honest empty state as content, not as disabled text', () => {
     // `.ladderText` is in this loop because the token owner corrected it here; keeping it in
     // the list is what stops the next edit walking it back to --ink-3.
-    for (const cls of ['.empty', '.consoleTrimmed', '.sectionNote', '.ladderText', '.runMetaAbsent']) {
+    // `.runMetaAbsent` was in this list and is not any more. It moved further, to
+    // `--ivory-2`, under tokens contract §9.4b — see `hover-row-contrast.test.tsx`, which
+    // is the gate that found the reason: it lives inside a row that hovers to `--card-2`,
+    // where light `--ink-2` is 4.25:1. This list is "not the disabled token"; that one is
+    // "clears AA on the surface it is actually painted on".
+    for (const cls of ['.empty', '.consoleTrimmed', '.sectionNote', '.ladderText']) {
       const rule = rules(CSS).find((r) => r.selector === cls);
       expect(rule, `${cls} should exist in drawer.module.css`).toBeDefined();
       expect(rule!.body, `${cls} must not use the disabled token`).not.toContain('var(--ink-3)');

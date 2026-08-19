@@ -568,25 +568,39 @@
   color: var(--ivory-2);
 }
 
+/* `--ivory`, and the reason is `.runRow:hover` twenty lines up.
+ *
+ * Tokens contract **§9.4b**, ruled by `design-system-guardian` on 20260816-2145: *when "a
+ * caveat sits one rung below the value it qualifies" collides with the AA floor, raise the
+ * value — never lower the caveat.* The caveat is required reading and cannot go below AA, so
+ * the gap has to be opened from above. */
 .runMeta {
   flex: 0 0 auto;
-  color: var(--ink-2);
+  color: var(--ivory);
   font-variant-numeric: tabular-nums;
 }
 
 /* "unpriced" — a word where a number would be. It must read one step dimmer than the real
  * numbers so the eye takes the priced column first and never mistakes it for a cheap run.
+ * Tokens contract §9.2 names this exact case — a provenance caveat — as its sharpest
+ * example: delete the word and a blank cell cannot tell the reader whether the run cost
+ * nothing or was never measured, which is the "floor, not a total" distinction BOARD rule 9
+ * exists to protect. It is also the same sentence as `KpiTile`'s `unpricedNote`, and the two
+ * must not disagree about how loudly the product admits a gap.
  *
- * `--ink-2`, not `--ink-3`, and the design argument survives intact: the dollar amounts are
- * `--ivory` at 15.98:1, so `--ink-2` at 5.08:1 is still visibly the quieter cell. Tokens
- * contract §9.2 names this exact case — a provenance caveat — as its sharpest example:
- * delete the word and a blank cell cannot tell the reader whether the run cost nothing or
- * was never measured, which is the "floor, not a total" distinction BOARD rule 9 exists to
- * protect. It is also the same sentence as `KpiTile`'s `unpricedNote`, and the two must not
- * disagree about how loudly the product admits a gap.
- * Correction from `design-system-guardian`, 20260816-2112. */
+ * THE MEASUREMENT THIS COMMENT USED TO CARRY WAS FALSE and is corrected here rather than
+ * deleted, because a comment that quietly rewrites its own reasoning is worse than one that
+ * was wrong out loud. It said *"the dollar amounts are `--ivory` at 15.98:1, so `--ink-2` at
+ * 5.08:1 is still visibly the quieter cell"* — and `.runMeta` was `--ink-2` at the time, so
+ * the caveat sat at the SAME weight as the figures it qualifies. Worse, `.runRow:hover`
+ * fills `--card-2`, where light `--ink-2` measures **4.25:1** — sub-AA at the moment the
+ * reader is most likely to be reading the row.
+ *
+ * The pair now is `.runMeta` → `--ivory` and this → `--ivory-2`: 7.98:1 dark / 7.14:1 light
+ * in the worst case including the hover fill, with the rung gap wider than it ever was.
+ * Re-ruled by `design-system-guardian`, 20260816-2145, landed here 20260819. */
 .runMetaAbsent {
-  color: var(--ink-2);
+  color: var(--ivory-2);
   font-variant-numeric: normal;
 }
 
@@ -1012,18 +1026,25 @@
   color: var(--ink-3);
 }
 
+/* THE RUNG GAP HERE IS OPENED FROM ABOVE, not from below — tokens contract §9.4b.
+ *
+ * `.workRow:hover` fills `--card-2`, where light `--ink-2` is 4.25:1. Everything a
+ * qualified cell says is required reading — it is the difference between a value something
+ * observed and a value nobody did — so the quiet tier cannot be the sub-AA one. The
+ * observed tier is raised to `--ivory` instead, which keeps a visible gap and clears AA in
+ * both themes on every surface this row has. Same ruling, same day, as `.runMetaAbsent`. */
 .workCell {
   color: var(--ivory-2);
 }
 
 .workCell[data-evidence='observed'] {
-  color: var(--ivory-2);
+  color: var(--ivory);
 }
 
-/* Recorded, not observed. Dimmer, and dotted — a mark that says "there is something to read
+/* Recorded, not observed. Quieter, and dotted — a mark that says "there is something to read
  * about this value" without saying anything false about the value itself. */
 .workCell[data-evidence='recorded'] {
-  color: var(--ink-2);
+  color: var(--ivory-2);
   text-decoration: underline dotted var(--line-2);
   text-underline-offset: 3px;
 }
@@ -1032,7 +1053,7 @@
  * distinguishable without colour — and neither is distinguishable BY colour, which is the
  * point: the difference between them is a sentence, and the sentence is rendered. */
 .workCell[data-evidence='unknown'] {
-  color: var(--ink-2);
+  color: var(--ivory-2);
   text-decoration: underline dashed var(--line-2);
   text-underline-offset: 3px;
 }
@@ -1050,7 +1071,9 @@
   @apply text-chip;
   font-weight: 400;
   line-height: 1.5;
-  color: var(--ink-2);
+  /* `--ivory-2`, not `--ink-2`: this sentence is inside `.workRow`, which hovers to
+   * `--card-2`, and it is the one line on the row a reader must not skip. §9.4b. */
+  color: var(--ivory-2);
 }
 
 .workActions {

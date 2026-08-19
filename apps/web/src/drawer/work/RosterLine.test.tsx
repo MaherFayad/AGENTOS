@@ -145,9 +145,20 @@ describe('colour is only ever spent on an observation', () => {
   }
 
   it('paints a recorded cell in monochrome, one step quieter than the numbers', () => {
-    const body = block(".workCell[data-evidence='recorded']");
-    expect(body).not.toMatch(DATA_INK);
-    expect(body).toContain('var(--ink-2)');
+    const recorded = block(".workCell[data-evidence='recorded']");
+    const observed = block(".workCell[data-evidence='observed']");
+    expect(recorded).not.toMatch(DATA_INK);
+    // `--ivory-2` under `--ivory`, and NOT `--ink-2` under `--ivory-2`. The rung gap is
+    // opened from above (tokens contract §9.4b) because `.workRow:hover` fills `--card-2`,
+    // where light `--ink-2` is 4.25:1 — and everything a qualified cell says is required
+    // reading. `hover-row-contrast.test.tsx` is the gate that enforces that generally.
+    // Anchored, not `toContain`: `var(--ivory)` is a substring of `var(--ivory-2)`, so a
+    // `toContain` here would pass with both tiers on the same token and the rung gap gone —
+    // "a substring is a claim you did not narrow", on the assertion that exists to keep them
+    // apart. Falsified by setting both to `--ivory-2`.
+    expect(recorded).toMatch(/color:\s*var\(--ivory-2\);/);
+    expect(observed).toMatch(/color:\s*var\(--ivory\);/);
+    expect(recorded).not.toContain('var(--ink-2)');
   });
 
   it('paints an unknown cell in monochrome too, and distinguishes it without colour', () => {
