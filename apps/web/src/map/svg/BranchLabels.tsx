@@ -1,7 +1,7 @@
 'use client';
 
 import type { GraphDepartment, GraphNode } from '@agnetos/contracts';
-import { branchLabels } from '../lib/branches';
+import { branchHitBox, branchLabels } from '../lib/branches';
 import { BRANCH_LABEL, BRANCH_SUBLABEL } from '../lib/map-type';
 
 export function BranchLabels({
@@ -40,6 +40,17 @@ export function BranchLabels({
               onActivate(placed.department);
             }}
           >
+            {/* The hit target. A `<g>` has no geometry and every `<text>` below is
+                `pointer-events: none`, so without this rectangle the `role="button"` and
+                the `onClick` above had nothing to be clicked *on* — measured in Chrome:
+                `elementFromPoint` at the centre of a label returned the `<svg>`. Invisible
+                by paint, present to hit-testing. */}
+            <rect
+              {...branchHitBox(placed)}
+              fill="transparent"
+              pointerEvents="all"
+              aria-hidden="true"
+            />
             <text
               textAnchor={placed.anchor}
               fontFamily="var(--font-serif)"

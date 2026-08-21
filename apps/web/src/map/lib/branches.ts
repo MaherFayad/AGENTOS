@@ -12,6 +12,7 @@
  */
 
 import type { GraphDepartment, GraphNode } from '@agnetos/contracts';
+import { BRANCH_LABEL, BRANCH_SUBLABEL } from './map-type';
 
 export interface Placed {
   x: number;
@@ -30,6 +31,64 @@ export interface BranchLabel extends Placed {
 
 /** How far past the branch's outermost node the caps label sits, in world units. */
 const LABEL_CLEARANCE = 96;
+
+/**
+ * Advance per character, in world units, for the two label typefaces at their §2.1 sizes.
+ *
+ * **Measured, not estimated.** Read off `getBBox()` in Chrome on `/p/agentos/map`,
+ * 2026-08-21T17:07Z: the 19px Instrument Serif caps ran 15.68–16.56 units/char across the
+ * seven departments (`SALES` 78.4/5, `DEALS` 82.8/5), and the 11px sans sub-labels ran
+ * 9.52–10.27 (`OUTREACH WRITING` 152.3/16, `PROPOSALS` 92.4/9). The coefficients below
+ * reproduce those within ~4% and are deliberately rounded *up*, because this feeds a hit
+ * box and a hit box that is slightly too small is a click that does nothing.
+ *
+ * They are approximations on purpose: the exact answer needs `getBBox()`, which means a
+ * layout effect, a state round-trip and a jsdom fallback for a rectangle nobody can see.
+ */
+const LABEL_ADVANCE = 0.45; // × font size, serif caps
+const SUBLABEL_ADVANCE = 0.65; // × font size, sans caps
+
+/**
+ * The invisible rectangle that makes a department label clickable (§2.1 — "click a
+ * department label → department view").
+ *
+ * It has to exist because an SVG `<g>` has no geometry of its own and every `<text>` inside
+ * this one is `pointer-events: none`. The group carried `role="button"` and an `onClick`
+ * for as long as the map has existed and **there was nothing anywhere in it to hit**:
+ * `document.elementFromPoint` at the centre of `DEALS` returned the `<svg>`, and the click
+ * navigated nowhere. A role attribute is not a hit target.
+ *
+ * Returned in the label group's own coordinates, where the caps baseline is y = 0.
+ */
+export function branchHitBox(label: Pick<BranchLabel, 'label' | 'sublabels' | 'anchor'>): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  const pad = 6;
+  const capsWidth = label.label.length * (BRANCH_LABEL.size * LABEL_ADVANCE + BRANCH_LABEL.tracking);
+  let subsWidth = 0;
+  for (const line of label.sublabels) {
+    subsWidth = Math.max(
+      subsWidth,
+      line.length * (BRANCH_SUBLABEL.size * SUBLABEL_ADVANCE + BRANCH_SUBLABEL.tracking),
+    );
+  }
+  const width = Math.max(capsWidth, subsWidth) + pad * 2;
+
+  // Cap height above the baseline, then down to whichever sub-label sits lowest. The
+  // `+ 4` matches the `y` the sub-labels are actually rendered at in `BranchLabels.tsx`.
+  const top = -BRANCH_LABEL.size * 0.94 - pad;
+  const bottom =
+    label.sublabels.length > 0
+      ? BRANCH_SUBLABEL.row * label.sublabels.length + 4 + BRANCH_SUBLABEL.size * 0.25 + pad
+      : BRANCH_LABEL.size * 0.35 + pad;
+
+  const inner = width - pad * 2;
+  const x = label.anchor === 'start' ? -pad : label.anchor === 'end' ? -inner - pad : -width / 2;
+  return { x, y: top, width, height: bottom - top };
+}
 
 /**
  * Place a department's label beyond the far end of its own branch, on the branch's ray.

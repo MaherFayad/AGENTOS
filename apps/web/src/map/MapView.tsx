@@ -50,6 +50,19 @@ import { Edges } from './svg/Edges';
 import { Nodes } from './svg/Nodes';
 import { Watermark } from './svg/Watermark';
 
+/**
+ * Movement beyond this is a drag; anything under it is a click (§2.1's interaction budget
+ * lists both gestures on the same node, so one of them has to yield to a threshold).
+ *
+ * Compared against the *pointerdown origin*, not the previous move: comparing consecutive
+ * moves means a slow 200px drag made of 1px steps never crosses it, and then the drag
+ * releases into a drawer.
+ */
+const DRAG_SLOP_PX = 3;
+
+const beyondSlop = (origin: { x: number; y: number } | null, x: number, y: number): boolean =>
+  origin !== null && Math.hypot(x - origin.x, y - origin.y) > DRAG_SLOP_PX;
+
 export interface MapViewProps {
   department?: string | null;
   agent?: string | null;
@@ -83,6 +96,8 @@ export function MapView({
   const stopAnim = useRef<(() => void) | null>(null);
   const didFit = useRef(false);
   const dragged = useRef(false);
+  /** Where the current gesture started, in client pixels. Feeds `beyondSlop`. */
+  const downAt = useRef<{ x: number; y: number } | null>(null);
   const graphRef = useRef<GraphPayload | null>(null);
   const pan = useRef<{ id: number; x: number; y: number } | null>(null);
   const pinch = useRef<{ distance: number; midX: number; midY: number } | null>(null);
@@ -318,14 +333,37 @@ export function MapView({
     relaxRaf.current = requestAnimationFrame(frame);
   }, []);
 
+  /**
+   * Start a node gesture. It is not yet a drag and not yet a click — `onPointerMove` and
+   * `dragged` decide which, and both outcomes have to stay reachable from here (§2.1 asks
+   * for a springy node drag *and* a click that opens the drawer).
+   *
+   * REQ-MAP-41 — the two defects this shape exists to prevent, both of which shipped:
+   *
+   * 1. **Never capture on an ancestor.** This called `svgRef.current.setPointerCapture()`,
+   *    which retargets every later pointer event — and the compatibility mouse events — to
+   *    the `<svg>`. Chrome then dispatches `click` at the nearest common ancestor of the
+   *    mousedown target (the node) and the mouseup target (the `<svg>`), which is the
+   *    `<svg>`, so `Nodes.tsx`'s `onClick` could never fire and the drawer never opened on
+   *    a mouse. Measured in Chrome over CDP: `pointerdown -> path`, `pointerup -> svg`,
+   *    `click -> svg`. Capturing on the node itself is what the browser already does for
+   *    touch (implicit pointer capture) — move/up still bubble to the `<svg>` handlers, and
+   *    the click still lands on the node.
+   * 2. **Reset `dragged` before anything can return early.** It used to sit below the grab
+   *    guard, and the `<svg>`'s own handler bails on a `[data-node-id]` target above *its*
+   *    reset — so a failed grab left the flag true from the previous pan and `onActivate`
+   *    swallowed every later click in silence. The reset belongs before the first `return`,
+   *    not after the last one.
+   */
   const onGrab = useCallback(
     (node: GraphNode, event: React.PointerEvent<SVGGElement>) => {
       if (event.button !== 0) return;
+      dragged.current = false;
+      downAt.current = { x: event.clientX, y: event.clientY };
       const relaxer = relaxerRef.current;
       if (!relaxer?.grab(node.id)) return;
-      dragged.current = false;
       event.stopPropagation();
-      svgRef.current?.setPointerCapture(event.pointerId);
+      event.currentTarget.setPointerCapture(event.pointerId);
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       pan.current = null;
       tickRelax();
@@ -335,6 +373,16 @@ export function MapView({
 
   const onPointerDown = (event: React.PointerEvent<SVGSVGElement>): void => {
     if (event.button !== 0) return;
+    // Same reason as `onGrab`: three early returns live below this line, and a flag whose
+    // reset sits under them is a flag that stays true after the one path that skips it.
+    //
+    // Guarded on *first pointer* rather than reset unconditionally: a second finger joining
+    // a pinch or an in-flight node drag is not a new gesture, and clearing the flag there
+    // would let the release of a 200px drag arrive at `onActivate` as a click.
+    if (pointers.current.size === 0 && !relaxerRef.current?.dragging) {
+      dragged.current = false;
+      downAt.current = { x: event.clientX, y: event.clientY };
+    }
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.current.size === 2) {
       const pts = [...pointers.current.values()];
@@ -352,8 +400,9 @@ export function MapView({
     const target = event.target as Element | null;
     if (target?.closest('[data-node-id]')) return;
     pan.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
-    dragged.current = false;
-    svgRef.current?.setPointerCapture(event.pointerId);
+    // No capture yet — see `onPointerMove`. Capturing here retargets the click to the
+    // `<svg>` and kills every clickable thing drawn inside the canvas, which is how §2.1's
+    // "click a department label → department view" was dead as well as the node click.
   };
 
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>): void => {
@@ -376,20 +425,34 @@ export function MapView({
     if (relaxerRef.current?.dragging) {
       const [wx, wy] = invertTransform(transformRef.current, event.clientX - rect.left, event.clientY - rect.top);
       relaxerRef.current.moveTo(wx, wy);
-      dragged.current = true;
+      // Thresholded, not "any movement at all". A mouse jitters a pixel between press and
+      // release; without the slop the second half of REQ-MAP-41 reappears as a click that
+      // works only when the hand is perfectly still.
+      if (beyondSlop(downAt.current, event.clientX, event.clientY)) dragged.current = true;
       return;
     }
 
     if (pan.current && pan.current.id === event.pointerId) {
       const dx = event.clientX - pan.current.x;
       const dy = event.clientY - pan.current.y;
-      if (Math.hypot(dx, dy) > 3) dragged.current = true;
+      if (!dragged.current && beyondSlop(downAt.current, event.clientX, event.clientY)) {
+        // The moment it is a drag and not a click, take the pointer — so a pan that leaves
+        // the window still ends, and a click that never moved still reaches whatever it was
+        // aimed at. Capture is for drags; a click must not be captured by anything.
+        dragged.current = true;
+        svgRef.current?.setPointerCapture(event.pointerId);
+      }
       pan.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
       const current = transformRef.current;
       commitTransform({ ...current, x: current.x + dx, y: current.y + dy });
     }
   };
 
+  /**
+   * One exit for every way a gesture can end — up, cancel, and losing the capture (which is
+   * what fires when the captured node is unmounted mid-drag by a `/ws/graph` delta). Safe to
+   * run twice: a normal release fires `pointerup` and then `lostpointercapture`.
+   */
   const endPointer = (event: React.PointerEvent<SVGSVGElement>): void => {
     pointers.current.delete(event.pointerId);
     pinch.current = null;
@@ -463,6 +526,7 @@ export function MapView({
           onPointerMove={onPointerMove}
           onPointerUp={endPointer}
           onPointerCancel={endPointer}
+          onLostPointerCapture={endPointer}
           onKeyDown={onKeyDown}
         >
           <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.k})`}>
@@ -493,7 +557,12 @@ export function MapView({
               departments={payload.departments}
               nodes={visibleNodes}
               focusDepartment={department}
-              onActivate={(id) => drillTo(id)}
+              // Same guard as `onActivate`: the label now has a real hit rectangle, so a pan
+              // that happens to start on one would otherwise drill in when it is released.
+              onActivate={(id) => {
+                if (dragged.current) return;
+                drillTo(id);
+              }}
             />
             {department && (
               <ClusterLabels

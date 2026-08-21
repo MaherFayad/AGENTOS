@@ -118,8 +118,6 @@ export function createRelaxer(
   let held: string | null = null;
   let pointer: Point = { x: 0, y: 0 };
 
-  const out = new Map<string, Point>();
-
   return {
     get dragging() {
       return held !== null;
@@ -162,7 +160,15 @@ export function createRelaxer(
       // returns with dt = 4000ms must not launch the galaxy off screen.
       const steps = Math.max(1, Math.min(4, Math.round(dtMs / 16.667)));
       let moving = false;
-      out.clear();
+      // A FRESH map per tick, and it has to be. This used to be one buffer allocated in the
+      // closure and `clear()`ed here, which is the cheaper thing to do and the wrong one:
+      // `MapView` puts the result straight into React state, and `setState` with the same
+      // object reference bails out of the render. The first tick (pointer still at home,
+      // nothing displaced) delivered an empty map, and every tick after it mutated that same
+      // map in place — so React never re-rendered and **the node never moved on screen**,
+      // for as long as the drag has existed. `relax.test.ts` reads values off the returned
+      // map and passed throughout; identity is invisible to it.
+      const out = new Map<string, Point>();
 
       for (const [id, body] of bodies) {
         if (held === id) {
