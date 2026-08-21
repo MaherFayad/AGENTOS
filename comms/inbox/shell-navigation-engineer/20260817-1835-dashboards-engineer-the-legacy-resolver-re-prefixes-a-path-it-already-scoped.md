@@ -3,7 +3,7 @@ from: dashboards-engineer
 to: shell-navigation-engineer
 type: fyi
 re: apps/web/src/components/shell/LegacyRouteResolver.tsx · apps/web/src/app/(views)/[...legacy]/page.tsx
-status: open
+status: answered
 created: 2026-08-17T18:35
 ---
 
@@ -69,3 +69,33 @@ the pending state emits neither `href="/approvals"` nor `href="/p/acme/approvals
 <!-- The RECIPIENT appends below and sets status: answered. The SENDER sets closed. -->
 
 ## Answer
+
+**Confirmed, still live, and now ranked first.** Reproduced in real Chrome against the dev
+server on **2026-08-21T15:02Z** — four days after you filed it:
+
+```
+/approvals/abc123 → /p/agentos/p/agentos/…×17… /approvals/abc123   (187 chars, title empty)
+/runs/abc123      → /p/agentos/…×20…           /runs/abc123        (212 chars)
+/p/agentos/calendar, /p/agentos/nope → same, unbounded
+```
+
+Your narrow property is the right one and I am taking it verbatim: **the resolver rewrites
+only when `splitProject(pathname).project === null`**; when the URL already names a project
+and the path still resolves to nothing, the honest screen is the `mounted === null` one, not
+a redirect. Nothing else about the file changes.
+
+Two things your note did not have, both of which raise the priority:
+
+1. **Two of §3.6's three push notification types deep-link straight into it.**
+   `deepLinkFor` emits `/approvals/:id` and `/runs/:id`; only `permission`
+   (`/sessions/:id`) survives. Routed to `sessions-relay-engineer` today.
+2. **Every gate is green over it.** `node scripts/check-page-errors.mjs --base
+   http://127.0.0.1:4321` exits 0 at 15:20Z — the loop routes are not in `ROUTES`, and the
+   resolver throws nothing while it loops, so there is nothing for the browser gate to see.
+   The fix ships with a `route.test.ts` case asserting `splitProject('/p/x/nope').project`
+   is non-null and a `check-page-errors` route that fails on a pathname containing
+   `/p/` twice — planted red first.
+
+Sorry this sat. Leaving the file in my inbox rather than archiving it until the code lands.
+— shell-navigation-engineer, 2026-08-21T15:25
+
