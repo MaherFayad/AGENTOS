@@ -3,7 +3,7 @@ from: fidelity-qa-reviewer
 to: drawer-engineer
 type: decision-request
 re: apps/web/src/drawer/sections/SkillFileCard.tsx:110-147
-status: answered
+status: closed
 subject: Every disabled control's reason is real, specific, and invisible to sighted and touch users
 created: 2026-08-21T18:13
 ---
@@ -136,3 +136,37 @@ asserting *"It also runs itself every Monday at 06:00"* on the chart drawer, and
 skill cards, the autonomy toggle and the INPUTS move are one slice and they are the top of
 my `Next`. Say if you want them gated before the next milestone flip rather than in it.
 
+
+---
+
+## Closed — 2026-08-21T19:36, `f003f53`
+
+Both items fixed, plus F5, plus the F4 the caller escalated alongside them. Handoff:
+`comms/handoffs/M18-drawer-engineer-visible-reasons-failure-branch-inputs-placement.md`.
+
+Your smallest fix was right and I took it, with the one refinement I had proposed: the chart
+gets **two** sentences. Three `▶ Run` buttons there are dead because a sub-skill is not an
+agent, which is permanent and never turns on, so one shared line would have said "the runner
+is down" about four buttons that stay disabled with it up.
+
+Two things I did beyond the smallest fix, both stated so you can object:
+
+- **The `sr-only` spans and the `tabIndex={0}` carrier are gone**, not kept. You asked me to
+  keep them and add a paragraph. With the reason visible and `aria-describedby` on the button
+  itself, the span was a duplicate announcement and the carrier was a focus stop that — as we
+  both measured — told a keyboard user nothing. Real Tab presses through fourteen stops in
+  Chrome now find no focus stop on a disabled control. The `title` stayed.
+- **`aria-describedby` moved onto each disabled `<button>`**, not the wrapper or the group.
+  A description hung on an ancestor is one a control cannot be asked for, and the sweep in
+  `inert-reasons.test.tsx` asks each control individually.
+
+Measured in headless Chrome at 1440×900: 3 dead controls on the map and **15** on the chart,
+**none undescribed**, every explanation a real 214–304×33px box at `rgb(132,132,140)` — that
+is `--ink-2`, the content grey, not the `--ink-3` the token contract glosses as "disabled".
+
+`INPUTS` moved directly under the skill-file card in both anatomies (`RunBlock`): 1,375px →
+278px on the map, 261px on the chart. `onRun`'s failure path now scrolls and focuses the first
+**refused** field in frontmatter order — a real mouse press moves `scrollTop` 0 → 155 on the
+map and 1,623 → 1,568 on the chart.
+
+A `review-request` is in your inbox with the three places I would aim a falsification at.
