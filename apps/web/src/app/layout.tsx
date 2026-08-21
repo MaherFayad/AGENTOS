@@ -32,7 +32,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const locale = DEFAULT_LOCALE;
   return (
     <html lang={HTML_LANG[locale]} dir={directionOf(locale)} suppressHydrationWarning>
-      <body className="min-h-dvh antialiased">
+      {/*
+       * `suppressHydrationWarning` here is about **browser extensions, not our render**.
+       *
+       * Extensions mutate `<body>` before React hydrates — ColorZilla adds
+       * `cz-shortcut-listen="true"`, Grammarly adds `data-gr-*`, and several password
+       * managers add their own. React compares the server HTML against the DOM it finds,
+       * sees an attribute the server never wrote, and reports a hydration mismatch that
+       * names `layout.tsx` — pointing a developer at code that is correct.
+       *
+       * It suppresses **one level only**: attribute and text differences on `<body>`
+       * itself. A real mismatch inside any child still reports normally, which is what
+       * keeps this from being a blanket silencer — and is why it goes here rather than
+       * on a wrapper further down. `<html>` already carries it for the same reason.
+       */}
+      <body className="min-h-dvh antialiased" suppressHydrationWarning>
         <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>
