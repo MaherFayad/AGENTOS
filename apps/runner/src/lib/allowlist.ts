@@ -45,6 +45,13 @@ export interface Connector {
    * be blind to the next connector: the next connector does not compile without answering.
    */
   writes: 'gated' | 'none' | 'ungated';
+  /**
+   * `false` when the backing MCP server is not wired on this host, so the grant resolves to
+   * no usable tool at run time (ADR-009 decision 5). Read defensively everywhere — **absent
+   * means available** — and surfaced by `validate:frontmatter` as a per-agent warning rather
+   * than an error, because an honest declaration of intent is better than a silent gap.
+   */
+  available?: boolean;
   /** Why it exists, so the next person deciding whether to add one has a precedent. */
   note?: string;
 }
@@ -128,6 +135,92 @@ export const CONNECTOR_REGISTRY: Readonly<Record<string, Connector>> = {
     // and the intent is that it writes elsewhere.
     writes: 'ungated',
     note: 'Read/write company/COMPANY.md + sources. Interview agent only (§3.3).',
+  },
+
+  // --- product: design and build (ADR-041) ---------------------------------
+  //
+  // Eight names landed at once, which is a real widening, so each is justified in ADR-041
+  // against one test: **a connector is registered only when an agent in the same commit
+  // declares it.** `mobbin` was asked for and refused because it fails that test twice over —
+  // a pattern gallery is a human's reference, and `wired_into` naming a family no agent body
+  // uses is the finding `agent-auditor` calls a security finding, not a tidiness one.
+  //
+  // `writes` here follows one rule and is not a read-only flag: **a connector whose job is
+  // files is `ungated`; one whose job is records or messages is `none`.** Four of the eight
+  // take the strictest value, which means an agent declaring them is refused a worktree
+  // (`assertWorktreeConfinable`). That is intended — an agent that can edit a shared Figma
+  // file and promote a deployment should not also be handed a repository this runner cannot
+  // bound. What each may mutate *in the world* is in its `note` and gated by the agent's
+  // `approval: required`.
+  //
+  // **None of the eight has a server or a credential** (observed 2026-08-21:
+  // `infra/compose.yaml` declares no MCP service; `apps/runner/src` has no `mcpServers`
+  // config), so all eight are `available: false` and the validator warns per declaring agent
+  // that the name resolves to no tool at run time. The MCP server must be registered under a
+  // name equal to the connector slug — the prefix *is* the boundary, and a server wired under
+  // any other name grants the agent nothing while the drawer still lists it.
+  figma: {
+    label: 'Figma',
+    tools: ['mcp__figma__*'],
+    writes: 'ungated',
+    available: false,
+    note: 'Design files, components and variables. Mutates a shared file; declaring agents carry approval: required. Needs a Figma access token.',
+  },
+  dovetail: {
+    label: 'Dovetail',
+    tools: ['mcp__dovetail__*'],
+    // `none` on the same reading that puts HubSpot there: its objects are records, and the
+    // media behind a transcript is uploaded by a human before an agent sees it.
+    writes: 'none',
+    available: false,
+    note: 'Research repository — transcripts, tags, highlights. Writes highlights back. Needs a Dovetail API token.',
+  },
+  amplitude: {
+    label: 'Amplitude',
+    tools: ['mcp__amplitude__*'],
+    writes: 'none',
+    available: false,
+    note: 'Product analytics, queried not written — an agent writing events corrupts the only record of what users did. Needs an API key and secret.',
+  },
+  context7: {
+    label: 'Context7',
+    tools: ['mcp__context7__*'],
+    writes: 'none',
+    available: false,
+    note: 'Version-correct library docs, so a frontend agent stops writing APIs removed two majors ago. Read-only. Needs an API key.',
+  },
+  'google-drive': {
+    label: 'Google Drive',
+    tools: ['mcp__google-drive__*'],
+    // A refusal, not a claim: a file-transfer server's local-write surface is unknowable until
+    // it is wired, and the conservative branch costs a worktree while the other costs a repo.
+    writes: 'ungated',
+    available: false,
+    note: 'Briefs, transcripts and specs that live outside the repo. Needs Google OAuth credentials.',
+  },
+  'google-calendar': {
+    label: 'Google Calendar',
+    tools: ['mcp__google-calendar__*'],
+    writes: 'none',
+    available: false,
+    note: 'Reads availability, creates events. An invitation reaches real people and cannot be recalled; declaring agents carry approval: required. Needs Google OAuth credentials.',
+  },
+  vercel: {
+    label: 'Vercel',
+    tools: ['mcp__vercel__*'],
+    writes: 'ungated',
+    available: false,
+    note: 'Preview deployments and logs. The family does not separate preview from production — it includes promotion and rollback — so declaring agents carry approval: required. Needs a Vercel access token.',
+  },
+  github: {
+    label: 'GitHub',
+    tools: ['mcp__github__*'],
+    // `ungated` for the same reason `git` is: another process, bounded by nothing this file
+    // can check. Note `mcp__git__` is not a prefix of `mcp__github__`, so the two grants do
+    // not bleed into each other.
+    writes: 'ungated',
+    available: false,
+    note: 'Issues, pull requests and reviews — the delivery record. Mutates a repo other people read; declaring agents carry approval: required. Needs a GitHub token.',
   },
 };
 

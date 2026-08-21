@@ -62,12 +62,33 @@ test('unknown connector names are listed, never silently dropped', () => {
   assert.equal(err.status, 422);
 });
 
-test('CONNECTOR_REGISTRY keys match agents/_registry/connectors.json', async () => {
+/**
+ * The two halves of the registry, pinned together.
+ *
+ * It compared **keys only** until ADR-041, and keys were the smaller half of the question.
+ * `writes` is what `assertWorktreeConfinable` reads: a row that says `ungated` in the JSON a
+ * curator edits and `none` in the code the runner executes hands a repository to exactly the
+ * run the data half refused. `available` is what the drawer and the validator use to tell a
+ * user a control is dead. A pin comparing one field is satisfiable by a lie in the other two.
+ */
+test('CONNECTOR_REGISTRY matches agents/_registry/connectors.json — keys, writes and availability', async () => {
   const raw = JSON.parse(await readFile(join(ROOT, 'agents', '_registry', 'connectors.json'), 'utf8')) as Record<
     string,
-    unknown
+    { writes?: string; available?: boolean }
   >;
   const fileKeys = Object.keys(raw).filter((key) => key !== '$comment').sort();
   const codeKeys = Object.keys(CONNECTOR_REGISTRY).sort();
   assert.deepEqual(codeKeys, fileKeys, 'the data half and the code half of the registry must not drift');
+
+  /** `available` absent means available, in both halves — normalised so the two are comparable. */
+  const shape = (writes: unknown, available: unknown) => `${String(writes)}/${available === false ? 'unwired' : 'wired'}`;
+  for (const key of fileKeys) {
+    const file = raw[key] as { writes?: string; available?: boolean };
+    const code = CONNECTOR_REGISTRY[key] as { writes: string; available?: boolean };
+    assert.equal(
+      shape(code.writes, code.available),
+      shape(file.writes, file.available),
+      `connector "${key}": the code half says ${shape(code.writes, code.available)} and connectors.json says ${shape(file.writes, file.available)}`,
+    );
+  }
 });

@@ -5,75 +5,160 @@
     "Owner: runner-engineer (§3.2).",
     "",
     "This file is the DATA half. The CODE half is CONNECTOR_REGISTRY in",
-    "apps/runner/src/lib/allowlist.ts, and `connectors.test.ts` asserts the two have identical",
-    "keys — so `npm run validate:frontmatter` and the running runner can never disagree about",
-    "whether an agent is wireable. Adding a row here without adding it there is caught by that",
-    "test, not by a confused user at 2am.",
+    "apps/runner/src/lib/allowlist.ts, and `allowlist.test.ts` asserts the two have identical",
+    "keys AND identical `writes` — so `npm run validate:frontmatter` and the running runner can",
+    "never disagree about whether an agent is wireable, or about whether its writes can be",
+    "confined. Adding a row here without adding it there is caught by that test, not by a",
+    "confused user at 2am.",
     "",
     "Adding a connector deliberately widens what agents in this library can do. It is not a step",
     "you take to unblock one agent. `tools` is the concrete allowlist a run receives; a trailing",
-    "`*` is a prefix match, which is how one MCP server exposes a family of tools under one name."
+    "`*` is a prefix match, which is how one MCP server exposes a family of tools under one name.",
+    "",
+    "`writes` has the runner's meaning and no other (allowlist.ts, worktree.ts): can THIS RUNNER",
+    "bound where the connector writes ON THIS HOST'S FILESYSTEM. `none` does NOT mean read-only —",
+    "slack, gmail and hubspot are all `none` and all write to a channel, a mailbox and a CRM.",
+    "`ungated` costs the run its worktree, which is a refusal rather than a claim to have jailed",
+    "anything. ADR-041 sets it by one rule: a connector whose job is FILES is `ungated`; one whose",
+    "job is RECORDS or MESSAGES is `none`. What a connector may mutate in the world is carried by",
+    "its note and gated by the agent's `approval: required`.",
+    "",
+    "`available: false` means the backing server is not wired. Observed 2026-08-21:",
+    "infra/compose.yaml declares no MCP service and apps/runner/src has no mcpServers config, so",
+    "the eight rows ADR-041 added say so. The MCP server name at wiring time must equal the",
+    "connector slug, because the tool prefix IS the boundary — a server registered under any other",
+    "name grants this agent nothing."
   ],
   "exa": {
     "label": "Exa",
     "tools": ["mcp__exa__*"],
+    "writes": "none",
     "note": "Neural search MCP."
   },
   "firecrawl": {
     "label": "Firecrawl",
     "tools": ["mcp__firecrawl__*"],
+    "writes": "none",
     "note": "Page scraping MCP."
   },
   "web-search": {
     "label": "Web search",
-    "tools": ["WebSearch"]
+    "tools": ["WebSearch"],
+    "writes": "none"
   },
   "web-fetch": {
     "label": "Web fetch",
-    "tools": ["WebFetch"]
+    "tools": ["WebFetch"],
+    "writes": "none"
   },
   "workspace": {
     "label": "Scratch workspace",
     "tools": ["Read", "Write", "Edit", "Glob", "Grep"],
-    "note": "Read/write inside the per-run scratch dir only (§3.2). The directory is destroyed after artifact extraction, which is what keeps this connector ordinary."
+    "writes": "gated",
+    "note": "Read/write inside this run's roots only (§3.2), enforced per path argument. The directory is destroyed after artifact extraction, which is what keeps this connector ordinary."
   },
   "shell": {
     "label": "Shell",
     "tools": ["Bash"],
+    "writes": "ungated",
     "note": "Deliberately separate from `workspace`. Most agents must not have it."
   },
   "slack": {
     "label": "Slack",
-    "tools": ["mcp__slack__*"]
+    "tools": ["mcp__slack__*"],
+    "writes": "none",
+    "note": "Reads and posts to channels. A post is visible to everyone in the channel the moment it lands, so an agent that posts unprompted carries `approval: required`."
   },
   "gmail": {
     "label": "Gmail",
     "tools": ["mcp__gmail__*"],
+    "writes": "none",
     "note": "Draft and send; send is gated by approval: required."
   },
   "hubspot": {
     "label": "HubSpot",
     "tools": ["mcp__hubspot__*"],
+    "writes": "none",
     "note": "CRM system of record."
   },
   "postgres": {
     "label": "Postgres",
     "tools": ["mcp__postgres__*"],
+    "writes": "none",
     "note": "Agent output rows (§2.5)."
   },
   "langfuse": {
     "label": "Langfuse",
     "tools": ["mcp__langfuse__*"],
+    "writes": "none",
     "note": "Read-only, for the auditor."
   },
   "git": {
     "label": "Git",
     "tools": ["mcp__git__*"],
+    "writes": "ungated",
     "note": "Repo history. Which paths a commit may touch is bounded by the runner (agents/** for schedules, company/** for the brain), not by this grant — ADR-002, ADR-007."
   },
   "company-brain": {
     "label": "Company brain",
     "tools": ["mcp__company__*"],
+    "writes": "ungated",
     "note": "Read/write company/COMPANY.md + sources. The interview agent's power is a connector rather than an implicit capability so that it shows up in WIRED INTO like everything else (§3.3)."
+  },
+  "figma": {
+    "label": "Figma",
+    "tools": ["mcp__figma__*"],
+    "writes": "ungated",
+    "available": false,
+    "note": "Design files, components and variables. It MUTATES a shared file — a node created or a variable rebound lands for every designer in the room with no undo an agent can perform, which is why every agent declaring it carries `approval: required`. Needs a Figma access token; until the human supplies one and the MCP server is wired, this connector grants nothing at run time."
+  },
+  "dovetail": {
+    "label": "Dovetail",
+    "tools": ["mcp__dovetail__*"],
+    "writes": "none",
+    "available": false,
+    "note": "The research repository — transcripts, tags, highlights, insights. `none` on the same reading that puts HubSpot there: its objects are records, not files, and the media that produced a transcript is uploaded by a human before an agent ever sees it. It DOES mutate — it writes notes and highlights back, which is the point, since research nobody can cite is research nobody trusts. Needs a Dovetail API token; unwired, so it grants nothing at run time."
+  },
+  "amplitude": {
+    "label": "Amplitude",
+    "tools": ["mcp__amplitude__*"],
+    "writes": "none",
+    "available": false,
+    "note": "Product analytics — the behavioural half of the evidence a design decision rests on. Queries and charts, not events: nothing here should ever write an event, because an agent writing to the analytics stream corrupts the only record of what users actually did. Needs an Amplitude API key and secret; unwired, so it grants nothing at run time."
+  },
+  "context7": {
+    "label": "Context7",
+    "tools": ["mcp__context7__*"],
+    "writes": "none",
+    "available": false,
+    "note": "Version-correct library and framework documentation, fetched at the version the repo actually pins. Exists because a frontend agent's most expensive failure mode is confidently writing an API that was removed two majors ago. Read-only. Needs an API key for the hosted server; unwired, so it grants nothing at run time."
+  },
+  "google-drive": {
+    "label": "Google Drive",
+    "tools": ["mcp__google-drive__*"],
+    "writes": "ungated",
+    "available": false,
+    "note": "Briefs, transcripts and specs that live in Drive rather than in the repo. `ungated` is a refusal and not a claim: a file-transfer server's local-write surface is not knowable until it is wired, and the conservative branch costs a run its worktree while the optimistic one costs a repository. Needs Google OAuth credentials; unwired, so it grants nothing at run time."
+  },
+  "google-calendar": {
+    "label": "Google Calendar",
+    "tools": ["mcp__google-calendar__*"],
+    "writes": "none",
+    "available": false,
+    "note": "Reads availability and creates events. Creating an event INVITES REAL PEOPLE and the invitation cannot be recalled, so an agent declaring it carries `approval: required`. Needs Google OAuth credentials; unwired, so it grants nothing at run time."
+  },
+  "vercel": {
+    "label": "Vercel",
+    "tools": ["mcp__vercel__*"],
+    "writes": "ungated",
+    "available": false,
+    "note": "Preview deployments and their logs. A deployment is a URL on the public internet, and this grant does not distinguish preview from production — the family includes promotion and rollback, so every agent declaring it carries `approval: required`. Needs a Vercel access token; unwired, so it grants nothing at run time."
+  },
+  "github": {
+    "label": "GitHub",
+    "tools": ["mcp__github__*"],
+    "writes": "ungated",
+    "available": false,
+    "note": "Issues, pull requests and reviews — the delivery record, not the code path. `ungated` for the same reason `git` is: the server runs in another process and nothing in this runner can bound what it writes. It mutates a repository other people read, so agents declaring it carry `approval: required`. Needs a GitHub token; unwired, so it grants nothing at run time."
   }
 }
