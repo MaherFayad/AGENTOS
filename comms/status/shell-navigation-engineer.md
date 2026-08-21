@@ -1,39 +1,54 @@
 # status — shell-navigation-engineer
 
-**Updated:** 2026-08-18T02:12
-**Milestone:** M16 (`Plan §23.5`, `§23.8`) · §2.0 · §3.6
+**Updated:** 2026-08-21T16:32
+**Milestone:** M18 (audit fixes) · §2.0 · §3.6 · §2.2
 **State:** review
 
 ## Now
-Nothing in flight. **THREADS replaced SESSIONS in the §2.0 tab bar** — the slot, not the
-view. Four tabs still, enforced by `MAX_SEGMENTED_TABS` with a test behind it, because the
-day BOARD lands THREADS *leaves* the array rather than BOARD joining it. Routes
-`/p/:project/threads[/:id]` are project-scoped `ViewMount`s for `sessions-relay-engineer`.
-**Decision they needed: `/sessions` and `/sessions/:id` are neither redirected nor removed** —
-a relay session id is not an `ops.thread` uuid, so a rewrite would resolve to a thread that
-does not exist. Both are sub-views under THREADS; `.thread` and `.session` are separate
-fields with a test that neither holds the other's value. Five defects planted, all confirmed
-red, all restored. Not committed.
+Nothing in flight. Five audit fixes landed in four commits — `145eda3` (the unbounded
+redirect loop that killed two of §3.6's three push types, plus two inert controls sharing
+`route.ts`), `795a11f` (search resolved **12 of 66** indexable things: `parsePanels` read
+`entry.title` off an envelope, `parseGraph` dropped `kind`), `b5db7a6` (`NOT CONFIGURED` in
+the status pill, monochrome), `c2f5ccd` (RTL ratchet 308→312, itemised, filed to its owner).
+Every fix planted red first, every plant verified present in the file, every one restored;
+zero `PLANT` strings remain. All three fixes re-confirmed in real Chrome at 1440×900.
 
 ## Blocked on
-Nothing. Four open, none blocking — the two M15 ones (`inlineStep` promotion,
-`ProjectSummary` narrowing) plus the M16 pair I just sent to `sessions-relay-engineer` and
-`rtl-arabic-pdpl-specialist`.
+Nothing. Five open in my inbox, none blocking — the M15 pair (`ProjectSummary` narrowing,
+`inlineStep`), the `ProjectSwitcher` enum, the cost-ticker 400, and the switcher/badge
+dialect note. Two decision-requests sent out and open: `PanelSummary` naming
+(`dashboards-engineer` + `runner-engineer`) and the ratchet raise
+(`rtl-arabic-pdpl-specialist`).
 
 ## Last handoff
-`comms/handoffs/M16-shell-navigation-engineer-threads-replaces-sessions-in-the-tab-bar.md`
+`comms/handoffs/M18-shell-navigation-engineer-audit-fixes-loop-search-status.md`
 
-## The finding worth not rediscovering
-**A smoke marker passed against the defect it was written to catch.** `'THREADS'` matched
-`app/layout.tsx`'s `<meta name="description">`, not the tab. Tightened to `'>THREADS<'`; the
-seven pre-existing `MAP`/`CHART` markers have the same weakness. Routed to
-`agent-library-curator`, with the `.next-smoke` collision that lets one smoke run corrupt
-another's.
+## The findings worth not rediscovering
+**An empty parse read as a successful parse defeats every honest-empty sentence you own.**
+`parsePanels` returned `[]`, `usePanelIndex` said `ready`, `message` stayed `null`, and the
+shell said what it would say about a project with no dashboards — while six existed. A
+checker that cannot tell *nothing matched* from *nothing was indexed* is blind in the way
+that matters. Now `malformedMessage`'s case.
+
+**A test that supplies the missing consumer cannot see the consumer is missing.** The
+`YOUR TREE` test subscribed to `shell:yourTree` itself and watched its own listener fire —
+green for months over a toggle that filtered nothing. *"A producer without a consumer"* with
+the test playing the consumer.
+
+**Only the payload-membership half of the search gate catches the bug.** *"Every href
+resolves to a route the app defines"* **passed with the defect live** —
+`/map/sales/growth-signal-scorer` is a well-formed route. A route-shape check alone would
+have shipped it.
+
+**The scratchpad is not session-isolated.** ~170 files from five agents across five days,
+including another agent's `plant.mjs`/`restore.mjs` that rewrite `drawer/JobDrawer.tsx`.
+Broadcast to `_all`; prefix scratch files with your slug.
 
 ## Next
-1. §3.6 push subscription flow with `sessions-relay-engineer`. Deep-link payloads still carry
-   no project field — the last unscoped sender in the shell.
-2. The owed test behind **REQ-SHELL-105** — a `SearchPill.test.tsx` case at `pathname: '/map'`.
-3. `ProjectSwitcher.tsx:243`'s untranslated status enum — a map keyed on `ProjectStatus` with
-   an exhaustive check, so a fourth status fails to compile rather than shipping a fifth
-   Latin word into an Arabic pill.
+1. §3.6 push subscription flow with `sessions-relay-engineer` — deep links now terminate
+   honestly but still reach no view; the payload still carries no project field.
+2. The owed **REQ-SHELL-105** test — a `SearchPill.test.tsx` case at `pathname: '/map'`.
+3. `ProjectSwitcher.tsx:243`'s untranslated status enum, with an exhaustive check.
+4. Audit **F9** — `ViewMount` ships `§3.6` and `BUILT BY SHELL-NAVIGATION-ENGINEER` to users
+   on `/offline` and now on four resolver screens. My files, deliberately left for the
+   reviewer's eye rather than bundled into a fix round.

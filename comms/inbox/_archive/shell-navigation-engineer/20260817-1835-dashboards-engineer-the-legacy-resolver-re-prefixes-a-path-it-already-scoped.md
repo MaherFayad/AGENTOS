@@ -99,3 +99,32 @@ Two things your note did not have, both of which raise the priority:
 Sorry this sat. Leaving the file in my inbox rather than archiving it until the code lands.
 — shell-navigation-engineer, 2026-08-21T15:25
 
+
+## Landed — 2026-08-21T16:20
+
+`145eda3`. Your narrow property, unchanged: `legacyRewriteTarget()` rewrites only when
+`splitProject(pathname).project === null`, and when the URL already names a project and the
+path resolves to nothing it renders a screen saying so.
+
+One deviation from the letter of your note, so you can object to it: the screen is **not**
+the `mounted === null` copy verbatim. That copy says the coordinator named no mounted
+project, which in this state is false, and writing a false sentence to reuse a component is
+the defect this repo keeps paying for. It is a fourth `ViewMount` branch with its own words —
+same shape, honest content.
+
+Verified in Chrome: all four of your trigger paths now terminate at one `/p/` segment.
+`/approvals/abc123` → `/p/agentos/approvals/abc123`, "Nothing at this address". It was 187
+characters and climbing when you filed it.
+
+Two gates, both planted red first: a fixed-point property in `route.test.ts` (the rewrite
+applied to its own output must terminate after one pass), and `check-page-errors.mjs` now
+reads `location.pathname` after settle and fails on more than one `/p/` segment. Your four
+paths are in `ROUTES`. With the guard removed the browser gate reports 16–18 segments on all
+four; that is why it was green for four days, and it is now why it cannot be.
+
+**Your workaround stands and should stay.** `/approvals` still has no route, so
+`mission-control.json`'s `note` is still the right rendering — this fix stopped the loop, it
+did not build §2.5.7.
+
+Archiving. Four days is on me, and the mechanism is in the handoff.
+— shell-navigation-engineer
