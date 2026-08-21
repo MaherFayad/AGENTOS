@@ -14,6 +14,25 @@ import { useEndpoint } from './useEndpoint';
  *
  * When the endpoint is missing the pill says so in a sentence — it never renders a
  * cheerful "online" it cannot prove (standing rule 9).
+ *
+ * ## Why `runnerConfigured` is read here and not only in the drawer
+ *
+ * Added 2026-08-21. On the live stack `GET /api/status` answers `runnerConfigured: false`,
+ * `tailscale: "unknown"`, `queueDepth: 0`, and this pill rendered **`UNKNOWN · 0 QUEUED`**
+ * — which is pixel-identical to a healthy idle runner behind a tailnet the container
+ * cannot see. The single most important fact about this deployment, *it cannot execute a
+ * single agent*, had exactly one consumer: `drawer/run/useRunnerAvailability.ts`, three
+ * navigation levels deep, rendering the reason into a `title` tooltip that never fires on
+ * touch — and §3.6 says the phone is why the PWA exists.
+ *
+ * So it goes in the chrome, in words, on every screen. `NOT CONFIGURED` beats
+ * `UNKNOWN · 0 QUEUED`, and the queue count is dropped with it: a depth of zero on a
+ * runner that cannot start anything is arithmetic on an absence, not a reading (rule 9,
+ * *`unknown` is not `zero`*).
+ *
+ * Still monochrome. This is chrome, not data ink, so there is no amber dot and no tinted
+ * border — the state is legible from the words alone, which is also the accessible
+ * outcome. `ConnectionStatus.test.tsx` fails on a colour utility class appearing here.
  */
 
 interface StatusReading {
@@ -27,6 +46,16 @@ interface StatusReading {
   tailscaleHint: string;
   /** `null` ⇒ not reported. The count is simply not drawn — never drawn as `0`. */
   queueDepth: number | null;
+  /**
+   * Whether the runner holds a usable Anthropic key (`apps/runner/src/lib/config.ts`,
+   * which treats a `-REPLACE-ME` placeholder as unconfigured).
+   *
+   * **`null` is a third value and it is load-bearing.** A status body without the field is
+   * a runner that *did not say*, and "did not say" is not "said no" — reading one as the
+   * other is this repo's house defect, a declared value read as an observed one. Only an
+   * explicit `false` changes the label.
+   */
+  runnerConfigured: boolean | null;
 }
 
 const STATUS_INTERVAL_MS = 15_000;
@@ -38,7 +67,9 @@ function parseStatus(json: unknown): StatusReading | null {
   if (tailscale === null) return null;
   const queueDepth = typeof record.queueDepth === 'number' && Number.isFinite(record.queueDepth) ? record.queueDepth : null;
   const tailscaleHint = typeof record.tailscaleHint === 'string' ? record.tailscaleHint.trim() : '';
-  return { tailscale, tailscaleHint, queueDepth };
+  const runnerConfigured =
+    typeof record.runnerConfigured === 'boolean' ? record.runnerConfigured : null;
+  return { tailscale, tailscaleHint, queueDepth, runnerConfigured };
 }
 
 export function ConnectionStatus(): React.JSX.Element {
@@ -54,16 +85,27 @@ export function ConnectionStatus(): React.JSX.Element {
   });
 
   const online = status.state === 'ready' && status.data.tailscale === 'online';
+
+  // Ranked by what stops a person getting work done, not by what the field order suggests.
+  // An unconfigured runner outranks the tailnet reading: a tailnet that is up does not make
+  // a keyless runner able to start anything, so ONLINE in that state is true and useless.
+  const unconfigured = status.state === 'ready' && status.data.runnerConfigured === false;
+
   const label =
     status.state === 'loading'
       ? 'CHECKING'
       : status.state === 'unavailable'
         ? 'NO READING'
-        : online
-          ? 'ONLINE'
-          : status.data.tailscale.toUpperCase();
+        : unconfigured
+          ? 'NOT CONFIGURED'
+          : online
+            ? 'ONLINE'
+            : status.data.tailscale.toUpperCase();
 
-  const queue = status.state === 'ready' && status.data.queueDepth !== null ? status.data.queueDepth : null;
+  const queue =
+    status.state === 'ready' && !unconfigured && status.data.queueDepth !== null
+      ? status.data.queueDepth
+      : null;
 
   // The runner's `tailscaleHint` is preferred over our one-liner whenever it is present:
   // it distinguishes "no Tailscale on this host" from "configured but invisible from
@@ -72,11 +114,20 @@ export function ConnectionStatus(): React.JSX.Element {
     status.state === 'ready'
       ? status.data.tailscaleHint || `Tailscale is ${status.data.tailscale}.`
       : '';
+  // Named as the blocker rather than described as a setting: "no API key" is a fact about
+  // a file, and what a reader needs is what it stops them doing. `RUNNER_ANTHROPIC_API_KEY`
+  // is spelled out because it is the exact thing that turns this off.
+  const configuration = unconfigured
+    ? ' The runner has no usable Anthropic API key, so no agent can be started from here — ' +
+      'nothing will queue and nothing will run. Set RUNNER_ANTHROPIC_API_KEY to a real key ' +
+      'and restart the runner.'
+    : '';
+
   const sentence =
     status.state === 'unavailable'
       ? status.message
       : status.state === 'ready'
-        ? `${reachability}${queue ? ` The runner has ${status.data.queueDepth} job${status.data.queueDepth === 1 ? '' : 's'} queued.` : ''}`
+        ? `${reachability}${configuration}${queue ? ` The runner has ${status.data.queueDepth} job${status.data.queueDepth === 1 ? '' : 's'} queued.` : ''}`
         : 'Checking the tailnet connection.';
 
   return (
