@@ -109,6 +109,18 @@ comments. The runner's code registry (`CONNECTOR_REGISTRY` in the runner) must h
 same keys — the JSON is the data half, the runner is the grant. Adding a connector
 deliberately widens what agents in this library can do.
 
+Every row carries **`writes`** (ADR-041), the same required field the runner's interface
+declares, with the runner's meaning and no other: *can this runner see, and therefore bound,
+where this connector writes **on this host's filesystem***. `none` = nothing on this host —
+it does **not** mean read-only, and `slack`, `gmail` and `hubspot` are all `none` while
+writing to a channel, a mailbox and a CRM. `gated` = every write is a declared path argument.
+`ungated` = somewhere this process cannot check, which costs the run its worktree
+(`assertWorktreeConfinable`). ADR-041 sets it by one rule — **a connector whose job is files
+is `ungated`; one whose job is records or messages is `none`** — which puts `figma`,
+`google-drive`, `github` and `vercel` on the strictest value. What a connector may mutate
+*in the world* is carried by its `note` and gated by the agent's `approval: required`; it is
+not what `writes` measures.
+
 A connector row may also carry `available: false` and `since: "M9"` for a connector whose
 backing server is not wired yet (ADR-009 decision 5, `runner-engineer`'s call). The
 validator reads both defensively — absent means available — and **warns**, per agent, that
@@ -117,8 +129,8 @@ invariant 7 already fails the case that matters: an agent whose only connectors 
 cannot write its artifact.
 
 `cluster` values are validated against `agents/_registry/clusters.json` (ADR-001): keys
-are the seven department slugs; each value is an ordered `{slug, label}[]` whose first
-three entries are the department's map sub-labels (§2.1).
+are the department slugs — **eight since ADR-041** — and each value is an ordered
+`{slug, label}[]` whose first three entries are the department's map sub-labels (§2.1).
 
 ## Validation
 
@@ -172,3 +184,30 @@ so every named import from `@agnetos/contracts` in a client component resolved t
 `next build` exited 0. `npm run validate:barrel` (`scripts/check-barrel-exports.mjs`) now
 refuses the duplicate, and `validate:frontmatter` separately refuses a `DEPARTMENT*` value
 re-declared in `frontmatter.ts`. **The seven slugs and their order are unchanged.**
+
+## Resolved — ADR-041
+
+**The department enum is eight.** `product` is appended at index 7 (label `Product`, angle
+225°, path segment `agents/product/`), amending ADR-001's enum and nothing else about it —
+the original seven keep their slugs, their order and their indices.
+[ADR-041](../decisions/ADR-041-product-department-and-connector-vocabulary.md) is the decision
+of record.
+
+Three things it also fixed, because a schema change is only as good as the things that mirror
+it:
+
+1. **`writes` is required on every connector row** and the runner/JSON parity test pins keys,
+   `writes` **and** `available` rather than keys alone.
+2. **Three Node-side department mirrors are gated.** `validate:frontmatter` compares its own
+   enum, `scripts/lib/departments.mjs` and `scripts/validate-panels.mjs` against
+   `departments.ts` — membership and order, never a count. Both mirrors were caught stale by
+   that gate on the commit that added it.
+3. **`scripts/lib/departments.mjs` was blind.** It parsed **zero** departments out of
+   `departments.ts` (it matched a tuple table ADR-035 removed) and silently used a hardcoded
+   copy, and it tested `length === 7` in two places — so an eighth department would have been
+   drawn at angle 0 on a build that exits 0.
+
+A curator adding a ninth department therefore edits `departments.ts`, three mirrors and
+`clusters.json`, and the gate tells them which ones they missed. `positions.json` needs **no
+entry**: an unseeded node is placed on its department's ray by `seedPositions` and
+`build-graph.mjs` writes the settled coordinates back.
