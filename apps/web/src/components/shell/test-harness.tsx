@@ -73,7 +73,21 @@ export function stubFetch(routes: Record<string, StubbedRoute>): void {
   );
 }
 
-/** A graph payload shaped like contracts/graph-layout.md, trimmed to what search needs. */
+/**
+ * A graph payload shaped like `contracts/graph-layout.md`.
+ *
+ * **`kind` is not optional here and its absence was a real defect.** This fixture used to
+ * omit it, described as *"trimmed to what search needs"* — and search needed it: the shell
+ * was being validated against a payload the runner has never sent. `GET /api/p/:project/graph`
+ * has always answered `"kind": "anchor" | "job" | "leaf"` on every node (observed
+ * 2026-08-21T15:35Z: 7 anchors, 12 jobs, 41 leaves out of 60), and because the fixture did
+ * not carry it, every shell test agreed with a fiction while 48 of 60 real results
+ * dead-ended in the running app.
+ *
+ * A leaf and an anchor are included deliberately. With only jobs here the two href branches
+ * that were wrong are never exercised, and a fixture that cannot reach a branch is an
+ * include-list by another name.
+ */
 export const GRAPH_FIXTURE = {
   version: 'sha256:test',
   departments: [
@@ -84,11 +98,28 @@ export const GRAPH_FIXTURE = {
     {
       id: 'sales/account-enrichment',
       label: 'Account Enrichment',
+      kind: 'job',
       department: 'sales',
       description: 'Appends firmographics to a raw account row.',
       status: 'live',
     },
-    { id: 'marketing/content-calendar', label: 'Content Calendar', department: 'marketing', status: 'draft' },
+    {
+      id: 'marketing/content-calendar',
+      label: 'Content Calendar',
+      kind: 'job',
+      department: 'marketing',
+      status: 'draft',
+    },
+    // A sub-skill. Searchable by its own name; its drawer is the parent job's.
+    {
+      id: 'sales/account-enrichment/growth-signal-scorer',
+      label: 'growth-signal-scorer',
+      kind: 'leaf',
+      department: 'sales',
+      status: 'draft',
+    },
+    // A department centre. Not an agent, has no drawer.
+    { id: 'sales/_anchor', label: 'Sales', kind: 'anchor', department: 'sales', status: 'draft' },
   ],
 };
 

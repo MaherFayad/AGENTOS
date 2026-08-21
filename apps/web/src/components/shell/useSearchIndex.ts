@@ -34,12 +34,61 @@ import { withProject } from './route';
  * there is no index, and the search panel says which of the two it is.
  */
 
+/**
+ * `kind` is **required**, and that is the whole repair.
+ *
+ * `contracts/graph-layout.md` has always sent it — `"kind": "anchor" | "job" | "leaf"` -
+ * and this interface used to omit it. 41 leaves and 7 anchors then built hrefs to agents
+ * that do not exist, so 48 of 60 search results opened a not-found drawer with no
+ * focusable elements in it. The standing *"a producer without a consumer"* finding, landing
+ * in the one control that exists to make a canvas reachable without a mouse.
+ *
+ * Required rather than optional: an optional `kind` would have to be given a default, and
+ * every available default is one of the three real cases silently mis-routed. A node whose
+ * kind cannot be read is dropped from the index instead — absent, not wrong.
+ */
+type GraphNodeKindLike = 'anchor' | 'job' | 'leaf';
+
 interface GraphNodeLike {
   id: string;
   label: string;
+  kind: GraphNodeKindLike;
   department?: string;
   description?: string;
   status?: string;
+}
+
+const NODE_KINDS: readonly string[] = ['anchor', 'job', 'leaf'];
+
+const kindOf = (value: unknown): GraphNodeKindLike | undefined =>
+  typeof value === 'string' && NODE_KINDS.includes(value)
+    ? (value as GraphNodeKindLike)
+    : undefined;
+
+/**
+ * Where a search result flies to — the same resolution the canvas already performs.
+ *
+ * `map/lib/slugs.ts`'s `jobSlug()` does exactly this for a click on the galaxy and has been
+ * correct the whole time: clicking a leaf node on the map lands on its parent job's drawer.
+ * Search simply never asked. It is restated here rather than imported because `jobSlug`
+ * takes a fully-typed `GraphNode` from `packages/contracts` while this module reads the
+ * payload structurally — but the two are held to the same answer by
+ * `useSearchIndex.test.ts`, which checks every href against the payload the runner sent.
+ *
+ *  - `anchor` — a department's centre. Not an agent, has no drawer, so it goes to the
+ *    department view. `sales/_anchor` → `/map/sales`.
+ *  - `leaf` — a sub-skill. Its parent job owns the drawer, so drop the last segment:
+ *    `sales/account-enrichment/growth-signal-scorer` → `/map/sales/account-enrichment`.
+ *    Leaves stay *in* the index; searching a sub-skill name and landing on its parent is
+ *    useful, and dropping them would lose 41 searchable names. Only the href was wrong.
+ *  - `job` — the drawer's own subject. Unchanged.
+ */
+function nodeHref(node: GraphNodeLike): string {
+  if (node.department === undefined) return '/map';
+  if (node.kind === 'anchor') return `/map/${node.department}`;
+  const [, job] = node.id.split('/');
+  if (job === undefined) return `/map/${node.department}`;
+  return `/map/${node.department}/${job}`;
 }
 
 interface GraphDepartmentLike {
@@ -72,7 +121,26 @@ const str = (value: unknown): string | undefined =>
 const num = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
-function parseGraph(json: unknown, project: string | null): GraphIndex | null {
+/**
+ * *Nothing matched* and *nothing was indexed* are different answers, and conflating them is
+ * how a defect ran in total silence.
+ *
+ * `parsePanels` read `entry.title` where the runner sends `{id, panel:{title}}`, so all six
+ * panels were dropped — and it returned `[]`. `useEndpoint` reads `[]` as a **successful
+ * parse**, so `usePanelIndex` reported `ready`, `message` stayed `null`, and every honest
+ * empty-state sentence in the shell was correct and silent. The search panel said nothing
+ * was there, which is exactly what it would say about a project with no dashboards at all.
+ *
+ * A parse handed entries that yields none has not found an empty list; it has failed to
+ * understand the list. That is `useEndpoint`'s `malformedMessage` case — *"the shape isn't
+ * what we agreed"* — and returning `null` routes it there. One bad row among good ones is
+ * still dropped quietly, because one malformed panel must not take the carousel down.
+ */
+function allDropped(raw: readonly unknown[], parsed: readonly unknown[]): boolean {
+  return raw.length > 0 && parsed.length === 0;
+}
+
+export function parseGraph(json: unknown, project: string | null): GraphIndex | null {
   if (!isRecord(json)) return null;
   const rawNodes = Array.isArray(json.nodes) ? json.nodes : null;
   const rawDepartments = Array.isArray(json.departments) ? json.departments : [];
@@ -83,10 +151,12 @@ function parseGraph(json: unknown, project: string | null): GraphIndex | null {
     if (!isRecord(raw)) continue;
     const id = str(raw.id);
     const label = str(raw.label);
-    if (!id || !label) continue;
+    const kind = kindOf(raw.kind);
+    if (!id || !label || kind === undefined) continue;
     nodes.push({
       id,
       label,
+      kind,
       department: str(raw.department),
       description: str(raw.description),
       status: str(raw.status),
@@ -123,13 +193,14 @@ function parseGraph(json: unknown, project: string | null): GraphIndex | null {
       label: node.label,
       description: node.description,
       department: node.department,
-      href: withProject(
-        node.department ? `/map/${node.department}/${node.id.split('/').pop()}` : '/map',
-        project,
-      ),
+      href: withProject(nodeHref(node), project),
       live: node.status === 'live',
     })),
   ];
+
+  // Handed rows and produced none? That is not an empty graph, it is a graph this build
+  // cannot read. See `allDropped`.
+  if (allDropped(rawNodes, nodes) || allDropped(rawDepartments, departments)) return null;
 
   const counts = new Map<string, DepartmentCounts>();
   for (const department of departments) {
@@ -148,24 +219,35 @@ function parseGraph(json: unknown, project: string | null): GraphIndex | null {
   return { items, counts, all };
 }
 
-function parsePanels(json: unknown, project: string | null): SearchItem[] | null {
+export function parsePanels(json: unknown, project: string | null): SearchItem[] | null {
   const list = Array.isArray(json) ? json : isRecord(json) && Array.isArray(json.panels) ? json.panels : null;
   if (list === null) return null;
   const items: SearchItem[] = [];
   for (const raw of list) {
     if (!isRecord(raw)) continue;
-    const id = str(raw.id);
-    const title = str(raw.title);
+    // `GET /api/p/:project/panels` answers `{panels:[{id, panel:<the document>}]}` -
+    // `apps/runner/src/lib/panels.ts`'s `PanelSummary`, which is an **envelope**, not the
+    // panel. Reading `raw.title` off the envelope found `undefined` every time and dropped
+    // all six. `dashboards/data/normalize.ts` has accepted both spellings correctly since
+    // M2; this is the same tolerance, so the carousel and the search index cannot disagree
+    // about what a panel is.
+    //
+    // Worth naming, because it is what produced the bug: `packages/contracts` *also*
+    // exports a type called `PanelSummary`, and that one is flat with a top-level `title`.
+    // Two different shapes, one name, and this module reached for the wrong one.
+    const doc = isRecord(raw.panel) ? raw.panel : raw;
+    const id = str(raw.id) ?? str(doc.id);
+    const title = str(doc.title);
     if (!id || !title) continue;
     items.push({
       id,
       kind: 'panel',
       label: title,
-      description: str(raw.subtitle) ?? str(raw.provider),
+      description: str(doc.subtitle) ?? str(doc.caption) ?? str(doc.provider),
       href: withProject(`/dashboards/${id}`, project),
     });
   }
-  return items;
+  return allDropped(list, items) ? null : items;
 }
 
 const GRAPH_INTERVAL_MS = 60_000;

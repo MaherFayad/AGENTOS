@@ -1,0 +1,250 @@
+{
+  "_observed": "2026-08-21T15:41Z · GET http://127.0.0.1:8787/api/p/agentos/{graph,panels} · runner live, no API key, no Postgres",
+  "_counts": {
+    "nodesTotal": 60,
+    "byKind": {
+      "anchor": 7,
+      "job": 12,
+      "leaf": 41
+    },
+    "departments": 7,
+    "panels": 6
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "sales/_anchor",
+        "label": "Sales",
+        "kind": "anchor",
+        "department": "sales",
+        "status": "draft"
+      },
+      {
+        "id": "deals/_anchor",
+        "label": "Deals",
+        "kind": "anchor",
+        "department": "deals",
+        "status": "draft"
+      },
+      {
+        "id": "marketing/_anchor",
+        "label": "Marketing",
+        "kind": "anchor",
+        "department": "marketing",
+        "status": "draft"
+      },
+      {
+        "id": "operations/_anchor",
+        "label": "Operations",
+        "kind": "anchor",
+        "department": "operations",
+        "status": "draft"
+      },
+      {
+        "id": "back-office/invoice-chaser",
+        "label": "Invoice Chaser",
+        "kind": "job",
+        "department": "back-office",
+        "status": "draft"
+      },
+      {
+        "id": "customer/support-triage",
+        "label": "Support Triage",
+        "kind": "job",
+        "department": "customer",
+        "status": "draft"
+      },
+      {
+        "id": "deals/deal-reactivation",
+        "label": "Deal Reactivation",
+        "kind": "job",
+        "department": "deals",
+        "status": "draft"
+      },
+      {
+        "id": "deals/proposal-drafter",
+        "label": "Proposal Drafter",
+        "kind": "job",
+        "department": "deals",
+        "status": "draft"
+      },
+      {
+        "id": "back-office/invoice-chaser/ageing-builder",
+        "label": "ageing-builder",
+        "kind": "leaf",
+        "department": "back-office",
+        "status": "draft"
+      },
+      {
+        "id": "back-office/invoice-chaser/reminder-drafter",
+        "label": "reminder-drafter",
+        "kind": "leaf",
+        "department": "back-office",
+        "status": "draft"
+      },
+      {
+        "id": "back-office/invoice-chaser/escalation-ladder",
+        "label": "escalation-ladder",
+        "kind": "leaf",
+        "department": "back-office",
+        "status": "draft"
+      },
+      {
+        "id": "customer/support-triage/intent-classifier",
+        "label": "intent-classifier",
+        "kind": "leaf",
+        "department": "customer",
+        "status": "draft"
+      }
+    ],
+    "departments": [
+      {
+        "id": "sales",
+        "label": "Sales",
+        "liveCount": 0,
+        "totalCount": 2,
+        "sublabels": [
+          "LEAD SOURCING",
+          "ENRICHMENT",
+          "OUTREACH WRITING"
+        ]
+      },
+      {
+        "id": "deals",
+        "label": "Deals",
+        "liveCount": 0,
+        "totalCount": 2,
+        "sublabels": [
+          "PIPELINE HYGIENE",
+          "PROPOSALS",
+          "FORECASTING"
+        ]
+      },
+      {
+        "id": "marketing",
+        "label": "Marketing",
+        "liveCount": 0,
+        "totalCount": 2,
+        "sublabels": [
+          "CONTENT",
+          "BRAND",
+          "DISTRIBUTION"
+        ]
+      },
+      {
+        "id": "operations",
+        "label": "Operations",
+        "liveCount": 0,
+        "totalCount": 2,
+        "sublabels": [
+          "DELIVERY",
+          "AUTOMATION",
+          "QUALITY & AUDIT"
+        ]
+      },
+      {
+        "id": "intelligence",
+        "label": "Intelligence",
+        "liveCount": 0,
+        "totalCount": 2,
+        "sublabels": [
+          "COMPANY RESEARCH",
+          "MARKET SIGNALS",
+          "SECOND BRAIN"
+        ]
+      },
+      {
+        "id": "customer",
+        "label": "Customer",
+        "liveCount": 0,
+        "totalCount": 1,
+        "sublabels": [
+          "ONBOARDING",
+          "SUPPORT",
+          "RETENTION"
+        ]
+      },
+      {
+        "id": "back-office",
+        "label": "Back Office",
+        "liveCount": 0,
+        "totalCount": 1,
+        "sublabels": [
+          "FINANCE",
+          "CONTRACTS & LEGAL",
+          "PEOPLE"
+        ]
+      }
+    ]
+  },
+  "panels": {
+    "panels": [
+      {
+        "id": "client-delivery",
+        "panel": {
+          "id": "client-delivery",
+          "title": "Client Delivery · Engagements",
+          "caption": "Who is on track, who is at risk, what shipped this week",
+          "provider": "postgres",
+          "railTitle": "CLIENT DELIVERY",
+          "order": 3
+        }
+      },
+      {
+        "id": "content-studio",
+        "panel": {
+          "id": "content-studio",
+          "title": "Content · Studio & Distribution",
+          "caption": "What got made, what got published, what landed",
+          "provider": "postgres",
+          "railTitle": "CONTENT",
+          "order": 4
+        }
+      },
+      {
+        "id": "finance",
+        "panel": {
+          "id": "finance",
+          "title": "Finance · Spend & Runway",
+          "caption": "What the agents cost, what the stack costs, what is left",
+          "provider": "langfuse",
+          "railTitle": "FINANCE",
+          "order": 6
+        }
+      },
+      {
+        "id": "mission-control",
+        "panel": {
+          "id": "mission-control",
+          "title": "Mission Control · Agent Ops",
+          "caption": "Every run, every dollar, every failure · one screen",
+          "provider": "langfuse",
+          "railTitle": "MISSION CONTROL",
+          "order": 1
+        }
+      },
+      {
+        "id": "pipeline",
+        "panel": {
+          "id": "pipeline",
+          "title": "Pipeline · Sales & Deals",
+          "caption": "Every deal, every stall · one screen",
+          "provider": "postgres",
+          "railTitle": "PIPELINE",
+          "order": 2
+        }
+      },
+      {
+        "id": "product-funnels",
+        "panel": {
+          "id": "product-funnels",
+          "title": "Amplitude · Product Funnels",
+          "caption": "Signup → activation → retention, without opening another tab",
+          "provider": "amplitude",
+          "railTitle": "PRODUCT",
+          "order": 5
+        }
+      }
+    ]
+  }
+}
