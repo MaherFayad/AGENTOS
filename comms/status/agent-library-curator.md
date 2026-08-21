@@ -1,28 +1,31 @@
 # status — agent-library-curator
 
-**Updated:** 2026-08-17T23:29
-**Milestone:** M16 (stop-the-line; not an M16 slice)
+**Updated:** 2026-08-21T20:22
+**Milestone:** ADR-041 (a user-requested schema change, not a milestone slice)
 **State:** review
 
 ## Now
-Fixed the `DEPARTMENTS` collision that had every route white-screening — one declaration
-site in `departments.ts`, ADR-035, plus the two gates nothing in this repo had: a static
-barrel-collision checker (`npm run validate:barrel`) and a route smoke that actually boots
-the app (`npm run smoke`). Uncommitted, per the dispatch.
+Shipped ADR-041: an eighth department `product` (appended at index 7), four `draft` agents
+under it, and a connector widening — ten registered, `mobbin` refused. Landed at `400684d`,
+`06e8990`, `3e361f3`, `b24a6d5`; the number was claimed on BOARD at `74aea50` first. All
+eleven source gates green, each observed separately at 19:59–20:00 AST because
+`shell-navigation-engineer` landed two commits mid-dispatch. Three latent defects fell out of
+it: `departments.mjs` could not read `departments.ts` at all, had two `=== 7` checks, and
+`computeLayout`'s default table hardcoded seven.
 
 ## Blocked on
-Nothing. Two items await answers but neither holds work:
-`comms/inbox/commandcenter-orchestrator/20260817-2326-…` — BOARD lines, and who owns
-`apps/web/next.config.mjs` / `apps/web/tsconfig.json` after my two-line edits.
-`comms/inbox/fidelity-qa-reviewer/20260817-2327-…` — one headless browser, which buys both
-runtime-error detection and Part VI's 1440px comparison.
+Nothing. Four messages are out and none holds work:
+`runner-engineer` (two of their files edited + the seven-row availability finding) ·
+`infra-compose-engineer` (servers, keys, the slug-equals-server-name constraint) ·
+`chart-matrix-engineer` (eight tabs at 1440px) · `map-galaxy-engineer` (the weakened
+stability claim).
 
 ## Last handoff
-`comms/handoffs/M-stopline-agent-library-curator-barrel-collision-and-the-missing-runtime-gate.md`
+`comms/handoffs/M-adr041-agent-library-curator-an-eighth-department-and-a-connector-widening.md`
 
 ## Next
-1. Answer the six open messages in my inbox — the oldest is from 2026-08-15 and two are
-   `runner-engineer` waiting on cascade decisions.
-2. Part IV seeding: 12 agents exist against a target of ~60. Curate, do not chase 137.
-3. `agent-auditor` (§3.4) — REQ-LIB-35–38 are the only rows in my spec with `—` in both
+1. **Answer the six open messages in my inbox.** Two are `decision-request`s aimed at my own
+   contract and one is from 2026-08-17. This is now the third dispatch that has deferred them.
+2. Part IV seeding: **16 agents against ~60**. Curate weekly, do not chase 137.
+3. `agent-auditor` (§3.4) — REQ-LIB-35–38 are still the only rows in my spec with `—` in both
    the *Implemented in* and *Verified by* columns.
