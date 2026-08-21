@@ -182,6 +182,43 @@ export function parseShellRoute(pathname: string): ShellRoute {
 }
 
 /**
+ * Where `LegacyRouteResolver` should send an unscoped URL — or `null` for *do not move*.
+ *
+ * ## The loop this exists to make impossible
+ *
+ * `app/(views)/[...legacy]` catches every path the `p/[project]/` tree does not define —
+ * and that **includes paths that already start with `/p/<slug>`**, because the tree has no
+ * route for an unknown third segment. The resolver used to prefix `/p/<mounted>` onto
+ * whatever the catch-all matched, unconditionally, so each pass matched again and prefixed
+ * again:
+ *
+ *   /approvals/abc123 → /p/agentos/approvals/abc123 → /p/agentos/p/agentos/… → unbounded
+ *
+ * Reproduced in Chrome 2026-08-21T15:02Z at 187 characters and still climbing, with an
+ * empty `<title>`; `replace` meant the back button could not get out either. Two of §3.6's
+ * three push notification types deep-link straight into it — `sessions/push/payload.ts`
+ * emits `/approvals/:id` and `/runs/:id`, and only `permission` (`/sessions/:id`) survived.
+ * Diagnosed by `dashboards-engineer`, 2026-08-17.
+ *
+ * The rewrite is therefore conditioned on the predicate that already meant this:
+ * **rewrite only when the path does not already name a project.** When the URL *does* name
+ * one and still resolves to nothing, the honest answer is a screen saying so — a redirect
+ * would be a claim that somewhere else has the content, and nowhere does.
+ *
+ * A pure function rather than an inline `if` because that is what makes the property
+ * testable: `route.test.ts` asserts this is a **fixed point after one pass**, which is the
+ * loop's absence stated as behaviour rather than as three examples.
+ *
+ * `/p/all/map` is still rewritable and that is correct — `all` is reserved, so
+ * `splitProject` reports `project: null` and the path genuinely does not name a project.
+ */
+export function legacyRewriteTarget(pathname: string, mounted: string | null): string | null {
+  if (mounted === null) return null;
+  if (splitProject(pathname).project !== null) return null;
+  return `/${PROJECT_SEGMENT}/${mounted}${pathname}`;
+}
+
+/**
  * `/p/agentos` — or `''` when the project is unknown.
  *
  * The empty string is what makes every href builder below degrade to the pre-project
@@ -317,9 +354,45 @@ export function viewSurface(view: ShellView): ViewSurface {
   return CANVAS_VIEWS.includes(view) ? 'canvas' : 'flow';
 }
 
-/** Zoom applies to the two canvas views only (contracts/graph-layout.md). */
+/**
+ * Zoom applies to **MAP only**, because MAP is the only view that answers `shell:zoom`.
+ *
+ * This used to include CHART, and CHART has never subscribed to the event — grep
+ * `on('shell:zoom'` and `apps/web/src/map/MapView.tsx` is the whole list. The cost was not
+ * two dead buttons: it was the *sentence*. With `enabled` true and no canvas reporting a
+ * level, `ZoomControls` printed **"The canvas has not reported a zoom level yet"**, which
+ * is a promise it will never keep — a reader is told to wait for something that is not
+ * coming. The other branch, *"zoom applies to MAP and CHART"*, was simply false.
+ *
+ * `route.test.ts` holds this to the source rather than to a comment: it reads `src/chart/`
+ * and fails if a `shell:zoom` subscriber ever appears there without this predicate being
+ * widened to match. The day CHART grows a camera, the gate says so.
+ */
 export function viewHasZoom(view: ShellView): boolean {
-  return view === 'map' || view === 'chart';
+  return view === 'map';
+}
+
+/**
+ * Whether the `YOUR TREE` filter in the breadcrumb strip does anything on this view.
+ *
+ * **False everywhere today, and that is a reading rather than a decision.** §2.2 specifies
+ * the toggle and the shell implements its half correctly — it flips `aria-pressed`, changes
+ * colour and emits `shell:yourTree`. **Nothing subscribes.** Grep the tree: the only
+ * `on('shell:yourTree'` outside `lib/shell-bus.ts` is in a test.
+ *
+ * So the control looked like it worked. It reported its new state to a screen reader, drew
+ * itself as active, and promised in its own tooltip to *"filter this view to the agents you
+ * have installed and running"* — while the canvas underneath did not change by one pixel. A
+ * control that silently succeeds is worse than one that is visibly disabled, and much worse
+ * than one that is absent: it teaches a reader that the filter is applied.
+ *
+ * This is the standing *"a producer without a consumer is not a feature"* finding, so it is
+ * gated the same way `viewHasZoom` is: `route.test.ts` reads the source for a subscriber
+ * and fails if one exists while this still returns `false`. Wiring the canvas half turns
+ * the button back on by flipping one line, and the test will demand it.
+ */
+export function viewHasYourTreeFilter(_view: ShellView): boolean {
+  return false;
 }
 
 /** The counter in the breadcrumb strip is a map/chart concept (§2.2). */

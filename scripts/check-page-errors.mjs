@@ -105,7 +105,42 @@ const ROUTES = [
   '/p/agentos/sessions',
   '/p/agentos/sessions/abc123',
   '/offline',
+  // **The four this gate could not see, and the reason `finalPath` exists.**
+  //
+  // Every route above is one the `p/[project]/` tree defines, so none of them reaches
+  // `app/(views)/[...legacy]` — where an unbounded redirect loop lived from M15 until
+  // 2026-08-21 with this gate reporting exit 0 over it the whole time. Two blindnesses
+  // compounded: the loop paths were **not in this list** (an include-list is a decision
+  // to be blind to everything unnamed), and **nothing throws while it loops**, so even
+  // once a path was listed the three detectors above would still have had nothing to
+  // report. An include-list plus a no-exception check is not a check that the page went
+  // where it said it was going.
+  //
+  // The first two are the §3.6 push deep links `sessions/push/payload.ts` actually emits;
+  // they were two of the three notification types and both were unreachable.
+  '/approvals/abc123',
+  '/runs/abc123',
+  // Project-scoped with no view underneath — the shape that made the prefixing recursive.
+  '/p/agentos/nope',
+  // Unscoped and unrouted: still legitimately rewritten once, so this proves the fix did
+  // not simply switch the rewrite off.
+  '/calendar',
 ];
+
+/**
+ * How many `/p/` segments a pathname may carry. Exactly one, always: a URL names one
+ * project or none.
+ *
+ * Stated as a counted property rather than as *"must not contain `/p/x/p/x`"* on purpose.
+ * The standing findings say a **substring is a claim you did not narrow** and an example
+ * list is a claim you did not generalise; counting the segment catches the loop at depth 2
+ * and at depth 20, and catches any other href builder that ever double-prefixes.
+ */
+const MAX_PROJECT_SEGMENTS = 1;
+
+function projectSegmentCount(pathname) {
+  return pathname.split('/').filter((seg) => seg === 'p').length;
+}
 
 /**
  * Console noise that is not a defect.
@@ -365,11 +400,19 @@ async function waitFor(fn, timeoutMs, label) {
 }
 
 /**
- * Load one URL in a fresh tab and return everything the browser complained about.
+ * Load one URL in a fresh tab and return everything the browser complained about, plus
+ * **where the browser ended up**.
  *
  * A fresh tab per route on purpose: a shared tab would let one route's error land in
  * another's report, and a client-side navigation would skip the very bundle evaluation
  * this gate exists to observe.
+ *
+ * `finalPath` was added 2026-08-21 and it is the answer to a specific blindness. For four
+ * days this gate returned exit 0 over an **unbounded redirect loop** — `/approvals/abc`
+ * climbing to `/p/agentos/p/agentos/…` without terminating — because nothing here looked
+ * at the address bar. The loop throws nothing, logs nothing and fails no subresource, so
+ * all three of this gate's detectors were correct and all three saw nothing. A checker
+ * that only listens for complaints is deaf to a page that is quietly, silently wrong.
  */
 async function visit(cdp, url, settleMs) {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
@@ -404,9 +447,24 @@ async function visit(cdp, url, settleMs) {
   // stopped at `load` would have reported it clean.
   await new Promise((r) => setTimeout(r, settleMs));
 
+  // Read *after* the settle, so a client-side `router.replace` in an effect is included.
+  // That is the only way this observes a redirect: the loop is React navigation, not an
+  // HTTP 3xx, so it never appears in a response chain.
+  let finalPath = null;
+  try {
+    const res = await cdp.send(
+      'Runtime.evaluate',
+      { expression: 'location.pathname', returnByValue: true },
+      sessionId,
+    );
+    if (typeof res?.result?.value === 'string') finalPath = res.result.value;
+  } catch {
+    /* a tab that has already gone is not a finding; the error listener covers real faults */
+  }
+
   await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
   cdp.listeners = cdp.listeners.filter((fn) => fn !== listener);
-  return errors;
+  return { errors, finalPath };
 }
 
 async function main() {
@@ -566,12 +624,35 @@ async function main() {
   await cdp.send('Target.setDiscoverTargets', { discover: true });
 
   let routesChecked = 0;
+  let pathsObserved = 0;
   for (const route of ROUTES) {
-    const errors = await visit(cdp, base + route, settleMs);
+    const { errors, finalPath } = await visit(cdp, base + route, settleMs);
     routesChecked++;
     for (const e of errors) {
       if (isBackendAbsence(e, base)) backendGaps.push(`${route}\n    ${e}`);
       else fail(`${route}\n    ${e}`);
+    }
+
+    // Where did the browser actually end up? A redirect loop is silent to all three
+    // detectors above, so this is the only observation in the file that can see one.
+    if (finalPath === null) {
+      // Not a pass. The instrument failed to read, and a checker that cannot read must
+      // not report clean — that is the whole "checkers go blind silently" family.
+      fail(
+        `${route}\n    could not read location.pathname — this run's redirect check did not run`,
+      );
+    } else {
+      pathsObserved++;
+      const count = projectSegmentCount(finalPath);
+      if (count > MAX_PROJECT_SEGMENTS) {
+        fail(
+          `${route}\n    ended at ${finalPath.length} chars carrying ${count} "/p/" segments:` +
+            `\n    ${finalPath.slice(0, 120)}${finalPath.length > 120 ? "…" : ""}` +
+            `\n    A URL names one project or none. More than one means something prefixed a` +
+            `\n    path that was already scoped — see legacyRewriteTarget in` +
+            `\n    apps/web/src/components/shell/route.ts.`,
+        );
+      }
     }
   }
 
@@ -588,7 +669,7 @@ async function main() {
         '<!doctype html><meta charset=utf-8><script>console.error("FALSIFY-CONSOLE");' +
           'setTimeout(function(){throw new Error("FALSIFY-THROW")},10)</script>',
       );
-    const caught = await visit(cdp, thrower, 500);
+    const caught = (await visit(cdp, thrower, 500)).errors;
     const sawThrow = caught.some((c) => c.includes('FALSIFY-THROW'));
     const sawConsole = caught.some((c) => c.includes('FALSIFY-CONSOLE'));
     console.log(
@@ -614,6 +695,13 @@ async function main() {
   // Same reasoning as smoke-routes': a gate that observed nothing must not report a pass.
   if (routesChecked === 0) {
     fail('inspected 0 routes. Refusing to pass over an empty observation.');
+  }
+  // The same guard, aimed at the redirect check specifically. Without it a CDP change
+  // that made every `Runtime.evaluate` fail would leave the error detectors green and
+  // silently stop checking where the browser landed — the exact shape of every blindness
+  // in comms/BRIEF.md. A gate must fail when its own instrument stops reading.
+  if (routesChecked > 0 && pathsObserved === 0) {
+    fail(`read location.pathname on 0 of ${routesChecked} routes. The redirect check never ran.`);
   }
 
   // Printed before the verdict, on a pass as well as a fail. An absence that only shows up

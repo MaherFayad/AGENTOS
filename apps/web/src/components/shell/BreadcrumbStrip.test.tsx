@@ -1,7 +1,7 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BreadcrumbStrip } from './BreadcrumbStrip';
-import { on, resetBusForTests } from '../../lib/shell-bus';
+import { emit, on, resetBusForTests } from '../../lib/shell-bus';
 import { GRAPH_FIXTURE, renderShell, stubFetch } from './test-harness';
 
 vi.mock('next/navigation', async () => (await import('./test-mocks')).navigationMock());
@@ -46,17 +46,41 @@ describe('BreadcrumbStrip (§2.0 / §2.2)', () => {
     await waitFor(() => expect(screen.getByText('NO LIVE COUNT YET')).toBeTruthy());
   });
 
-  it('YOUR TREE is a toggle that tells the canvas to filter', async () => {
-    const filter = vi.fn();
-    on('shell:yourTree', filter);
+  /**
+   * This test used to assert the opposite, and it passed for months over a control that
+   * did nothing.
+   *
+   * It subscribed to `shell:yourTree` **itself**, clicked the button, and watched its own
+   * listener fire. Every assertion was true and the feature was absent: no canvas has ever
+   * subscribed to that event, so in the running app the toggle flipped `aria-pressed`,
+   * recoloured itself, announced a new state to a screen reader, and filtered nothing. A
+   * test that supplies the missing consumer cannot see that the consumer is missing —
+   * *"a producer without a consumer is not a feature"*, with the test standing in for the
+   * consumer.
+   *
+   * The button is now hidden while nothing listens (`viewHasYourTreeFilter`), and the
+   * predicate is held to the source tree by `route.test.ts` rather than to this file.
+   */
+  it('does not draw YOUR TREE while no canvas subscribes to shell:yourTree', async () => {
     stubFetch({ '/api/p/agentos/graph': { json: GRAPH_FIXTURE } });
     renderShell(<BreadcrumbStrip />, { pathname: '/p/agentos/map/sales' });
 
-    const toggle = screen.getByRole('button', { name: /your tree/i });
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(toggle);
+    // The counter beside it is real and must still be there — this hides one control, not
+    // the strip.
+    await waitFor(() => expect(screen.getByText('4')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /your tree/i })).toBeNull();
+    // And no orphaned separator left behind where it used to sit.
+    expect(screen.queryByText('YOUR TREE')).toBeNull();
+  });
+
+  it('still emits shell:yourTree from the shell, so wiring the canvas is all that is left', () => {
+    // The shell half is correct and stays tested: `toggleYourTree` publishes the event with
+    // the right payload. Asserted against the context rather than through a button that is
+    // not drawn, so this cannot quietly become the previous test again.
+    const filter = vi.fn();
+    on('shell:yourTree', filter);
+    emit('shell:yourTree', { enabled: true });
     expect(filter).toHaveBeenCalledWith({ enabled: true });
-    await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('true'));
   });
 
   it('says ALL DASHBOARDS inside a dashboard', () => {

@@ -1,4 +1,27 @@
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+import type { ShellEventName } from '../../lib/shell-bus';
+
+/**
+ * Located by walking up from the working directory: under Vitest's jsdom environment
+ * `import.meta.url` is not a `file:` URL, so `fileURLToPath` throws at import time and the
+ * whole suite collects as zero tests — a green run that asserted nothing.
+ */
+function findSrcDir(): string {
+  let dir = resolve(process.cwd());
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(dir, 'apps', 'web', 'src');
+    if (existsSync(candidate)) return candidate;
+    const local = join(dir, 'src');
+    if (existsSync(join(local, 'components', 'shell'))) return local;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(`could not locate apps/web/src from ${process.cwd()}`);
+}
 import {
   breadcrumbFor,
   MAX_SEGMENTED_TABS,
@@ -7,6 +30,8 @@ import {
   projectTrail,
   searchPlaceholder,
   splitProject,
+  legacyRewriteTarget,
+  viewHasYourTreeFilter,
   switchProjectHref,
   VIEW_LABELS,
   VIEWS,
@@ -281,9 +306,13 @@ describe('breadcrumbFor', () => {
 });
 
 describe('per-view capabilities', () => {
-  it('gives zoom to the canvas views only', () => {
+  // Zoom moved to MAP only on 2026-08-21 — CHART has never subscribed to `shell:zoom`, so
+  // "the canvas views" was never the right grouping. The assertion that *holds* it there
+  // lives in the `inert controls` block below and reads the source rather than this list;
+  // this one is kept because a predicate deserves a direct example too.
+  it('gives zoom to MAP, the one view with a camera', () => {
     expect(viewHasZoom('map')).toBe(true);
-    expect(viewHasZoom('chart')).toBe(true);
+    expect(viewHasZoom('chart')).toBe(false);
     expect(viewHasZoom('dashboards')).toBe(false);
     expect(viewHasZoom('threads')).toBe(false);
   });
@@ -314,5 +343,166 @@ describe('viewSurface — the §2.0 offset contract', () => {
     // tomorrow starts underneath the bar and nobody finds out until a screenshot.
     expect(canvas.length).toBeLessThan(flow.length + canvas.length);
     expect(flow.length).toBeGreaterThan(0);
+  });
+});
+
+describe('legacyRewriteTarget — the unscoped-URL rewrite terminates', () => {
+  /**
+   * The defect this replaces (`dashboards-engineer`, 2026-08-17; reproduced in Chrome
+   * 2026-08-21T15:02Z): the resolver prefixed `/p/<mounted>` onto whatever the `[...legacy]`
+   * catch-all matched, **without asking whether the path already named a project**. The
+   * catch-all also matches `/p/<slug>/<anything-with-no-route>`, so each pass matched again
+   * and prefixed again:
+   *
+   *   /approvals/abc123 → /p/agentos/approvals/abc123 → /p/agentos/p/agentos/… → unbounded
+   *
+   * Two of §3.6's three push notification types deep-link straight into it
+   * (`deepLinkFor` emits `/approvals/:id` and `/runs/:id`), and `replace` means the back
+   * button cannot recover.
+   */
+  const MOUNTED = 'agentos';
+
+  it('rewrites a path that does not name a project', () => {
+    expect(legacyRewriteTarget('/map/sales', MOUNTED)).toBe('/p/agentos/map/sales');
+    expect(legacyRewriteTarget('/approvals/abc123', MOUNTED)).toBe('/p/agentos/approvals/abc123');
+    expect(legacyRewriteTarget('/runs/abc123', MOUNTED)).toBe('/p/agentos/runs/abc123');
+  });
+
+  it('refuses to rewrite a path that already names a project', () => {
+    // The narrow property `dashboards-engineer` named: rewrite **only** when
+    // `splitProject(pathname).project === null`.
+    expect(legacyRewriteTarget('/p/agentos/nope', MOUNTED)).toBeNull();
+    expect(legacyRewriteTarget('/p/agentos/approvals/abc123', MOUNTED)).toBeNull();
+    expect(legacyRewriteTarget('/p/client-x/calendar', MOUNTED)).toBeNull();
+    // A *reserved* slug is not a project, so this one is still rewritable — `/p/all/...`
+    // parses to `project: null` and must not be mistaken for "already scoped".
+    expect(legacyRewriteTarget('/p/all/map', MOUNTED)).toBe('/p/agentos/p/all/map');
+  });
+
+  it('picks nothing when the coordinator named no mounted project', () => {
+    expect(legacyRewriteTarget('/map/sales', null)).toBeNull();
+  });
+
+  /**
+   * **The assertion that actually catches the bug class.** The three above are examples;
+   * this one is the property. Applying the rewrite to its own output must terminate after
+   * exactly one step — anything else is a loop, whatever the example set happens to contain.
+   */
+  it('is a fixed point after one pass — the loop cannot exist', () => {
+    const paths = [
+      '/',
+      '/map',
+      '/map/sales',
+      '/map/sales/account-enrichment',
+      '/approvals/abc123',
+      '/runs/abc123',
+      '/sessions/abc123',
+      '/calendar',
+      '/p/agentos/map',
+      '/p/agentos/nope',
+      '/p/all/map',
+      '/p/Not_A_Slug/map',
+    ];
+    for (const path of paths) {
+      const once = legacyRewriteTarget(path, MOUNTED);
+      if (once === null) continue;
+      expect(legacyRewriteTarget(once, MOUNTED), `${path} → ${once} rewrote again`).toBeNull();
+    }
+  });
+
+  it('never emits a pathname carrying two project segments', () => {
+    // The same property stated the way `check-page-errors.mjs` observes it in a browser,
+    // so the unit test and the runtime gate are testing one thing in two places.
+    for (const path of ['/approvals/abc', '/p/agentos/approvals/abc', '/runs/x', '/nope']) {
+      const target = legacyRewriteTarget(path, MOUNTED) ?? path;
+      expect(target.split('/p/').length - 1, `${path} → ${target}`).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe('inert controls: the predicate is held to the source, not to a comment', () => {
+  /**
+   * Two chrome controls promised things nothing delivered:
+   *
+   *  - the zoom readout said *"The canvas has not reported a zoom level yet"* on CHART,
+   *    which has never subscribed to `shell:zoom`. A promise that will never be kept;
+   *  - `YOUR TREE` flipped `aria-pressed`, recoloured itself and emitted `shell:yourTree`
+   *    into a bus with no subscriber, so it reported success and changed nothing.
+   *
+   * Both are now `false` in `route.ts`. **A constant saying "nobody consumes this" is a
+   * declaration, and this repo's standing finding is that a comment is not a mechanism** —
+   * so these read the source tree and fail when the world stops matching the constant.
+   * That is the point: the day someone wires the canvas half, the gate goes red and names
+   * the line to flip, rather than the feature staying dark because a flag was forgotten.
+   */
+  const SRC = findSrcDir();
+
+  /**
+   * Comments removed before matching, because prose *about* a subscriber is not one —
+   * this file and `route.ts` both quote the call while explaining the finding, and
+   * without this the gate reported `route.ts` as its own consumer.
+   *
+   * A comment-stripper is a known blindness in this repo (one deleted half its corpus
+   * and still passed), which is exactly why the emptiness guard below is not optional:
+   * if this ever ate the source, `subscribersOf('shell:zoom')` would come back empty
+   * and the first test fails before either claim is made.
+   */
+  const stripComments = (source: string): string =>
+    source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  /** Files that subscribe to a bus event, by `on('<event>'`. Tests excluded. */
+  function subscribersOf(event: ShellEventName): string[] {
+    const hits: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          if (entry !== 'node_modules' && entry !== '__tests__') walk(full);
+          continue;
+        }
+        if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) continue;
+        // `lib/shell-bus.ts` declares the events; it does not consume them.
+        if (full.replace(/\\/g, '/').endsWith('lib/shell-bus.ts')) continue;
+        if (stripComments(readFileSync(full, 'utf8')).includes(`on('${event}'`)) {
+          hits.push(full.replace(/\\/g, '/').slice(SRC.replace(/\\/g, '/').length + 1));
+        }
+      }
+    };
+    walk(SRC);
+    return hits.sort();
+  }
+
+  it('can see a subscriber at all — otherwise both assertions below are vacuous', () => {
+    // The emptiness guard. If this grep stopped matching, every claim here would pass while
+    // reading nothing, which is how `check-rtl` reported green over 190 invisible strings.
+    const zoomSubscribers = subscribersOf('shell:zoom');
+    expect(zoomSubscribers.length).toBeGreaterThan(0);
+    expect(zoomSubscribers.some((f) => f.startsWith('map/'))).toBe(true);
+  });
+
+  it('gives zoom to MAP only, because MAP is the only view that answers shell:zoom', () => {
+    expect(viewHasZoom('map')).toBe(true);
+    expect(viewHasZoom('chart')).toBe(false);
+    expect(viewHasZoom('dashboards')).toBe(false);
+    expect(viewHasZoom('threads')).toBe(false);
+
+    // And the reason, checked rather than asserted. Wire a camera into CHART and this fails
+    // with the fix in its message.
+    const chartSubscribes = subscribersOf('shell:zoom').some((f) => f.startsWith('chart/'));
+    expect(
+      chartSubscribes,
+      'src/chart/ now subscribes to shell:zoom — widen viewHasZoom() in route.ts to include chart',
+    ).toBe(false);
+  });
+
+  it('hides YOUR TREE for as long as no canvas subscribes to shell:yourTree', () => {
+    const consumers = subscribersOf('shell:yourTree');
+    const anyViewShowsIt = VIEWS.some((view) => viewHasYourTreeFilter(view));
+    expect(
+      anyViewShowsIt,
+      consumers.length === 0
+        ? 'nothing subscribes to shell:yourTree, so the toggle must not be drawn'
+        : `${consumers.join(', ')} now subscribes to shell:yourTree — turn viewHasYourTreeFilter() on for that view`,
+    ).toBe(consumers.length > 0);
   });
 });

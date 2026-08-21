@@ -24,11 +24,15 @@ export function ZoomControls(): React.JSX.Element {
   const reset = useCallback(() => emit('shell:zoom', { direction: 'reset' }), []);
 
   const readout = zoom === null ? '—' : `${Math.round(zoom * 100)}%`;
+  // "…has not reported a zoom level yet" is only honest on a view that will eventually
+  // report one. On CHART it never would, and `viewHasZoom` used to say CHART had zoom, so
+  // the readout sat there promising a number that was not coming. Both branches now name
+  // only MAP, which is the only view that answers `shell:zoom`.
   const readoutTitle =
     zoom === null
       ? enabled
-        ? 'The canvas has not reported a zoom level yet.'
-        : 'Zoom applies to the MAP and CHART views.'
+        ? 'The map has not reported a zoom level yet.'
+        : 'Zoom applies to the MAP view.'
       : 'Reset zoom to 100%';
 
   return (

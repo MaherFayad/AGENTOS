@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ViewMount } from './ViewMount';
 import { useShell } from './ShellContext';
+import { legacyRewriteTarget, splitProject } from './route';
 
 /**
  * What answers a URL that does not name a project — `/map/sales`, `/dashboards/pipeline`,
@@ -52,6 +53,15 @@ import { useShell } from './ShellContext';
  *   project field yet — `sessions-relay-engineer`'s to add — so tapping one resolves
  *   through here. It works; it costs a frame.
  * - **Anything bookmarked before M15.**
+ *
+ * ## What it must *not* do: prefix a path that already names a project
+ *
+ * This catch-all also matches `/p/<slug>/<anything the view tree does not define>`, because
+ * `p/[project]/` has no route for an unknown third segment. Prefixing unconditionally made
+ * every such URL an **unbounded** one — `/approvals/abc` → `/p/agentos/p/agentos/…` — and
+ * with `replace` the back button could not escape. `legacyRewriteTarget` now consults
+ * `splitProject` first, and the terminating property is asserted in `route.test.ts` and
+ * observed in a browser by `scripts/check-page-errors.mjs`.
  */
 export function LegacyRouteResolver(): React.JSX.Element {
   const router = useRouter();
@@ -60,10 +70,33 @@ export function LegacyRouteResolver(): React.JSX.Element {
 
   const mounted = projects.state === 'ready' ? projects.data.mounted : null;
 
+  // The URL's own answer, not the coordinator's: does this address already name a project?
+  const named = splitProject(pathname).project;
+  const target = legacyRewriteTarget(pathname, mounted);
+
   useEffect(() => {
-    if (mounted === null) return;
-    router.replace(`/p/${mounted}${pathname}`);
-  }, [mounted, pathname, router]);
+    if (target === null) return;
+    router.replace(target);
+  }, [target, router]);
+
+  // Checked **before** the two states below, because neither sentence is true here: we are
+  // not "finding your project" and the runner's reachability is beside the point. The URL
+  // named a project and the path underneath it resolves to nothing.
+  //
+  // Deliberately *not* the `mounted === null` copy verbatim, though that is the screen this
+  // reuses: that copy says the coordinator named no mounted project, which in this state is
+  // false. A redirect would be worse still — it would assert that some other address has
+  // the content, and none does (standing rule 9).
+  if (named !== null) {
+    return (
+      <ViewMount title="Nothing at this address" owner="shell-navigation-engineer" spec="Plan §9">
+        This link names the project <code>{named}</code>, but there is no view in this app at{' '}
+        <code>{pathname}</code>. Nothing has been redirected, because there is nowhere to
+        redirect to — a guess would just send you somewhere else that is also not it. Check
+        the address, or go back to <code>/p/{named}/map</code>.
+      </ViewMount>
+    );
+  }
 
   if (projects.state === 'loading') {
     return (

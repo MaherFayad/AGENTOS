@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { breadcrumbFor, projectTrail, viewHasLiveCounter } from './route';
+import { breadcrumbFor, projectTrail, viewHasLiveCounter, viewHasYourTreeFilter } from './route';
 import { useShell } from './ShellContext';
 
 /**
@@ -30,6 +30,10 @@ export function BreadcrumbStrip(): React.JSX.Element | null {
   if (crumb === null) return null;
 
   const showCounter = viewHasLiveCounter(route.view);
+  // §2.2 specifies `YOUR TREE`; nothing on any canvas subscribes to it yet, so it is not
+  // drawn. See `viewHasYourTreeFilter` — a toggle that flips `aria-pressed`, recolours
+  // itself and changes nothing is a claim that the filter was applied.
+  const showYourTree = viewHasYourTreeFilter(route.view);
   const trail = projectTrail(route);
 
   return (
@@ -92,24 +96,28 @@ export function BreadcrumbStrip(): React.JSX.Element | null {
               <span className="tabular-nums">{liveCounts.total}</span> LIVE
             </span>
           )}
-          <span aria-hidden="true" className="text-ink-3">
-            ·
-          </span>
-          <button
-            type="button"
-            onClick={toggleYourTree}
-            aria-pressed={yourTree}
-            title={
-              yourTree
-                ? 'Showing only agents that are installed and live.'
-                : 'Filter this view to the agents you have installed and running.'
-            }
-            className={`uppercase tracking-wider-1 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-line-2 ${
-              yourTree ? 'text-ivory' : 'text-ink-2 hover:text-ivory-2'
-            }`}
-          >
-            YOUR TREE
-          </button>
+          {showYourTree && (
+            <>
+              <span aria-hidden="true" className="text-ink-3">
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={toggleYourTree}
+                aria-pressed={yourTree}
+                title={
+                  yourTree
+                    ? 'Showing only agents that are installed and live.'
+                    : 'Filter this view to the agents you have installed and running.'
+                }
+                className={`uppercase tracking-wider-1 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-line-2 ${
+                  yourTree ? 'text-ivory' : 'text-ink-2 hover:text-ivory-2'
+                }`}
+              >
+                YOUR TREE
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
