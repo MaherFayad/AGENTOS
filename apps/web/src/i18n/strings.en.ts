@@ -630,12 +630,22 @@ export const en = {
   'threads.mailbox.send': 'Send',
   'threads.mailbox.sending': 'Sending…',
   'threads.mailbox.emptyBody': 'A message needs a body. Nothing was sent.',
-  /* The honest empty state for an address this build cannot know. `SseStartData`
-   * carries no thread id, so a run on screen cannot say which conversation it is
-   * a turn of. Named rather than hidden — a composer that silently disappears is
-   * indistinguishable from one nobody built. */
+  /* The honest empty state for an address this drawer does not have. Named rather
+   * than hidden — a composer that silently disappears is indistinguishable from one
+   * nobody built.
+   *
+   * **It used to say "The run stream does not say which thread this run belongs to",
+   * and that stopped being true in M17**, when `SseStartData.threadId` landed and
+   * `JobDrawer` began reading it. The stream does say. What is missing on a drawer
+   * nobody has run anything in is the *run*, and a sentence that blames the wire for
+   * an absence the reader caused is the consumer-with-no-producer defect wearing its
+   * copy hat: a mechanism claim that outlived its mechanism, with nothing red.
+   *
+   * So it reports the observation and not the cause. That also keeps it true in the
+   * second state it has to cover — a runner with no thread store (`--profile dev`),
+   * whose `start` carries no id — where "no run has started" would itself be false. */
   'threads.mailbox.noThread':
-    'The run stream does not say which thread this run belongs to, so there is no mailbox to address from here yet.',
+    'No run here has named a thread yet, so there is nothing to address a message to.',
 
   'threads.mailbox.disposition.queued':
     'Queued in the mailbox. Nothing has read it yet — the thread’s next run does.',

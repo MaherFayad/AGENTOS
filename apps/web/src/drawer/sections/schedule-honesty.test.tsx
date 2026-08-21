@@ -21,10 +21,25 @@
  * drawer still composed a promise from the new one, which is exactly the accident that made
  * the sentence honest before this fix — absence, not design.
  *
- * ## What this suite cannot see
+ * ## The surface it could not see, and now does
+ *
+ * Everything above rendered `<JobDrawer>` with its default `side="left"`, so for the whole of
+ * M17 and M18 **this suite only ever saw the map anatomy** — and `HOW TO RUN IT` exists only
+ * in the chart one. `composeHowToRun` went on emitting *"It also runs itself every Monday at
+ * 06:00."* through both fixes, on the one surface a suite written to catch that exact claim
+ * could not reach. The drawer contradicted itself 40px apart: that paragraph asserted an
+ * execution and the card below it named the absent executor. An include-list is a decision to
+ * be blind to everything unnamed, and a `side` prop with one value tested is an include-list.
+ * The last `describe` renders both anatomies from the same list, so a third would have to be
+ * added here to be missed again.
+ *
+ * ## What this suite still cannot see
  *
  * - It never contacts the runner. That `executionNote` is authored behind an exhaustive
  *   switch on `ScheduleFiredBy` is `apps/runner`'s to prove, and it does.
+ * - It stubs `runnerConfigured: true`. **On the real dev stack that flag is `false`, so
+ *   `⏰ Schedule` is disabled, the cron editor never opens and `executionNote` cannot reach
+ *   a screen at all** — the save path is proved here and nowhere a person can stand.
  * - It renders the default locale. This sentence is uncatalogued English on an uncatalogued
  *   card, like the rest of `SkillFileCard` — filed, not fixed here.
  *
@@ -194,4 +209,45 @@ describe('the schedule save says what happened and not what will', () => {
     expect(container.textContent?.match(ISO) ?? []).toEqual([]);
     expect(container.textContent).not.toContain('Next run');
   });
+});
+
+/**
+ * Both anatomies, one list, because the defect this catches was *a surface nobody rendered*
+ * rather than a wording anybody argued about.
+ *
+ * `HOW TO RUN IT` (§2.6.5) is assembled by `composeHowToRun` from frontmatter, and its cron
+ * clause is the same claim as the card's: a `schedule:` in a file is a declaration, and
+ * saying the agent "runs itself" asserts that something reads it on a timer. `firedBy` is
+ * `'nobody'`. The assertion is therefore on the *claim*, not on one spelling of it — the
+ * card's honest clause must be present and no sentence anywhere may put the agent in the
+ * present tense as its own executor.
+ */
+describe('every anatomy that prints the cron names its absent executor', () => {
+  const ASSERTS_EXECUTION = [
+    /runs itself/i,
+    /it will run/i,
+    /next run/i,
+    /\bscheduled\b/i,
+  ];
+
+  for (const side of ['left', 'right'] as const) {
+    it(`${side === 'left' ? 'map' : 'chart'} — states the declaration and never an execution`, async () => {
+      serve(RESPONSE);
+      const { container } = render(
+        <I18nProvider locale="en">
+          <JobDrawer slug="sales/account-enrichment" side={side} open onClose={() => undefined} />
+        </I18nProvider>,
+      );
+      await screen.findByText('Account Enrichment');
+      // The expression itself is on screen in both — otherwise this suite would pass on a
+      // drawer that simply stopped mentioning the schedule, which proves nothing.
+      await waitFor(() => expect(container.textContent).toContain('every Monday at 06:00'));
+
+      const text = container.textContent ?? '';
+      for (const claim of ASSERTS_EXECUTION) {
+        expect(text, `${side} anatomy asserts an execution: ${String(claim)}`).not.toMatch(claim);
+      }
+      expect(text.toLowerCase()).toContain('nothing in this build acts on that');
+    });
+  }
 });

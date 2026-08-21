@@ -67,13 +67,19 @@ export type { Sender };
 
 export interface MailboxComposerProps {
   /**
-   * The thread to append to. `null` ⇒ this drawer knows no thread to address, which is
-   * the state of every run today: `SseStartData` carries no `threadId`
-   * (`RUN_STREAM_CARRIES_THREAD_ID`). The composer then renders **disabled with the
-   * reason**, which is the drawer's standing rule for a control that cannot work yet —
-   * the same rule `Take it ↓` and `▶ Run now` already follow. It does not collapse:
-   * collapsing is for a frontmatter section an agent did not fill in, and an absent
-   * producer is not an absent optional field.
+   * The thread to append to. `null` ⇒ this drawer has not been told one, and the composer
+   * renders **disabled with the reason** — the drawer's standing rule for a control that
+   * cannot act, the same one `Take it ↓` and `▶ Run now` follow. It does not collapse:
+   * collapsing is for a frontmatter section an agent did not fill in, and a missing address
+   * is not a missing optional field.
+   *
+   * **This comment used to say `SseStartData` carries no `threadId`, and so did the sentence
+   * on screen. Both were left behind by M17**, where the field landed
+   * (`RUN_STREAM_CARRIES_THREAD_ID` is `true`) and `JobDrawer` began reading it. Two states
+   * still reach `null` and neither is the wire's fault: no run has been started in this
+   * drawer, or the runner has no thread store at all (`--profile dev`), where the id is
+   * genuinely absent from a real `start`. `threads.mailbox.noThread` now reports the
+   * observation rather than naming a cause that only one of the two shares.
    */
   threadId: string | null;
   send: Sender;

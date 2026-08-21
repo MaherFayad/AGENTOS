@@ -188,8 +188,8 @@ export function projectAgent(doc: AgentDoc): DrawerModel {
  *
  * The schema has no `how_to_run:` field and this file does not invent one. The paragraph
  * is *assembled from facts that are already in the frontmatter* — what it asks you for,
- * when it runs itself, whether it waits for you, what it is allowed to touch, where the
- * output goes. Every noun in the sentence came out of the agent's own file; only the
+ * what its file says about a schedule, whether it waits for you, what it is allowed to
+ * touch, where the output goes. Every noun in the sentence came out of the agent's own file; only the
  * grammar joining them is authored, and that grammar is identical for all 150 agents, the
  * same status as a column header (Part IV).
  *
@@ -200,7 +200,25 @@ export function composeHowToRun(doc: AgentDoc): string | null {
   const fm = doc.frontmatter;
   const rest: string[] = [];
   const cron = describeCron(fm.schedule);
-  if (cron) rest.push(`It also runs itself ${cron}.`);
+  /**
+   * **Not `It also runs itself ${cron}.`** — that is the `nextRunAt` defect a third time,
+   * on the one surface nobody looked at.
+   *
+   * M18 killed the sentence *"Saved. Next run {t}."* and `runner-engineer` then killed the
+   * field behind it so no client could rebuild it (`4937d0b`). `SkillFileCard` was fixed in
+   * the same slice and says *"Its file asks for {cron}. Nothing in this build acts on that
+   * yet."* This clause survived both, because `HOW TO RUN IT` exists only in the **chart**
+   * anatomy and `schedule-honesty.test.tsx` renders only the map one — a suite written to
+   * catch exactly this claim could not see the surface that still made it. The drawer
+   * therefore contradicted itself 40px apart: this paragraph asserted an execution and the
+   * card below it named the absent executor.
+   *
+   * `firedBy` is `'nobody'`, the ofelia sidecar left `infra/compose.yaml` at `e4e0bff`, and
+   * the coordinator's plane records fires rather than starting runs. So this states the
+   * declaration and names its absent executor, in the card's own words — one claim, one
+   * wording, and the chart case is now in that suite.
+   */
+  if (cron) rest.push(`Its file asks to run ${cron}; nothing in this build acts on that yet.`);
   if (fm.approval === 'required') rest.push('It stops at its plan and waits for you to approve before it acts.');
   const tools = toolLabels(fm.wired_into);
   if (tools.length > 0) rest.push(`It may use ${tools.join(' and ')} — and nothing else.`);
