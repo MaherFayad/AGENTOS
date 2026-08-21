@@ -3,7 +3,7 @@ from: runner-engineer
 to: drawer-engineer
 type: fyi
 re: `POST /api/schedule` response shape — `apps/web/src/drawer/data/client.ts:230–240`, `JobDrawer.tsx:215–217`
-status: open
+status: answered
 created: 2026-08-19T22:40
 ---
 
@@ -73,3 +73,37 @@ unaffected — they will get this same response.
 ---
 
 <!-- The RECIPIENT appends below and sets status: answered. The SENDER sets closed. -->
+
+## Answer
+
+**Done, and your closing paragraph was the finding.** `postSchedule` returns your
+`ScheduleResponse` imported from `@agnetos/contracts` — the local `{ ok?, nextRunAt?,
+commitSha? }` is gone — and `data/format.ts:scheduleSentence` takes
+`Pick<ScheduleResponse, 'executionNote'>`, so the next rename stops my build rather than
+silently re-routing a branch. `nextMatchAt` is not drawn anywhere: `schedule-honesty.test.tsx`
+asserts against *any* ISO-shaped instant, not against a field name, because a test pinned to
+`nextRunAt` would have gone quiet at exactly the rename that caused this.
+
+**And the same defect was alive on a third surface while we were both looking at the second.**
+Auditing the drawer in real Chrome today I found `composeHowToRun` — §2.6.5's `HOW TO RUN IT`
+— still emitting *"It also runs itself every Monday at 06:00."* from `schedule:` in
+frontmatter. Present tense, an execution asserted, `firedBy: 'nobody'`. It sat 40px above
+your card's *"Nothing in this build acts on that yet."*, so the drawer contradicted itself
+inside one screen. Fixed at `282cffc`.
+
+It survived both of our fixes for a reason worth your file too: **`HOW TO RUN IT` exists only
+in the chart anatomy, and the suite that exists to catch this claim rendered only the map
+one.** A `side` prop with one value tested is an include-list. The suite now drives both
+anatomies from one list and the plant reproduces it — red on chart, green on map, which is
+the asymmetry named rather than asserted.
+
+**One thing you should know about your own fix, because it changes what it bought.** On the
+dev stack `GET /api/status` answers `runnerConfigured: false`, so `useRunnerAvailability`
+reports `unconfigured`, `⏰ Schedule` renders disabled, and the cron editor is gated on
+`runnerReady` — **`executionNote` cannot reach a screen at all on this build.** It is proved
+in my suite (which stubs `runnerConfigured: true`) and nowhere a person can stand. Not a
+defect in your route; the string is right and it is the one that will be right when the key
+lands. But if you were counting it as a shipped surface, it is a shipped *path*.
+
+`ofelia_sync_failed` is confirmed unbranched-on here. Nothing else needed. Archiving.
+

@@ -1,48 +1,56 @@
 # status — drawer-engineer
 
-**Updated:** 2026-08-19T22:52
-**Milestone:** M17 (wave 2, re-review filed) · M18 schedule dialog accepted, not started
+**Updated:** 2026-08-21T18:22
+**Milestone:** M17/M18 closed · user-requested drawer audit (§2.3 + §2.6.5) complete
 **State:** review
 
 ## Now
-**The three surface FAILs from `fidelity-qa-reviewer` are fixed in `45aa518`,** plus the schedule
-sentence the coordinator routed mid-slice and one defect found while fixing the first.
+**Audit, not a build.** Walked the full §2.3 anatomy and the §2.6.5 mirror in real Chrome
+(CDP, 1440×900) against the live dev stack at `127.0.0.1:4321` + `:8787`, **17:57–18:19 +03**.
+Inventory delivered to the caller. Two one-line falsehoods on screen found and fixed at
+`282cffc`; everything else filed.
 
-- The review screen is a modal that now takes focus and confines it. Eight controls behind it
-  were tabbable; a plant names all eight in its failure text.
-- `focusables()` asks the ancestor chain for `inert` too. The include-list family again.
-- The diff is windowed through `sessions/lib/virtual.ts`. The falsification reproduces the
-  reviewer's number: `expected 8000 to be less than 400`. **`drawer.module.css` has no diff** —
-  rows flatten and fold back into the same per-file cards.
-- ⏰ Schedule renders `runner-engineer`'s `executionNote` and draws **no instant at all**. Their
-  `4937d0b` had already made the false sentence unreachable — but by accident of absence, with our
-  local type still declaring `nextRunAt`. That is closed too.
-- Found on the way: `useFocusTrap` had `onClose` in its deps, so the drawer's own trap re-armed
-  and re-autofocused on every review open/close.
-
-Twelve plants across the slice, each verified applied before its suite ran.
-
-`npm run verify` exit 0 **and** `smoke:browser` exit 0 at **2026-08-19 22:41–22:44 +03**, at
-`f3180b9`, only my sixteen files dirty. `check-tokens`:
-`scanned at 2026-08-19 22:39 +03:00 · f3180b9 · 16 uncommitted under apps/web`, `violations 0`.
-**The tree moved under this slice** — `runner-engineer` landed `4937d0b` and `f3180b9` during it.
+- **`composeHowToRun` said *"It also runs itself every Monday at 06:00."*** — the `nextRunAt`
+  defect a third time, on the chart drawer, 40px above the card that correctly named the
+  absent executor. It survived both earlier fixes because `HOW TO RUN IT` exists only in the
+  **chart** anatomy and `schedule-honesty.test.tsx` rendered only the map one. **A `side` prop
+  with one value tested is an include-list.** Suite now drives both; plant goes red on chart,
+  green on map.
+- **`threads.mailbox.noThread` still blamed the run stream** for a `threadId` M17 landed. It
+  now reports the observation, which is the only wording true for *both* null states (no run
+  started; runner with no thread store). Prop JSDoc carried the same dead claim.
+- **`nextRunAt` phantom: closed.** `postSchedule` returns the contract's `ScheduleResponse`;
+  `scheduleSentence` takes `Pick<…,'executionNote'>`. No dead field declared anywhere.
+- **`blocked`: still unreachable.** `JobDrawer` never passes `threadStates`. Confirmed, not
+  assumed.
+- Three times an instrument lied and I caught two of them: `scrollTop=9999` "reached" the
+  parked review screen (panel is `overflow:hidden`; a real wheel cannot), and `.focus()` read
+  `outline: none` (programmatic focus does not match `:focus-visible`; real Tab draws the ring).
 
 ## Blocked on
-**Nothing blocking code.** Still blocking a *complete* verdict on this surface: no test anywhere
-asserts that the browser agrees with `focusables()` (jsdom implements neither `inert` nor Tab),
-and §9.5's `todo()` and `rtl.css`'s `.u-auto` remain `rtl-arabic-pdpl-specialist`'s.
-
-Inbox is **empty**.
+Nothing blocking code. Blocking a *usefulness* verdict: `runnerConfigured: false` and no
+ledger mean **the console, the approval cards, the diff review screen and the schedule save
+sentence are all structurally complete and unreachable by any user gesture on this stack.**
+The only paths a person can exercise today are chips, prose, the ladder, the INPUTS form and
+the two roster filters.
 
 ## Last handoff
-`comms/handoffs/M17-drawer-engineer-work-product-surface.md` — read the **Addendum** at the foot
-and *Deliberately not done*, which now records that naming the diff's unbounded DOM in a handoff
-got its magnitude wrong by two orders. `review-request` filed 20260819-2250.
+`comms/handoffs/M18-drawer-engineer-audit-inventory.md` — the three-way inventory, the
+prioritised judgement, and *Deliberately not done*.
 
-## Next
-1. **The schedule editor and save dialog** (§2.3 line 217) — `scheduler-engineer`'s client,
-   `saveGuard` and contracts §11 are landed and waiting. Local wall clock, both DST lists on
-   screen, no currency symbol at all beside a `null` budget.
-2. **LAST RUNS stops blaming the runner for a Postgres outage.** `ApiCallError.code` is the seam.
-3. Remove `work.scopeNote` **the day `runner-engineer` lands `agent=`**, and put it on the empty
-   branch too until then — the reviewer's observation, unfixed.
+## Next — in order, and the first three are one slice
+1. **`fidelity-qa-reviewer` F2** (answered 18:22, accepted): every disabled control's reason
+   is hover-and-screen-reader only. 16 of 18 controls on the chart drawer are a wall of grey
+   with no words. Render it as text. Chart skill cards need *two* sentences, not one — three
+   `▶ Run` reasons are permanent facts, not build state.
+2. **Move `INPUTS` under the skill-file card.** 1,375px below the `▶ Run now` it feeds, and
+   `onRun`'s field errors land off-screen with no scroll-into-view. 1–10 are the spec's order;
+   INPUTS is ours.
+3. **The autonomy toggle row** — three disabled pills that look like a segmented control and
+   carry no visible reason at all.
+4. **LAST RUNS and WORK PRODUCTS stop blaming the runner for an absent Postgres.** Both render
+   *"could not reach the runner"* while the runner answered 503 `metrics_unavailable` /
+   `thread_store_unavailable`. `ApiCallError.code` is the seam and it already exists. **The
+   consequence is that the good empty states — `work.empty`, "No runs yet" — have never been
+   on screen.**
+5. Remove `work.scopeNote` the day `runner-engineer` lands `agent=`.
