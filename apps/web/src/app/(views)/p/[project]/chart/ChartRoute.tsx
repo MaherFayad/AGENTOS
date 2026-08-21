@@ -24,7 +24,7 @@ export function ChartRoute({
 }) {
   const router = useRouter();
   const { route } = useShell();
-  const fallback = DEPARTMENTS[0]?.slug ?? 'sales';
+  const fallback = DEPARTMENTS[0]?.slug ?? 'product';
   const active = department && isDepartment(department) ? department : fallback;
 
   return (

@@ -18,10 +18,10 @@ export function agentFixture(
   n += 1;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return {
-    slug: `marketing/${slug}`,
+    slug: `design/${slug}`,
     name,
     description: `What ${name} does, in one honest sentence (#${n}).`,
-    department: 'marketing' as ChartAgent['department'],
+    department: 'design' as ChartAgent['department'],
     icon: 'sparkles',
     tier,
     phase,
@@ -31,26 +31,26 @@ export function agentFixture(
 }
 
 /**
- * A marketing department with a deliberately uneven distribution:
+ * A design department with a deliberately uneven distribution:
  * 7 autonomous · 3 assisted · 2 human-led = 12 jobs, leaving 4 empty tier × phase cells
  * and two cells holding more than one card (so keyboard traversal is exercised).
  */
-export const marketingAgents: readonly ChartAgent[] = [
-  agentFixture('Company Deep-Dive', 'autonomous', '1-foundation'),
-  agentFixture('Content Archive Index', 'autonomous', '1-foundation'),
-  agentFixture('Brand Voice Codex', 'human-led', '1-foundation'),
+export const designAgents: readonly ChartAgent[] = [
+  agentFixture('Design System Index', 'autonomous', '1-foundation'),
+  agentFixture('Component Inventory', 'autonomous', '1-foundation'),
+  agentFixture('Visual Language Codex', 'human-led', '1-foundation'),
 
-  agentFixture('Lead Intent Scoring', 'autonomous', '2-capture'),
-  agentFixture('Creative Fatigue Detector', 'autonomous', '2-capture'),
-  agentFixture('Comment Triage', 'assisted', '2-capture'),
+  agentFixture('Usability Signal Scoring', 'autonomous', '2-capture'),
+  agentFixture('Pattern Drift Detector', 'autonomous', '2-capture'),
+  agentFixture('Feedback Triage', 'assisted', '2-capture'),
 
-  agentFixture('Ad Copy Generator', 'autonomous', '3-generate'),
-  agentFixture('Blog Draft Writer', 'assisted', '3-generate'),
-  agentFixture('Newsletter Composer', 'assisted', '3-generate'),
-  agentFixture('Campaign Brief', 'human-led', '3-generate'),
+  agentFixture('Screen Spec Generator', 'autonomous', '3-generate'),
+  agentFixture('Flow Draft Writer', 'assisted', '3-generate'),
+  agentFixture('Prototype Composer', 'assisted', '3-generate'),
+  agentFixture('Design Brief', 'human-led', '3-generate'),
 
-  agentFixture('Channel Orchestrator', 'autonomous', '4-orchestrate'),
-  agentFixture('Performance Monitor', 'autonomous', '4-orchestrate'),
+  agentFixture('Handoff Orchestrator', 'autonomous', '4-orchestrate'),
+  agentFixture('Design QA Monitor', 'autonomous', '4-orchestrate'),
 ];
 
 /** The exact shape of §2.6.2's example line: 18 autonomous + 5 assisted = 23 jobs. */

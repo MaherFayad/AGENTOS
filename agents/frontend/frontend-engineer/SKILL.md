@@ -1,7 +1,7 @@
 ---
 name: Frontend Engineer
 description: Implement a specified screen against the design system and the framework version this repo actually pins, and hand back a diff a human can read in one sitting.
-department: product
+department: frontend
 cluster: build
 icon: code
 tier: assisted

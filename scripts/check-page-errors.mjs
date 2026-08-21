@@ -82,10 +82,10 @@ const WEB = join(ROOT, 'apps', 'web');
 const ROUTES = [
   '/',
   '/p/agentos/map',
-  '/p/agentos/map/sales',
-  '/p/agentos/map/sales/account-enrichment',
+  '/p/agentos/map/design',
+  '/p/agentos/map/design/product-designer',
   '/p/agentos/chart',
-  '/p/agentos/chart/sales',
+  '/p/agentos/chart/design',
   '/p/agentos/dashboards',
   // **The detail view, and the reason it is worth naming separately.** Every other view here
   // has its deep route listed — `map/:dept/:agent`, `chart/:dept`, `threads/:id`,

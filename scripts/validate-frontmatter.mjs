@@ -42,8 +42,8 @@ const DEPARTMENTS_TS = join(ROOT, 'packages', 'contracts', 'src', 'departments.t
  * cannot rot silently (ADR-002: "the validators check that they agree").
  * ------------------------------------------------------------------ */
 
-/** ADR-001's seven, plus ADR-041's `product` **appended** at index 7. Order is the CHART tab order. */
-const DEPARTMENTS = ['sales', 'deals', 'marketing', 'operations', 'intelligence', 'customer', 'back-office', 'product'];
+/** ADR-042's six. Order is the CHART tab order and the MAP branch angle order. */
+const DEPARTMENTS = ['product', 'design', 'frontend', 'backend', 'ai', 'intelligence'];
 const TIERS = ['human-led', 'assisted', 'autonomous'];
 const PHASES = ['1-foundation', '2-capture', '3-generate', '4-orchestrate'];
 const STATUSES = ['live', 'draft', 'failing'];
@@ -640,7 +640,7 @@ async function checkContractDrift(err) {
     const mirrored = [...block[1].matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]).filter((v) => DEPARTMENTS.includes(v) || !/^[A-Z]/.test(v));
     const slugs = mirrored.filter((v, i, a) => a.indexOf(v) === i);
     if (slugs.join('|') !== DEPARTMENTS.join('|')) {
-      err(null, `contract drift: ${file} mirrors the departments as [${slugs.join(', ')}] but the enum is [${DEPARTMENTS.join(', ')}] (ADR-041)`);
+      err(null, `contract drift: ${file} mirrors the departments as [${slugs.join(', ')}] but the enum is [${DEPARTMENTS.join(', ')}] (ADR-042)`);
     }
   }
 
@@ -682,7 +682,7 @@ export async function validateAll() {
   if (registry) {
     const keys = Object.keys(registry);
     for (const d of DEPARTMENTS) if (!keys.includes(d)) globalErr('agents/_registry/clusters.json', `no clusters registered for department "${d}"`);
-    for (const k of keys) if (!DEPARTMENTS.includes(k)) globalErr('agents/_registry/clusters.json', `"${k}" is not one of the ${DEPARTMENTS.length} departments (ADR-001, ADR-041)`);
+    for (const k of keys) if (!DEPARTMENTS.includes(k)) globalErr('agents/_registry/clusters.json', `"${k}" is not one of the ${DEPARTMENTS.length} departments (ADR-042)`);
     for (const [dept, list] of Object.entries(registry)) {
       const set = new Set();
       if (!Array.isArray(list)) { globalErr('agents/_registry/clusters.json', `${dept} must be a list of {slug,label}`); continue; }
@@ -760,7 +760,7 @@ export async function validateAll() {
       if (fm[f] !== undefined && !isStr(fm[f])) err(`${f} must be a non-empty string`);
     }
 
-    if (!DEPARTMENTS.includes(fm.department)) err(`department "${fm.department}" is not one of the ${DEPARTMENTS.length} (ADR-001, ADR-041): ${DEPARTMENTS.join(', ')}`);
+    if (!DEPARTMENTS.includes(fm.department)) err(`department "${fm.department}" is not one of the ${DEPARTMENTS.length} (ADR-042): ${DEPARTMENTS.join(', ')}`);
     if (fm.department !== undefined && fm.department !== pathDept) err(`department "${fm.department}" disagrees with the path segment "${pathDept}" — the MAP branch comes from the field, the watcher finds the file by path, and they must be the same branch`);
     if (!TIERS.includes(fm.tier)) err(`tier "${fm.tier}" is not one of ${TIERS.join(' | ')} — it is a CHART row`);
     if (!PHASES.includes(fm.phase)) err(`phase "${fm.phase}" is not one of ${PHASES.join(' | ')} — it is a CHART column`);

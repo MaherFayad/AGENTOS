@@ -89,14 +89,12 @@ export const ENUMS = {
    * is what makes the literal safe.
    */
   DEPARTMENTS: [
-    'sales',
-    'deals',
-    'marketing',
-    'operations',
-    'intelligence',
-    'customer',
-    'back-office',
     'product',
+    'design',
+    'frontend',
+    'backend',
+    'ai',
+    'intelligence',
   ],
 };
 

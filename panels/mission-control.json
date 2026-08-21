@@ -5,7 +5,7 @@
   "caption": "Every run, every dollar, every failure · one screen",
   "railTitle": "MISSION CONTROL",
   "provider": "langfuse",
-  "department": ["operations"],
+  "department": ["ai"],
   "order": 1,
   "buildPrompt": "the agent-ops command center: run volume, spend, p50 latency and error rate across every agent in the tree, plus the live feed of runs — all Langfuse-backed, nothing static — and one week grid of what is scheduled to run, read from ops.schedule through a registered query, monochrome and annotated with an occurrence count rather than a cost",
   "filters": { "type": "range", "options": ["7d", "14d", "28d"], "default": "7d" },

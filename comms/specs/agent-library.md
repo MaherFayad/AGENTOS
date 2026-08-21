@@ -24,12 +24,14 @@ the coverage checker steals another agent's section:
 
 ## Decisions
 
-- **ADR-001 — the seven departments and `cluster` as a registry-validated free string.**
-  Accepted before this spec; implemented here. See `comms/decisions/ADR-001-department-taxonomy.md`.
+- **ADR-042 — the six departments; `cluster` stays a registry-validated free string.**
+  ADR-001 set the pattern and ADR-042 replaced its table wholesale (`product`, `design`,
+  `frontend`, `backend`, `ai`, `intelligence`). See
+  `comms/decisions/ADR-042-six-departments-for-a-product-house.md`.
 - **Cluster registry entries are `{slug, label}` objects, not bare strings.** ADR-001's
   illustrative JSON showed strings. §2.2 renders the caption verbatim — `SEQUENCING & SEND` —
   and no slug transform produces an ampersand, so the label is data, not a derivation. The
-  keys of `agents/_registry/clusters.json` are still exactly the seven department slugs, as
+  keys of `agents/_registry/clusters.json` are still exactly the department slugs, as
   the ADR specifies. Recorded in `comms/contracts/frontmatter-schema.md`.
 - **The first three clusters of a department are its three map sub-labels** (§2.1). Order in
   the registry is therefore meaningful, not alphabetical, and reordering it changes the map.
@@ -61,9 +63,9 @@ the coverage checker steals another agent's section:
 | REQ-LIB-02 | PART IV | The frontmatter type exports every Part IV field with no additions | `packages/contracts/src/frontmatter.ts` | `npm run typecheck` |
 | REQ-LIB-03 | PART IV | `tier` union is exactly `human-led \| assisted \| autonomous` (CHART rows) | `packages/contracts/src/frontmatter.ts` | `node scripts/validate-frontmatter.mjs` |
 | REQ-LIB-04 | PART IV | `phase` union is exactly `1-foundation \| 2-capture \| 3-generate \| 4-orchestrate` (CHART columns) | `packages/contracts/src/frontmatter.ts` | `node scripts/validate-frontmatter.mjs` |
-| REQ-LIB-05 | PART IV | `department` enum is the seven ADR-001 slugs in ADR-001 order | `packages/contracts/src/frontmatter.ts` | `node scripts/validate-frontmatter.mjs` |
+| REQ-LIB-05 | PART IV | `department` enum is the six ADR-042 slugs in ADR-042 order | `packages/contracts/src/frontmatter.ts` | `node scripts/validate-frontmatter.mjs` |
 | REQ-LIB-06 | §2.2 | Every department has ≥3 registered clusters; the first three are its map sub-labels | `agents/_registry/clusters.json` | `node scripts/validate-frontmatter.mjs` |
-| REQ-LIB-07 | §2.2 | Sales' clusters are §2.2's five verbatim, including the label `SEQUENCING & SEND` | `agents/_registry/clusters.json` | manual diff against §2.2 |
+| REQ-LIB-07 | §2.2 | ~~Sales' clusters are §2.2's five verbatim~~ — **VOID: `sales` deleted by ADR-042.** §2.2's cluster labels have no department left to land in | `agents/_registry/clusters.json` | void — see ADR-042 |
 | REQ-LIB-08 | PART IV | Validator: every required field present | `scripts/validate-frontmatter.mjs` | negative fixture run, 18 findings |
 | REQ-LIB-09 | PART IV | Validator: every enum value checked against its union | `scripts/validate-frontmatter.mjs` | negative fixture run |
 | REQ-LIB-10 | PART IV | Validator: path department segment must equal the `department` field | `scripts/validate-frontmatter.mjs` | negative fixture run |
@@ -87,9 +89,9 @@ the coverage checker steals another agent's section:
 | REQ-LIB-28 | PART IV | Seeder records provenance in the body, never in frontmatter | `scripts/seed-agents.mjs` | synthetic-source end-to-end run |
 | REQ-LIB-29 | PART IV | Seeder is idempotent — re-runs skip staged and already-curated agents | `scripts/seed-agents.mjs` | second run reports "already staged" |
 | REQ-LIB-30 | PART IV | Seeder stages to `agents/_incoming/`; a raw import cannot pass validation | `scripts/seed-agents.mjs` | promotion of an uncurated import is excluded |
-| REQ-LIB-31 | PART IV | Upstream categories that do not map to the seven departments are reported, not forced | `scripts/seed-agents.mjs` | `--unmapped` |
-| REQ-LIB-32 | PART IV | The Part IV canonical example exists field-for-field as the drawer's reference frame | `agents/sales/account-enrichment/SKILL.md` | manual diff against Part IV |
-| REQ-LIB-33 | PART IV | ≥1 agent in each of the seven departments, so no map branch is empty | `agents/` | validator's by-department line |
+| REQ-LIB-31 | PART IV | Upstream categories that do not map to the six departments are reported, not forced | `scripts/seed-agents.mjs` | `--unmapped` |
+| REQ-LIB-32 | PART IV | The Part IV canonical example exists field-for-field as the drawer's reference frame | `agents/design/product-designer/SKILL.md` | manual diff against Part IV |
+| REQ-LIB-33 | PART IV | ≥1 agent in each department, so no map branch is empty — **UNMET: `backend` has 0 (ADR-042)** | `agents/` | validator's by-department line |
 | REQ-LIB-34 | §2.6 | Seed agents span the `tier × phase` matrix so both cards and hatched cells render | `agents/` | `--json` report, 6 of 12 cells filled |
 | REQ-LIB-35 | §3.4 | `agent-auditor` reports frontmatter gaps, stale agents, error rates, missing creds, orphan skills | — | — |
 | REQ-LIB-36 | §3.4 | `agent-auditor` writes `audit/report.md` and commits only the `status` field | — | — |

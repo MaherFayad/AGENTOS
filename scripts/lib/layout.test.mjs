@@ -104,7 +104,7 @@ test('stability: adding one agent leaves every existing node within epsilon', ()
   const seed = toStoredPositions(before).positions;
 
   const after = computeLayout(
-    [...agents, { slug: 'newcomer', department: 'marketing', name: 'Newcomer', cluster: 'cluster-1', status: 'draft' }],
+    [...agents, { slug: 'newcomer', department: 'design', name: 'Newcomer', cluster: 'cluster-1', status: 'draft' }],
     seed,
     opts(),
   );
@@ -132,7 +132,7 @@ test('stability: adding one agent leaves every existing node within epsilon', ()
   // regression trips them and a rounding change does not.
   assert.ok(max < 12, `worst existing node moved ${max.toFixed(2)}px (${worst}); expected < 12`);
   assert.ok(p95 < 3, `p95 displacement ${p95.toFixed(2)}px; expected < 3`);
-  assert.ok(after.nodes.some((n) => n.id === 'marketing/newcomer'), 'the new node exists');
+  assert.ok(after.nodes.some((n) => n.id === 'design/newcomer'), 'the new node exists');
 });
 
 test('stability: a new agent does not disturb other departments at all', () => {
@@ -140,7 +140,7 @@ test('stability: a new agent does not disturb other departments at all', () => {
   const before = computeLayout(agents, {}, opts());
   const seed = toStoredPositions(before).positions;
   const after = computeLayout(
-    [...agents, { slug: 'newcomer', department: 'marketing', name: 'Newcomer', status: 'draft' }],
+    [...agents, { slug: 'newcomer', department: 'design', name: 'Newcomer', status: 'draft' }],
     seed,
     opts(),
   );
@@ -150,11 +150,11 @@ test('stability: a new agent does not disturb other departments at all', () => {
   // departments: 0.63px, i.e. invisible at any zoom in the 30–300% budget.
   const wasAt = positionsOf(before);
   for (const n of after.nodes) {
-    if (n.department === 'marketing') continue;
+    if (n.department === 'design') continue;
     const p = wasAt.get(n.id);
     if (!p) continue;
     const d = Math.hypot(n.x - p.x, n.y - p.y);
-    assert.ok(d < 1, `${n.id} in ${n.department} moved ${d.toFixed(2)}px when a marketing agent was added`);
+    assert.ok(d < 1, `${n.id} in ${n.department} moved ${d.toFixed(2)}px when a design agent was added`);
   }
 });
 
@@ -181,8 +181,8 @@ test('stability: a re-seeded build only thaws the neighbourhood of what is new',
   const after = computeLayout(
     [
       ...agents,
-      { slug: 'n-one', department: 'customer', name: 'One', status: 'live', breaks_into: ['a', 'b'] },
-      { slug: 'n-two', department: 'customer', name: 'Two', status: 'draft' },
+      { slug: 'n-one', department: 'frontend', name: 'One', status: 'live', breaks_into: ['a', 'b'] },
+      { slug: 'n-two', department: 'frontend', name: 'Two', status: 'draft' },
     ],
     seed,
     opts(),
@@ -196,9 +196,12 @@ test('stability: a re-seeded build only thaws the neighbourhood of what is new',
 
   /**
    * **ADR-041 weakened this assertion and the weakening is real, not cosmetic.** It used to
-   * require every moved node to be in `customer`. Eight branches share 360° where seven did,
-   * so adjacent rays are 6.4° closer and `thawRadius` now reaches across a branch boundary:
-   * measured here, 6 of 87 nodes move and one of them is on `intelligence`.
+   * require every moved node to be in one department. Branch count changes the ray spacing —
+   * eight branches put adjacent rays 6.4° closer than seven did — and `thawRadius` then
+   * reaches across a branch boundary, so nodes on a *neighbouring* department move too.
+   * ADR-042's six widens the spacing back to 60°, which can only reduce the spill; the
+   * assertion stays stated at neighbourhood scope because the ceiling, not the count, is
+   * what ADR-003 actually promises.
    *
    * So the claim is stated as ADR-003 actually makes it — *a new agent moves its
    * neighbourhood, never the galaxy* — with the neighbourhood being the department and its
@@ -207,12 +210,12 @@ test('stability: a re-seeded build only thaws the neighbourhood of what is new',
    * regression and turns this red.
    */
   const ids = ADR_001_DEPARTMENTS.map((d) => d.id);
-  const at = ids.indexOf('customer');
+  const at = ids.indexOf('frontend');
   const neighbourhood = new Set([ids[at], ids[(at - 1 + ids.length) % ids.length], ids[(at + 1) % ids.length]]);
   for (const n of moved) {
     assert.ok(
       neighbourhood.has(n.department),
-      `${n.id} (${n.department}) moved for a customer-branch drop — outside customer and its rail neighbours`,
+      `${n.id} (${n.department}) moved for a frontend-branch drop — outside frontend and its rail neighbours`,
     );
   }
   assert.ok(
@@ -224,19 +227,19 @@ test('stability: a re-seeded build only thaws the neighbourhood of what is new',
 /* ── shape: departments, branches, sizes ───────────────────────────────────── */
 
 /**
- * One literal, deliberately: the **contract's** count (ADR-001's seven plus ADR-041's
- * `product`). Everything downstream derives from the table, so adding a ninth department is
- * a one-line edit here rather than five — but a department silently *lost* from the table
- * still turns this red, which a fully derived test could not do.
+ * One literal, deliberately: the **contract's** count (ADR-042's six). Everything downstream
+ * derives from the table, so changing the department set is a one-line edit here rather than
+ * five — but a department silently *lost* from the table still turns this red, which a fully
+ * derived test could not do.
  */
-test('every branch sits on its own ADR-001/ADR-041 angle, sales at twelve o’clock', () => {
+test('every branch sits on its own ADR-042 angle, product at twelve o’clock', () => {
   const p = computeLayout(library(), {}, opts());
   const count = ADR_001_DEPARTMENTS.length;
-  assert.equal(count, 8, 'ADR-001 (seven) amended by ADR-041 (product) — update this with the ADR, not to match the code');
+  assert.equal(count, 6, 'ADR-042 fixes the enum at six — update this with the ADR, not to match the code');
   assert.equal(p.departments.length, count);
-  assert.equal(p.departments[0].id, 'sales');
+  assert.equal(p.departments[0].id, 'product');
   assert.equal(p.departments[0].angle, -Math.PI / 2);
-  assert.equal(p.departments.at(-1).id, 'product');
+  assert.equal(p.departments.at(-1).id, 'intelligence');
   p.departments.forEach((d, i) => assert.equal(d.angle, branchAngle(i, count)));
 });
 
@@ -305,17 +308,17 @@ test('collision: no two nodes overlap after simulation', () => {
 test('pulse dots only travel edges of live branches (§2.1)', () => {
   const p = computeLayout(
     [
-      { slug: 'alive', department: 'sales', name: 'A', status: 'live', breaks_into: ['x'] },
-      { slug: 'asleep', department: 'deals', name: 'B', status: 'draft' },
+      { slug: 'alive', department: 'product', name: 'A', status: 'live', breaks_into: ['x'] },
+      { slug: 'asleep', department: 'design', name: 'B', status: 'draft' },
     ],
     {},
     opts(),
   );
   const edge = (t) => p.edges.find((e) => e.target === t);
-  assert.equal(edge('sales/_anchor').pulse, true, 'the spoke to a live branch pulses');
-  assert.equal(edge('deals/_anchor').pulse, false, 'a dormant branch does not');
-  assert.equal(edge('sales/alive').pulse, true);
-  assert.equal(edge('deals/asleep').pulse, false);
+  assert.equal(edge('product/_anchor').pulse, true, 'the spoke to a live branch pulses');
+  assert.equal(edge('design/_anchor').pulse, false, 'a dormant branch does not');
+  assert.equal(edge('product/alive').pulse, true);
+  assert.equal(edge('design/asleep').pulse, false);
 });
 
 test('edge curvature is slight, signed and stable per edge', () => {
@@ -330,24 +333,24 @@ test('edge curvature is slight, signed and stable per edge', () => {
 test('badges: schedule sets the clock, approval pending is runtime-only (§3.2)', () => {
   const p = computeLayout(
     [
-      { slug: 'cron', department: 'operations', name: 'C', status: 'live', schedule: '0 6 * * 1' },
-      { slug: 'gate', department: 'operations', name: 'G', status: 'live', approval: 'required' },
+      { slug: 'cron', department: 'ai', name: 'C', status: 'live', schedule: '0 6 * * 1' },
+      { slug: 'gate', department: 'ai', name: 'G', status: 'live', approval: 'required' },
     ],
     {},
     opts(),
   );
-  assert.equal(p.nodes.find((n) => n.id === 'operations/cron').scheduled, true);
-  assert.equal(p.nodes.find((n) => n.id === 'operations/gate').scheduled, false);
+  assert.equal(p.nodes.find((n) => n.id === 'ai/cron').scheduled, true);
+  assert.equal(p.nodes.find((n) => n.id === 'ai/gate').scheduled, false);
   assert.equal(
-    p.nodes.find((n) => n.id === 'operations/gate').approvalPending,
+    p.nodes.find((n) => n.id === 'ai/gate').approvalPending,
     false,
     '`approval: required` is a capability, not a pending gate — the pulse comes from /ws/graph',
   );
 });
 
 test('an unknown status degrades to draft rather than rendering half-parsed', () => {
-  const p = computeLayout([{ slug: 'odd', department: 'sales', name: 'O', status: 'banana' }], {}, opts());
-  assert.equal(p.nodes.find((n) => n.id === 'sales/odd').status, 'draft');
+  const p = computeLayout([{ slug: 'odd', department: 'product', name: 'O', status: 'banana' }], {}, opts());
+  assert.equal(p.nodes.find((n) => n.id === 'product/odd').status, 'draft');
 });
 
 test('an agent in an unknown department is excluded, loudly', () => {
@@ -374,12 +377,12 @@ test('zero agents renders one empty branch per department and a dark core, not f
 });
 
 test('sublabels come from the cluster registry, padded honestly when it is thin', () => {
-  const clusters = { sales: ['lead-sourcing', 'enrichment', 'outreach-writing', 'targeting'], deals: ['pipeline'] };
+  const clusters = { design: ['interaction', 'design-system', 'visual', 'prototyping'], backend: ['api'] };
   const p = computeLayout([], {}, opts({ clusters }));
-  const sales = p.departments.find((d) => d.id === 'sales');
-  const deals = p.departments.find((d) => d.id === 'deals');
-  assert.deepEqual(sales.sublabels, ['lead-sourcing', 'enrichment', 'outreach-writing']);
-  assert.deepEqual(deals.sublabels, ['pipeline', '', ''], 'invented cluster names are worse than a gap');
+  const design = p.departments.find((d) => d.id === 'design');
+  const backend = p.departments.find((d) => d.id === 'backend');
+  assert.deepEqual(design.sublabels, ['interaction', 'design-system', 'visual']);
+  assert.deepEqual(backend.sublabels, ['api', '', ''], 'invented cluster names are worse than a gap');
 });
 
 test('brain completeness is clamped to 0…1 and defaults to zero', () => {

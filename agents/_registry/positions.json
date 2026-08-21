@@ -1,262 +1,142 @@
 {
-  "version": "sha256:ad7b0cf5c05a95f8a31c14e3b281466efb8a0144b210a6f39836e6b550fa832f",
-  "computedAt": "2026-08-21T16:50:18.096Z",
+  "version": "sha256:486a625729f3f22e71d00780dba032e9d1c9ad7cf96ef062da1b42a3a0b67193",
+  "computedAt": "2026-08-21T22:23:23.932Z",
   "positions": {
-    "back-office/_anchor": {
-      "x": -273.2,
-      "y": -147.5
+    "ai/_anchor": {
+      "x": -321.7,
+      "y": 171.2
     },
-    "back-office/invoice-chaser": {
-      "x": -442.5,
-      "y": -304.3
+    "ai/agent-auditor": {
+      "x": -538.7,
+      "y": 291.3
     },
-    "back-office/invoice-chaser/ageing-builder": {
-      "x": -467.9,
-      "y": -385.6
+    "ai/agent-auditor/connector-checker": {
+      "x": -588.9,
+      "y": 341.8
     },
-    "back-office/invoice-chaser/escalation-ladder": {
-      "x": -505.3,
-      "y": -344.4
+    "ai/agent-auditor/error-rate-ranker": {
+      "x": -603.1,
+      "y": 272.2
     },
-    "back-office/invoice-chaser/reminder-drafter": {
-      "x": -490.8,
-      "y": -369.3
+    "ai/agent-auditor/frontmatter-gap-finder": {
+      "x": -568.1,
+      "y": 353.9
     },
-    "customer/_anchor": {
-      "x": -304.1,
-      "y": 119
+    "ai/agent-auditor/orphan-skill-finder": {
+      "x": -603.9,
+      "y": 323.1
     },
-    "customer/support-triage": {
-      "x": -557.2,
-      "y": 127.6
+    "ai/agent-auditor/stale-agent-finder": {
+      "x": -607.8,
+      "y": 299.4
     },
-    "customer/support-triage/escalation-router": {
-      "x": -623.5,
-      "y": 155.9
+    "backend/_anchor": {
+      "x": 12.5,
+      "y": 321.4
     },
-    "customer/support-triage/intent-classifier": {
-      "x": -605.8,
-      "y": 176.8
+    "design/_anchor": {
+      "x": 281.2,
+      "y": -171.2
     },
-    "customer/support-triage/reply-drafter": {
-      "x": -623.3,
-      "y": 105.2
+    "design/product-designer": {
+      "x": 395,
+      "y": -306.4
     },
-    "customer/support-triage/severity-scorer": {
-      "x": -628.4,
-      "y": 131.6
+    "design/product-designer/component-auditor": {
+      "x": 473.6,
+      "y": -311.3
     },
-    "deals/_anchor": {
-      "x": 293.9,
-      "y": -229.5
+    "design/product-designer/flow-mapper": {
+      "x": 455.3,
+      "y": -339.3
     },
-    "deals/deal-reactivation": {
-      "x": 438.7,
-      "y": -372
+    "design/product-designer/screen-speccer": {
+      "x": 469.1,
+      "y": -287.7
     },
-    "deals/deal-reactivation/last-touch-summariser": {
-      "x": 502.3,
-      "y": -409
+    "design/product-designer/state-coverage-checker": {
+      "x": 448.3,
+      "y": -362.2
     },
-    "deals/deal-reactivation/reactivation-drafter": {
-      "x": 481.6,
-      "y": -426.8
+    "design/product-designer/token-conformer": {
+      "x": 478.9,
+      "y": -334.7
     },
-    "deals/deal-reactivation/stall-detector": {
-      "x": 512.8,
-      "y": -383.7
+    "frontend/_anchor": {
+      "x": 287.9,
+      "y": 163.6
     },
-    "deals/proposal-drafter": {
-      "x": 500.2,
-      "y": -338.4
+    "frontend/frontend-engineer": {
+      "x": 453.4,
+      "y": 221.9
     },
-    "deals/proposal-drafter/pricing-applier": {
-      "x": 567,
-      "y": -377.5
+    "frontend/frontend-engineer/accessibility-pass": {
+      "x": 499.8,
+      "y": 283.8
     },
-    "deals/proposal-drafter/scope-assembler": {
-      "x": 574.8,
-      "y": -351.1
+    "frontend/frontend-engineer/component-scaffolder": {
+      "x": 477.6,
+      "y": 292.8
     },
-    "deals/proposal-drafter/terms-checker": {
-      "x": 549,
-      "y": -395.9
+    "frontend/frontend-engineer/diff-narrator": {
+      "x": 521.2,
+      "y": 272.8
+    },
+    "frontend/frontend-engineer/state-wirer": {
+      "x": 523.5,
+      "y": 248.9
+    },
+    "frontend/frontend-engineer/token-conformer": {
+      "x": 528,
+      "y": 225.4
     },
     "intelligence/_anchor": {
-      "x": -150.1,
-      "y": 313.7
+      "x": -127,
+      "y": 239.7
     },
     "intelligence/company-deep-dive": {
-      "x": -284.1,
-      "y": 511.6
+      "x": -284.7,
+      "y": 451.3
     },
     "intelligence/company-deep-dive/claim-verifier": {
-      "x": -291.8,
-      "y": 583.1
+      "x": -305.1,
+      "y": 538.5
     },
     "intelligence/company-deep-dive/org-mapper": {
-      "x": -333.9,
-      "y": 563.2
+      "x": -346.2,
+      "y": 520.7
     },
     "intelligence/company-deep-dive/source-gatherer": {
-      "x": -346.9,
-      "y": 539.3
+      "x": -355.6,
+      "y": 498.6
     },
     "intelligence/company-deep-dive/thesis-writer": {
-      "x": -315.4,
-      "y": 578.5
+      "x": -329.1,
+      "y": 537.5
     },
     "intelligence/company-interview": {
-      "x": -163.4,
-      "y": 510.2
+      "x": -180.4,
+      "y": 453.8
     },
     "intelligence/company-interview/answer-normaliser": {
-      "x": -164.8,
-      "y": 581.8
+      "x": -193.3,
+      "y": 532.1
     },
     "intelligence/company-interview/brain-writer": {
-      "x": -207.8,
-      "y": 569.3
+      "x": -235.2,
+      "y": 524.1
     },
     "intelligence/company-interview/gap-reporter": {
-      "x": -188.7,
-      "y": 583.9
+      "x": -216.3,
+      "y": 538.9
     },
     "intelligence/company-interview/question-set": {
-      "x": -220.5,
-      "y": 548.9
-    },
-    "marketing/_anchor": {
-      "x": 350.4,
-      "y": 80.1
-    },
-    "marketing/brand-voice-guard": {
-      "x": 539.7,
-      "y": 166.5
-    },
-    "marketing/brand-voice-guard/red-line-checker": {
-      "x": 603.9,
-      "y": 196.1
-    },
-    "marketing/brand-voice-guard/register-checker": {
-      "x": 608.9,
-      "y": 171.9
-    },
-    "marketing/brand-voice-guard/tone-scorer": {
-      "x": 585.9,
-      "y": 216.5
-    },
-    "marketing/content-repurposer": {
-      "x": 565.3,
-      "y": 90.2
-    },
-    "marketing/content-repurposer/angle-extractor": {
-      "x": 629.7,
-      "y": 119.7
-    },
-    "marketing/content-repurposer/channel-adapter": {
-      "x": 635,
-      "y": 96.2
-    },
-    "marketing/content-repurposer/hook-writer": {
-      "x": 630.9,
-      "y": 71.8
-    },
-    "operations/_anchor": {
-      "x": 152.3,
-      "y": 317.5
-    },
-    "operations/agent-auditor": {
-      "x": 233.2,
-      "y": 551.4
-    },
-    "operations/agent-auditor/connector-checker": {
-      "x": 227.5,
-      "y": 622.2
-    },
-    "operations/agent-auditor/error-rate-ranker": {
-      "x": 251.4,
-      "y": 620.6
-    },
-    "operations/agent-auditor/frontmatter-gap-finder": {
-      "x": 202.4,
-      "y": 611.2
-    },
-    "operations/agent-auditor/orphan-skill-finder": {
-      "x": 274.6,
-      "y": 614.5
-    },
-    "operations/agent-auditor/stale-agent-finder": {
-      "x": 289.2,
-      "y": 595.4
-    },
-    "operations/follow-up-coordinator": {
-      "x": 272.9,
-      "y": 484.8
-    },
-    "operations/follow-up-coordinator/action-item-extractor": {
-      "x": 336.6,
-      "y": 511.4
-    },
-    "operations/follow-up-coordinator/owner-assigner": {
-      "x": 326.5,
-      "y": 533.2
-    },
-    "operations/follow-up-coordinator/recap-writer": {
-      "x": 307,
-      "y": 547.2
+      "x": -245.3,
+      "y": 502.3
     },
     "product/_anchor": {
       "x": -324.9,
       "y": -326.2
-    },
-    "product/frontend-engineer": {
-      "x": -372.5,
-      "y": -505.8
-    },
-    "product/frontend-engineer/accessibility-pass": {
-      "x": -397.2,
-      "y": -571.1
-    },
-    "product/frontend-engineer/component-scaffolder": {
-      "x": -351.6,
-      "y": -571.4
-    },
-    "product/frontend-engineer/diff-narrator": {
-      "x": -331.4,
-      "y": -557.6
-    },
-    "product/frontend-engineer/state-wirer": {
-      "x": -433.3,
-      "y": -485.9
-    },
-    "product/frontend-engineer/token-conformer": {
-      "x": -374.4,
-      "y": -578.7
-    },
-    "product/product-designer": {
-      "x": -530.3,
-      "y": -515.5
-    },
-    "product/product-designer/component-auditor": {
-      "x": -585.4,
-      "y": -566.4
-    },
-    "product/product-designer/flow-mapper": {
-      "x": -600.1,
-      "y": -522.2
-    },
-    "product/product-designer/screen-speccer": {
-      "x": -544.1,
-      "y": -585.4
-    },
-    "product/product-designer/state-coverage-checker": {
-      "x": -598.2,
-      "y": -546.2
-    },
-    "product/product-designer/token-conformer": {
-      "x": -567.9,
-      "y": -583
     },
     "product/project-orchestrator": {
       "x": -549.6,
@@ -305,42 +185,6 @@
     "product/ux-researcher/transcript-synthesiser": {
       "x": -430.4,
       "y": -605.1
-    },
-    "sales/_anchor": {
-      "x": 2.5,
-      "y": -378.7
-    },
-    "sales/account-enrichment": {
-      "x": -28.3,
-      "y": -587.6
-    },
-    "sales/account-enrichment/firmographic-appender": {
-      "x": -28.8,
-      "y": -661.2
-    },
-    "sales/account-enrichment/growth-signal-scorer": {
-      "x": -52.7,
-      "y": -659.5
-    },
-    "sales/account-enrichment/tech-stack-detector": {
-      "x": -73.9,
-      "y": -645.8
-    },
-    "sales/database-mining": {
-      "x": 41.1,
-      "y": -597
-    },
-    "sales/database-mining/contact-resolver": {
-      "x": 77.6,
-      "y": -656.7
-    },
-    "sales/database-mining/icp-filter": {
-      "x": 52.4,
-      "y": -668.6
-    },
-    "sales/database-mining/list-deduper": {
-      "x": 27,
-      "y": -668.6
     }
   }
 }

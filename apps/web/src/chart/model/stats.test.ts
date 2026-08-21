@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveStats, statLineSegments, statLineText } from './stats';
-import { emptyDepartmentAgents, marketingAgents, specExampleAgents } from './__fixtures__/agents';
+import { emptyDepartmentAgents, designAgents, specExampleAgents } from './__fixtures__/agents';
 
 /**
  * REQ-CHT-08/09/10 — the stat line is DERIVED. These tests feed fixtures in and assert
@@ -8,7 +8,7 @@ import { emptyDepartmentAgents, marketingAgents, specExampleAgents } from './__f
  */
 describe('deriveStats', () => {
   it('counts each tier from the agent set, never from a literal', () => {
-    expect(deriveStats(marketingAgents)).toEqual({
+    expect(deriveStats(designAgents)).toEqual({
       total: 12,
       autonomous: 7,
       assisted: 3,
@@ -25,8 +25,8 @@ describe('deriveStats', () => {
   });
 
   it('moves with the data — adding one autonomous agent moves both numerals', () => {
-    const before = deriveStats(marketingAgents);
-    const after = deriveStats([...marketingAgents, marketingAgents[0]]);
+    const before = deriveStats(designAgents);
+    const after = deriveStats([...designAgents, designAgents[0]]);
     expect(after.autonomous).toBe(before.autonomous + 1);
     expect(after.total).toBe(before.total + 1);
   });
@@ -43,7 +43,7 @@ describe('deriveStats', () => {
 
 describe('statLineSegments', () => {
   it('renders the §2.6.2 sentence with the numerals emphasised', () => {
-    const stats = deriveStats(marketingAgents);
+    const stats = deriveStats(designAgents);
     expect(statLineText(stats)).toBe('7 of 12 jobs run autonomously · 3 assisted · the rest stay human');
     expect(statLineSegments(stats).filter((s) => s.strong).map((s) => s.text)).toEqual([
       '7 of 12 jobs',

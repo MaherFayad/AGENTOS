@@ -1,6 +1,11 @@
 # ADR-004 — Our six Command Centers
 
-**Date:** 2026-08-15 · **Author:** `dashboards-engineer` · **Status:** accepted
+**Date:** 2026-08-15 · **Author:** `dashboards-engineer` · **Status:** superseded
+**Superseded in part by:** [ADR-042](ADR-042-six-departments-for-a-product-house.md) — four of
+the six centers are deleted (`pipeline`, `content-studio`, `finance`, `client-delivery`), each
+having been scoped to a department that no longer exists. `mission-control` (retargeted to `ai`)
+and `product-funnels` stand, and the panel *schema* and the seven-widget rule are untouched — so
+everything below still reads true except the roster of six.
 **Affects:** `comms/contracts/panel-schema.md`, `panels/*.json`, M6, BOARD open question M6
 
 ## Context

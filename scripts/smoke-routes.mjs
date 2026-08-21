@@ -93,10 +93,10 @@ const ROUTES = [
   // to the tab's own text node, angle brackets included, and falsified: `>CHART<` fails
   // against a page whose `<meta>` still names CHART.
   { path: '/p/agentos/map', marker: '>CHART<' },
-  { path: '/p/agentos/map/sales', marker: '>CHART<' },
-  { path: '/p/agentos/map/sales/account-enrichment', marker: '>CHART<' },
+  { path: '/p/agentos/map/design', marker: '>CHART<' },
+  { path: '/p/agentos/map/design/product-designer', marker: '>CHART<' },
   { path: '/p/agentos/chart', marker: '>MAP<' },
-  { path: '/p/agentos/chart/sales', marker: '>MAP<' },
+  { path: '/p/agentos/chart/design', marker: '>MAP<' },
   { path: '/p/agentos/dashboards', marker: '>MAP<' },
   // **The one content marker in this table, and it is deliberate.** Every other marker here is
   // chrome, because chrome is the cheapest proof the shell rendered rather than an error page.

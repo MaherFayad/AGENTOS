@@ -6,7 +6,7 @@
   "railTitle": "PRODUCT",
   "provider": "amplitude",
   "department": ["intelligence"],
-  "order": 5,
+  "order": 2,
   "buildPrompt": "the product command center for the intelligence branch: the signup-to-activation funnel as a bar list, weekly active users as an area chart, and the events that move activation — sourced by the amplitude-sync agent into Postgres, never queried from the browser",
   "filters": { "type": "range", "options": ["7d", "14d", "28d"], "default": "28d" },
   "kpis": [

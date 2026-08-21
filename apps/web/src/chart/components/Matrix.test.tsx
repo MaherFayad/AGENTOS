@@ -4,13 +4,13 @@ import { Matrix } from './Matrix';
 import { JobCard } from './JobCard';
 import { buildMatrix, isEmptyCell } from '../model/matrix';
 import { PHASE_COLUMNS, TIER_ROWS } from '../model/taxonomy';
-import { marketingAgents } from '../model/__fixtures__/agents';
+import { designAgents } from '../model/__fixtures__/agents';
 
 /**
  * The assembled board. These tests need the shared primitives and `lucide-react`, so they
  * are kept apart from the model and hatch tests, which must stay runnable on their own.
  */
-const matrix = buildMatrix(marketingAgents);
+const matrix = buildMatrix(designAgents);
 const markup = renderToStaticMarkup(<Matrix matrix={matrix} departmentLabel="Marketing" />);
 const occurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 
@@ -47,7 +47,7 @@ describe('<Matrix>', () => {
   });
 
   it('renders one job card per agent', () => {
-    expect(occurrences(markup, 'data-testid="chart-job-card"')).toBe(marketingAgents.length);
+    expect(occurrences(markup, 'data-testid="chart-job-card"')).toBe(designAgents.length);
   });
 
   it('shows a derived jobs-count pill on every tier row header', () => {
@@ -76,7 +76,7 @@ describe('<Matrix>', () => {
 });
 
 describe('<JobCard>', () => {
-  const agent = marketingAgents[0];
+  const agent = designAgents[0];
   const collapsed = renderToStaticMarkup(
     <JobCard agent={agent} id="c" tabIndex={0} expanded={false} onToggle={() => {}} onMoreDetail={() => {}} />,
   );

@@ -19,20 +19,18 @@
  * rather than a test-harness preference. `runs.test.mjs` keeps `normalizeRuns`.
  */
 
-import { LEGACY_UNSCOPED_PATHS, PROJECT_ROUTE_PREFIX, RUNNER_ROUTES } from '@agnetos/contracts';
+import { DEPARTMENT_SLUGS, LEGACY_UNSCOPED_PATHS, PROJECT_ROUTE_PREFIX, RUNNER_ROUTES } from '@agnetos/contracts';
 import { describe, expect, it } from 'vitest';
 import { NO_PROJECT, planLangfuse, toRunnerRange, urlsOf, type Plan } from './endpoints';
 
 const P = 'agentos';
-const DEPARTMENTS = [
-  'sales',
-  'deals',
-  'marketing',
-  'operations',
-  'intelligence',
-  'customer',
-  'back-office',
-];
+/**
+ * The real enum, not a hand-typed copy. This was a literal list of ADR-001's seven — it had
+ * already missed ADR-041's `product` without any test noticing, because every assertion below
+ * is relative to `DEPARTMENTS.length`. A list that can silently disagree with the contract it
+ * stands for is the drift this suite exists to catch, so it now reads the contract.
+ */
+const DEPARTMENTS: readonly string[] = DEPARTMENT_SLUGS;
 
 /** The scoped forms of the paths `runner-engineer`'s contract lists as refused. */
 const REFUSED = new Set(LEGACY_UNSCOPED_PATHS.map((r) => r.path));
@@ -57,7 +55,7 @@ const urls = (plan: Plan): string[] => urlsOf(plan);
 const PLANS: Record<string, Plan> = {
   scalar: planLangfuse({ metric: 'runs', range: '7d' }, { project: P }),
   'scalar+filter': planLangfuse(
-    { metric: 'cost', range: '28d', filter: { department: 'sales' }, compare: 'previous-period' },
+    { metric: 'cost', range: '28d', filter: { department: 'design' }, compare: 'previous-period' },
     { project: P },
   ),
   series: planLangfuse({ metric: 'runs', shape: 'series', range: '14d' }, { project: P }),

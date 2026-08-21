@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { isExpandKey, moveGridFocus, posId, samePos } from './keyboard';
 import { buildMatrix, cellCounts } from './matrix';
-import { marketingAgents } from './__fixtures__/agents';
+import { designAgents } from './__fixtures__/agents';
 
 /** counts = [[1,0,1,0], [0,1,2,0], [2,2,1,2]] for the marketing fixture. */
-const counts = cellCounts(buildMatrix(marketingAgents));
+const counts = cellCounts(buildMatrix(designAgents));
 
 const at = (row: number, col: number, item = 0) => ({ row, col, item });
 

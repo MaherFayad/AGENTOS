@@ -77,7 +77,7 @@ test('the exact declaration that could not write its own artifact is still rejec
 test('every agent in the library can produce the deliverable its own body describes', async () => {
   const defs = await loadRegistry();
   const files = await findSkillFiles(AGENTS);
-  assert.ok(files.length >= 12, 'the library did not load');
+  assert.ok(files.length >= 5, 'the library did not load'); // was 12; ADR-042 left 7
 
   const cannot = [];
   for (const file of files) {

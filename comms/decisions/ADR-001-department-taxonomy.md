@@ -1,6 +1,8 @@
 # ADR-001 — The seven canonical departments, and `cluster`
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-042](ADR-042-six-departments-for-a-product-house.md) — the
+  department table is replaced in full. The two structural rules below survive: `departments.ts`
+  is the single declaration site, and `cluster` is a registry-validated free string.
 - **Date:** 2026-08-15
 - **Owner:** `agent-library-curator`
 - **Proposed by:** `commandcenter-orchestrator` (unblocking ruling — owner may refine the

@@ -1,8 +1,8 @@
 ---
 name: Product Designer
 description: Take a decided problem to a specified flow — every screen, every state, every component named against the design system rather than redrawn beside it.
-department: product
-cluster: design
+department: design
+cluster: interaction
 icon: pen-tool
 tier: assisted
 phase: 3-generate

@@ -15,7 +15,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DepartmentRails } from './DepartmentRails';
 
 const rails = () => {
-  render(<DepartmentRails department="sales" onPrev={vi.fn()} onNext={vi.fn()} />);
+  render(<DepartmentRails department="design" onPrev={vi.fn()} onNext={vi.fn()} />);
   return screen.getAllByRole('button');
 };
 

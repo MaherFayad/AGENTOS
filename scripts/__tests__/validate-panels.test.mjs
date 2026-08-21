@@ -27,7 +27,7 @@ const base = () => ({
   caption: 'One line about it',
   railTitle: 'SAMPLE',
   provider: 'langfuse',
-  department: ['operations'],
+  department: ['ai'],
   order: 1,
   buildPrompt: 'a sample command center used only by the validator tests',
   kpis: Array.from({ length: 5 }, (_, i) => ({
@@ -439,9 +439,23 @@ test('the enum copies match packages/contracts/src/panels.ts', async () => {
   assert.deepEqual(errors(checkContractParity(ts)), []);
 });
 
-test('every shipped panel is valid and every widget type is exercised', async () => {
+/**
+ * ADR-042 deleted four of ADR-004's six Command Centers — `pipeline`, `content-studio`,
+ * `finance` and `client-delivery` were each scoped to a department that no longer exists.
+ * Two ship today, and `progress-table` therefore has no panel exercising its renderer.
+ *
+ * The coverage claim is kept but **inverted**: rather than asserting every type is used —
+ * which is now false and would have to be deleted — the unexercised set is pinned to an
+ * explicit list. A *newly* unexercised type still turns this red, and the list shrinks to
+ * empty as the replacement dashboards land. A renderer no panel drives is a renderer no
+ * runtime gate has ever executed, which is the hazard this assertion exists to name; the
+ * pin keeps that hazard visible instead of retiring it.
+ */
+const UNEXERCISED_WIDGET_TYPES = ['progress-table'];
+
+test('every shipped panel is valid, and only the named widget types go unexercised', async () => {
   const files = (await readdir(join(ROOT, 'panels'))).filter((f) => f.endsWith('.json'));
-  assert.ok(files.length >= 6, 'ADR-004 ships six Command Centers');
+  assert.ok(files.length >= 2, 'the panels directory did not load — this gate cannot see what it checks');
 
   const seen = new Set();
   for (const file of files) {
@@ -449,7 +463,12 @@ test('every shipped panel is valid and every widget type is exercised', async ()
     assert.deepEqual(errors(validatePanel(panel, { fileName: file })), [], `${file} is invalid`);
     for (const w of panel.widgets) seen.add(w.type);
   }
-  assert.deepEqual([...seen].sort(), [...ENUMS.WIDGET_TYPES].sort());
+  const unexercised = [...ENUMS.WIDGET_TYPES].filter((t) => !seen.has(t)).sort();
+  assert.deepEqual(
+    unexercised,
+    [...UNEXERCISED_WIDGET_TYPES].sort(),
+    'a widget type gained or lost panel coverage — update UNEXERCISED_WIDGET_TYPES with the panel, not to match the code',
+  );
 });
 
 test('no shipped panel fakes a business number with a static value', async () => {

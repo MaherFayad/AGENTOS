@@ -5,7 +5,7 @@ import { HATCH_ANGLE_DEG, HATCH_BACKGROUND } from '../model/hatch';
 import { buildMatrix, isEmptyCell } from '../model/matrix';
 import { posId } from '../model/keyboard';
 import { phaseColumn, tierRow } from '../model/taxonomy';
-import { emptyDepartmentAgents, marketingAgents } from '../model/__fixtures__/agents';
+import { emptyDepartmentAgents, designAgents } from '../model/__fixtures__/agents';
 
 /**
  * REQ-CHT-31/32 — §2.6.6. Every empty tier × phase renders the diagonal-hatch block.
@@ -13,7 +13,7 @@ import { emptyDepartmentAgents, marketingAgents } from '../model/__fixtures__/ag
  * and a cell that becomes empty is checked automatically.
  */
 describe('<EmptyCell> — the §2.6.6 hatch', () => {
-  const matrix = buildMatrix(marketingAgents);
+  const matrix = buildMatrix(designAgents);
   const empties = matrix.cells.flat().filter(isEmptyCell);
 
   it('has empty cells to test in the first place', () => {

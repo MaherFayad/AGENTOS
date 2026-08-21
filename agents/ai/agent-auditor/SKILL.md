@@ -1,8 +1,8 @@
 ---
 name: Agent Auditor
 description: Walk the agent library and the run history, then report what is broken, stale, unwired or lying — and mark it on the map.
-department: operations
-cluster: quality-and-audit
+department: ai
+cluster: agent-ops
 icon: clipboard-check
 tier: autonomous
 phase: 4-orchestrate

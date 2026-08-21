@@ -5,7 +5,7 @@ import { toChartAgent } from './agents';
 const SAMPLE = `---
 name: Account Enrichment
 description: Layer firmographics onto target accounts.
-department: sales            # branch
+department: product          # branch
 icon: building
 tier: autonomous
 phase: 2-capture
@@ -17,13 +17,13 @@ Body is ignored.
 
 describe('parseSkillMarkdown', () => {
   it('projects the chart fields from a SKILL.md and ignores the body', () => {
-    const record = parseSkillMarkdown(SAMPLE, 'sales/account-enrichment');
+    const record = parseSkillMarkdown(SAMPLE, 'product/ux-researcher');
     expect(record).not.toBeNull();
     const agent = toChartAgent(record!);
     expect(agent).toMatchObject({
-      slug: 'sales/account-enrichment',
+      slug: 'product/ux-researcher',
       name: 'Account Enrichment',
-      department: 'sales',
+      department: 'product',
       icon: 'building',
       tier: 'autonomous',
       phase: '2-capture',
@@ -32,15 +32,15 @@ describe('parseSkillMarkdown', () => {
   });
 
   it('drops a file whose path department disagrees with the field (invariant 1)', () => {
-    expect(parseSkillMarkdown(SAMPLE, 'marketing/account-enrichment')).toBeNull();
+    expect(parseSkillMarkdown(SAMPLE, 'design/ux-researcher')).toBeNull();
   });
 
   it('drops a file with a tier or phase outside the frontmatter unions', () => {
     const bad = SAMPLE.replace('tier: autonomous', 'tier: magic');
-    expect(parseSkillMarkdown(bad, 'sales/account-enrichment')).toBeNull();
+    expect(parseSkillMarkdown(bad, 'product/ux-researcher')).toBeNull();
   });
 
   it('returns null when there is no frontmatter block', () => {
-    expect(parseSkillMarkdown('# just a readme', 'sales/x')).toBeNull();
+    expect(parseSkillMarkdown('# just a readme', 'product/x')).toBeNull();
   });
 });

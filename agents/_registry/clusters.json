@@ -1,58 +1,44 @@
 {
-  "sales": [
-    { "slug": "lead-sourcing", "label": "LEAD SOURCING" },
-    { "slug": "enrichment", "label": "ENRICHMENT" },
-    { "slug": "outreach-writing", "label": "OUTREACH WRITING" },
-    { "slug": "targeting", "label": "TARGETING" },
-    { "slug": "sequencing-and-send", "label": "SEQUENCING & SEND" }
-  ],
-  "deals": [
-    { "slug": "pipeline-hygiene", "label": "PIPELINE HYGIENE" },
-    { "slug": "proposals", "label": "PROPOSALS" },
-    { "slug": "forecasting", "label": "FORECASTING" },
-    { "slug": "negotiation", "label": "NEGOTIATION" },
-    { "slug": "handover", "label": "HANDOVER" }
-  ],
-  "marketing": [
-    { "slug": "content", "label": "CONTENT" },
-    { "slug": "brand", "label": "BRAND" },
-    { "slug": "distribution", "label": "DISTRIBUTION" },
-    { "slug": "paid-acquisition", "label": "PAID ACQUISITION" },
-    { "slug": "campaign-analytics", "label": "CAMPAIGN ANALYTICS" }
-  ],
-  "operations": [
+  "product": [
+    { "slug": "discovery", "label": "DISCOVERY" },
     { "slug": "delivery", "label": "DELIVERY" },
-    { "slug": "automation", "label": "AUTOMATION" },
-    { "slug": "quality-and-audit", "label": "QUALITY & AUDIT" },
-    { "slug": "scheduling", "label": "SCHEDULING" },
-    { "slug": "internal-comms", "label": "INTERNAL COMMS" }
+    { "slug": "roadmap", "label": "ROADMAP" },
+    { "slug": "requirements", "label": "REQUIREMENTS" },
+    { "slug": "launch", "label": "LAUNCH" }
+  ],
+  "design": [
+    { "slug": "interaction", "label": "INTERACTION" },
+    { "slug": "design-system", "label": "DESIGN SYSTEM" },
+    { "slug": "visual", "label": "VISUAL" },
+    { "slug": "prototyping", "label": "PROTOTYPING" },
+    { "slug": "design-qa", "label": "DESIGN QA" }
+  ],
+  "frontend": [
+    { "slug": "build", "label": "BUILD" },
+    { "slug": "components", "label": "COMPONENTS" },
+    { "slug": "state", "label": "STATE" },
+    { "slug": "accessibility", "label": "ACCESSIBILITY" },
+    { "slug": "performance", "label": "PERFORMANCE" }
+  ],
+  "backend": [
+    { "slug": "api", "label": "API" },
+    { "slug": "data", "label": "DATA" },
+    { "slug": "integrations", "label": "INTEGRATIONS" },
+    { "slug": "jobs", "label": "JOBS" },
+    { "slug": "reliability", "label": "RELIABILITY" }
+  ],
+  "ai": [
+    { "slug": "agent-ops", "label": "AGENT OPS" },
+    { "slug": "evals", "label": "EVALS" },
+    { "slug": "prompts", "label": "PROMPTS" },
+    { "slug": "retrieval", "label": "RETRIEVAL" },
+    { "slug": "model-routing", "label": "MODEL ROUTING" }
   ],
   "intelligence": [
     { "slug": "company-research", "label": "COMPANY RESEARCH" },
-    { "slug": "market-signals", "label": "MARKET SIGNALS" },
     { "slug": "second-brain", "label": "SECOND BRAIN" },
+    { "slug": "product-analytics", "label": "PRODUCT ANALYTICS" },
     { "slug": "competitive", "label": "COMPETITIVE" },
     { "slug": "reporting", "label": "REPORTING" }
-  ],
-  "customer": [
-    { "slug": "onboarding", "label": "ONBOARDING" },
-    { "slug": "support", "label": "SUPPORT" },
-    { "slug": "retention", "label": "RETENTION" },
-    { "slug": "voice-of-customer", "label": "VOICE OF CUSTOMER" },
-    { "slug": "success-reviews", "label": "SUCCESS REVIEWS" }
-  ],
-  "back-office": [
-    { "slug": "finance", "label": "FINANCE" },
-    { "slug": "contracts-and-legal", "label": "CONTRACTS & LEGAL" },
-    { "slug": "people", "label": "PEOPLE" },
-    { "slug": "procurement", "label": "PROCUREMENT" },
-    { "slug": "compliance", "label": "COMPLIANCE" }
-  ],
-  "product": [
-    { "slug": "discovery", "label": "DISCOVERY" },
-    { "slug": "design", "label": "DESIGN" },
-    { "slug": "build", "label": "BUILD" },
-    { "slug": "design-system", "label": "DESIGN SYSTEM" },
-    { "slug": "delivery", "label": "DELIVERY" }
   ]
 }

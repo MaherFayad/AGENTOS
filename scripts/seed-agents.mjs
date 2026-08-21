@@ -55,45 +55,66 @@ const SOURCES = [
 const LICENCE_FILES = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENCE', 'COPYING'];
 
 /* ------------------------------------------------------------------ *
- * Taxonomy mapping (ADR-001)
+ * Taxonomy mapping (ADR-001, retargeted by ADR-042)
  *
- * First match wins. Anything unmatched goes to the unmapped report and is NOT staged —
- * ADR-001: "Anything that doesn't map cleanly is a signal the department set is wrong,
- * not that the agent needs forcing." Forcing an engineering agent into `operations`
- * because it has to go somewhere is how a curated library becomes a junk drawer.
+ * First match wins, so the table runs specific → general: `design-system` before `design`,
+ * `retrieval` before `ai`, `api` before `backend`. A generic rule placed early swallows
+ * every specific one under it, and the symptom is a library where nine tenths of the
+ * imports sit in one cluster.
+ *
+ * Anything unmatched goes to the unmapped report and is NOT staged — ADR-001: "Anything
+ * that doesn't map cleanly is a signal the department set is wrong, not that the agent
+ * needs forcing." That rule now does more work than it used to: ADR-042 deleted the seven
+ * business departments, so a brand-voice or cold-email agent from an upstream GTM library
+ * has nowhere honest to land and **should** come back unmapped. Widening a rule to absorb
+ * it is how a curated library becomes a junk drawer.
  * ------------------------------------------------------------------ */
 
 const RULES = [
-  [/\b(lead|prospect|icp|list.?build|scrap(e|ing))\b/i, 'sales', 'lead-sourcing'],
-  [/\b(enrich|firmograph|technograph)\b/i, 'sales', 'enrichment'],
-  [/\b(cold.?email|outreach|sdr|copywriter.*outbound)\b/i, 'sales', 'outreach-writing'],
-  [/\b(sequence|cadence|follow.?up.*outbound)\b/i, 'sales', 'sequencing-and-send'],
-  [/\b(pipeline|deal|opportunit|crm.?hygiene)\b/i, 'deals', 'pipeline-hygiene'],
-  [/\b(proposal|quote|rfp|sow|statement of work)\b/i, 'deals', 'proposals'],
-  [/\b(forecast|quota|revenue.?predict)\b/i, 'deals', 'forecasting'],
-  [/\b(negotiat|pricing.?strategy|discount)\b/i, 'deals', 'negotiation'],
-  [/\b(content|blog|copywrit|editorial|newsletter)\b/i, 'marketing', 'content'],
-  [/\b(brand|voice|tone.?of.?voice|positioning)\b/i, 'marketing', 'brand'],
-  [/\b(social|distribution|repurpos|seo|publish)\b/i, 'marketing', 'distribution'],
-  [/\b(ads?|paid|ppc|meta.?ads|google.?ads|campaign.?budget)\b/i, 'marketing', 'paid-acquisition'],
-  [/\b(analytics|attribution|funnel.?report)\b/i, 'marketing', 'campaign-analytics'],
-  [/\b(project|delivery|sprint|standup|meeting|transcript)\b/i, 'operations', 'delivery'],
-  [/\b(workflow|automat|integration|ops.?bot)\b/i, 'operations', 'automation'],
-  [/\b(audit|qa|quality|review.?process|compliance.?check)\b/i, 'operations', 'quality-and-audit'],
-  [/\b(schedul|calendar|capacity|resourc)\b/i, 'operations', 'scheduling'],
-  [/\b(research|deep.?dive|due.?diligence|company.?profile)\b/i, 'intelligence', 'company-research'],
-  [/\b(market|trend|signal|news.?monitor)\b/i, 'intelligence', 'market-signals'],
-  [/\b(competit|battlecard|win.?loss)\b/i, 'intelligence', 'competitive'],
-  [/\b(report|dashboard.?summary|kpi.?digest)\b/i, 'intelligence', 'reporting'],
-  [/\b(onboard|kickoff|activation)\b/i, 'customer', 'onboarding'],
-  [/\b(support|ticket|helpdesk|triage)\b/i, 'customer', 'support'],
-  [/\b(churn|retention|renewal|health.?score)\b/i, 'customer', 'retention'],
-  [/\b(feedback|nps|voice.?of.?customer|survey)\b/i, 'customer', 'voice-of-customer'],
-  [/\b(invoice|billing|account(s|ing)|expense|finance|cash)\b/i, 'back-office', 'finance'],
-  [/\b(contract|legal|nda|terms)\b/i, 'back-office', 'contracts-and-legal'],
-  [/\b(recruit|hiring|hr|people.?ops|onboarding.?employee)\b/i, 'back-office', 'people'],
-  [/\b(procure|vendor|supplier)\b/i, 'back-office', 'procurement'],
-  [/\b(pdpl|gdpr|privacy|policy|regulat)\b/i, 'back-office', 'compliance'],
+  // --- design ---------------------------------------------------------------
+  [/\b(design.?system|design.?token|component.?librar|style.?guide|pattern.?librar)\w*\b/i, 'design', 'design-system'],
+  [/\b(wireframe|prototyp|figma|mockup)\w*\b/i, 'design', 'prototyping'],
+  [/\b(ux|user.?experience|interaction.?design|user.?flow|information.?architecture|journey.?map)\w*\b/i, 'design', 'interaction'],
+  [/\b(typograph|iconograph|illustration|visual.?design|layout.?design)\w*\b/i, 'design', 'visual'],
+  [/\b(design.?review|design.?qa|heuristic.?evaluation)\w*\b/i, 'design', 'design-qa'],
+
+  // --- ai (before the generic engineering rules: an "LLM API" agent is an AI agent) ---
+  [/\b(prompt.?engineer|system.?prompt|few.?shot|prompt.?librar)\w*\b/i, 'ai', 'prompts'],
+  [/\b(eval(uation)?.?harness|golden.?set|llm.?benchmark|model.?eval)\w*\b/i, 'ai', 'evals'],
+  [/\b(rag|retrieval.?augmented|embedding|vector.?(db|store|search)|semantic.?search)\w*\b/i, 'ai', 'retrieval'],
+  [/\b(model.?rout|model.?select|model.?fallback|token.?budget|context.?window)\w*\b/i, 'ai', 'model-routing'],
+
+  // --- frontend -------------------------------------------------------------
+  [/\b(accessibilit|a11y|wcag|screen.?reader|aria)\w*\b/i, 'frontend', 'accessibility'],
+  [/\b(react|vue|svelte|angular|next\.?js|css|tailwind|component.?scaffold|ui.?engineer)\w*\b/i, 'frontend', 'components'],
+  [/\b(state.?manage|redux|zustand|xstate|client.?cache)\w*\b/i, 'frontend', 'state'],
+  [/\b(web.?vitals|lighthouse|bundle.?size|performance|optimi[sz])\w*\b/i, 'frontend', 'performance'],
+
+  // --- backend --------------------------------------------------------------
+  [/\b(api|rest|graphql|endpoint|openapi|swagger)\w*\b/i, 'backend', 'api'],
+  [/\b(database|sql|postgres|schema.?migration|orm|data.?model)\w*\b/i, 'backend', 'data'],
+  [/\b(webhook|third.?party.?integration|oauth|connector.?build)\w*\b/i, 'backend', 'integrations'],
+  [/\b(cron|queue|worker|batch.?job|background.?job|scheduler)\w*\b/i, 'backend', 'jobs'],
+  [/\b(devops|sre|infrastructure|kubernetes|docker|deploy(ment)?|incident|uptime|observabilit)\w*\b/i, 'backend', 'reliability'],
+
+  // --- product --------------------------------------------------------------
+  [/\b(user.?research|usability.?test|discovery.?research|jobs.?to.?be.?done|persona)\w*\b/i, 'product', 'discovery'],
+  [/\b(roadmap|prioriti[sz]ation|okr|product.?strategy)\w*\b/i, 'product', 'roadmap'],
+  [/\b(requirement|prd|user.?stor|acceptance.?criteria|spec.?writ)\w*\b/i, 'product', 'requirements'],
+  [/\b(launch|release.?notes|go.?to.?market|rollout.?plan)\w*\b/i, 'product', 'launch'],
+  [/\b(project.?manage|sprint|standup|backlog|delivery.?plan|task.?breakdown)\w*\b/i, 'product', 'delivery'],
+
+  // --- intelligence ---------------------------------------------------------
+  [/\b(competit|battlecard|win.?loss)\w*\b/i, 'intelligence', 'competitive'],
+  [/\b(product.?analytics|funnel.?analysis|cohort|amplitude|mixpanel|event.?tracking)\w*\b/i, 'intelligence', 'product-analytics'],
+  [/\b(deep.?dive|due.?diligence|company.?profile|market.?research)\w*\b/i, 'intelligence', 'company-research'],
+  [/\b(knowledge.?base|second.?brain|note.?taking|wiki|memory.?store)\w*\b/i, 'intelligence', 'second-brain'],
+  [/\b(report|kpi.?digest|dashboard.?summary|weekly.?metric)\w*\b/i, 'intelligence', 'reporting'],
+
+  // --- generic catch-alls, deliberately last --------------------------------
+  [/\b(agent|mcp|orchestrat|swarm|tool.?use|llm|ai.?assistant)\w*\b/i, 'ai', 'agent-ops'],
+  [/\b(frontend|front.?end|browser)\w*\b/i, 'frontend', 'components'],
+  [/\b(backend|back.?end|server.?side|microservice)\w*\b/i, 'backend', 'api'],
 ];
 
 /**

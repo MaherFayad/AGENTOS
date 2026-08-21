@@ -25,18 +25,16 @@ import { join } from 'node:path';
 
 /** ADR-001 §Decision rows 0–6, plus ADR-041's row 7. Order is significant. */
 const ADR_001 = [
-  { id: 'sales', label: 'Sales' },
-  { id: 'deals', label: 'Deals' },
-  { id: 'marketing', label: 'Marketing' },
-  { id: 'operations', label: 'Operations' },
-  { id: 'intelligence', label: 'Intelligence' },
-  { id: 'customer', label: 'Customer' },
-  { id: 'back-office', label: 'Back Office' },
   { id: 'product', label: 'Product' },
+  { id: 'design', label: 'Design' },
+  { id: 'frontend', label: 'Frontend' },
+  { id: 'backend', label: 'Backend' },
+  { id: 'ai', label: 'AI' },
+  { id: 'intelligence', label: 'Intelligence' },
 ];
 
 /**
- * ADR-001: `index × 360/count`, starting at −90° so `sales` sits at twelve o'clock.
+ * ADR-001: `index × 360/count`, starting at −90° so `product` sits at twelve o'clock (ADR-042).
  *
  * `count` defaults to the table's length rather than to a literal: a caller that forgets to
  * pass it gets the current department set, not the 2026-08-15 one.

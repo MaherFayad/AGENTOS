@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildMatrix, cellCounts, isEmptyCell, phaseProgress, tierCount } from './matrix';
 import { COL_COUNT, PHASE_ORDER, PROGRESS_SEGMENTS, ROW_COUNT, TIER_ORDER } from './taxonomy';
-import { emptyDepartmentAgents, marketingAgents } from './__fixtures__/agents';
+import { emptyDepartmentAgents, designAgents } from './__fixtures__/agents';
 import type { ChartAgent } from '../types';
 
 describe('buildMatrix', () => {
-  const matrix = buildMatrix(marketingAgents);
+  const matrix = buildMatrix(designAgents);
 
   it('is exactly 3 tiers × 4 phases (REQ-CHT-13)', () => {
     expect(ROW_COUNT).toBe(3);
@@ -23,8 +23,8 @@ describe('buildMatrix', () => {
 
   it('places every agent in exactly one cell', () => {
     const placed = matrix.cells.flat().flatMap((c) => c.agents.map((a) => a.slug));
-    expect(placed).toHaveLength(marketingAgents.length);
-    expect(new Set(placed).size).toBe(marketingAgents.length);
+    expect(placed).toHaveLength(designAgents.length);
+    expect(new Set(placed).size).toBe(designAgents.length);
   });
 
   it('puts each agent at its own tier × phase', () => {
@@ -37,20 +37,20 @@ describe('buildMatrix', () => {
   });
 
   it('sorts cards inside a cell by name, so the board does not reshuffle per load', () => {
-    const reversed = buildMatrix([...marketingAgents].reverse());
+    const reversed = buildMatrix([...designAgents].reverse());
     expect(cellCounts(reversed)).toEqual(cellCounts(matrix));
     const names = (m: typeof matrix) => m.cells.flat().flatMap((c) => c.agents.map((a) => a.name));
     expect(names(reversed)).toEqual(names(matrix));
   });
 
   it('drops agents whose tier or phase is outside the frontmatter union', () => {
-    const rogue = { ...marketingAgents[0], slug: 'marketing/rogue', tier: 'wishful' } as unknown as ChartAgent;
-    expect(buildMatrix([...marketingAgents, rogue]).total).toBe(marketingAgents.length);
+    const rogue = { ...designAgents[0], slug: 'design/rogue', tier: 'wishful' } as unknown as ChartAgent;
+    expect(buildMatrix([...designAgents, rogue]).total).toBe(designAgents.length);
   });
 
   it('derives the row-header job counts (REQ-CHT-15)', () => {
     expect(matrix.tierCounts).toEqual([2, 3, 7]);
-    expect(tierCount('autonomous', marketingAgents)).toBe(7);
+    expect(tierCount('autonomous', designAgents)).toBe(7);
     expect(matrix.tierCounts.reduce((a, b) => a + b, 0)).toBe(matrix.total);
   });
 
@@ -74,13 +74,13 @@ describe('buildMatrix', () => {
 
 describe('phaseProgress', () => {
   it('derives 4-segment dashes from the autonomy mix of the phase (REQ-CHT-18)', () => {
-    const matrix = buildMatrix(marketingAgents);
+    const matrix = buildMatrix(designAgents);
     expect(matrix.phaseProgress.map((p) => p.filled)).toEqual([3, 3, 2, 4]);
     expect(matrix.phaseProgress.map((p) => p.jobs)).toEqual([3, 3, 4, 2]);
   });
 
   it('fills all four segments when every job in the phase is autonomous', () => {
-    const all = marketingAgents.filter((a) => a.phase === '4-orchestrate');
+    const all = designAgents.filter((a) => a.phase === '4-orchestrate');
     expect(phaseProgress('4-orchestrate', all).filled).toBe(PROGRESS_SEGMENTS);
   });
 
@@ -89,14 +89,14 @@ describe('phaseProgress', () => {
   });
 
   it('fills none when every job in the phase is still human-led', () => {
-    const humanOnly = marketingAgents
+    const humanOnly = designAgents
       .filter((a) => a.phase === '1-foundation')
       .map((a) => ({ ...a, tier: 'human-led' as const }));
     expect(phaseProgress('1-foundation', humanOnly).filled).toBe(0);
   });
 
   it('never exceeds the segment count', () => {
-    for (const p of buildMatrix(marketingAgents).phaseProgress) {
+    for (const p of buildMatrix(designAgents).phaseProgress) {
       expect(p.filled).toBeGreaterThanOrEqual(0);
       expect(p.filled).toBeLessThanOrEqual(PROGRESS_SEGMENTS);
     }

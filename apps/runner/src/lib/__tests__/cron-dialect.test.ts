@@ -80,8 +80,13 @@ test('every schedule: committed to the library is one the coordinator can actual
 
   // What this instrument saw, asserted before anything is concluded from it. Without these two
   // lines a broken path, a renamed directory or an empty checkout is a green run.
+  // The floor was 10 and ADR-042 deleted nine agents with the seven business departments,
+  // leaving 7. Lowered to 5 rather than to the exact count: a floor equal to the library is
+  // tripped by every legitimate deletion, and a floor of 1 no longer distinguishes a real
+  // library from a glob that matched one stray file. Five still fails an empty checkout, a
+  // renamed directory and a wrong LIBRARY path, which is the whole job of this assertion.
   assert.ok(
-    files.length >= 10,
+    files.length >= 5,
     `only ${files.length} SKILL.md files were found under ${LIBRARY} — this gate is reading the wrong tree and cannot see the library it claims to check.`,
   );
 

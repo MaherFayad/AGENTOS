@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ChartView } from './ChartView';
 import { DEPARTMENTS } from '../data/contracts';
-import { marketingAgents } from '../model/__fixtures__/agents';
+import { designAgents } from '../model/__fixtures__/agents';
 
 /**
  * REQ-CHT-01/02/03 — the department tab bar.
@@ -18,10 +18,10 @@ import { marketingAgents } from '../model/__fixtures__/agents';
  * itself about an empty list.
  */
 describe('<ChartView> department tabs', () => {
-  const markup = renderToStaticMarkup(<ChartView agents={marketingAgents} department="marketing" />);
+  const markup = renderToStaticMarkup(<ChartView agents={designAgents} department="design" />);
 
   it('renders every department the contract declares', () => {
-    expect(DEPARTMENTS).toHaveLength(8);
+    expect(DEPARTMENTS).toHaveLength(6); // ADR-042 — was 8 (ADR-001's seven + ADR-041's product)
     expect(markup.match(/role="tab"/g) ?? []).toHaveLength(DEPARTMENTS.length);
   });
 
@@ -42,9 +42,9 @@ describe('<ChartView> department tabs', () => {
 describe('<ChartView> composition', () => {
   it('shows the title block, the derived stat line and the board for a staffed department', () => {
     const markup = renderToStaticMarkup(
-      <ChartView agents={marketingAgents} department="marketing" />,
+      <ChartView agents={designAgents} department="design" />,
     );
-    expect(markup).toContain('Marketing');
+    expect(markup).toContain('Design');
     expect(markup).toContain('the AI ');
     expect(markup).toContain('rollout');
     expect(markup).toContain('7 of 12 jobs');
@@ -54,17 +54,17 @@ describe('<ChartView> composition', () => {
 
   it('shows an honest empty state — not a fabricated grid — for an unstaffed department', () => {
     const markup = renderToStaticMarkup(
-      <ChartView agents={marketingAgents} department="back-office" />,
+      <ChartView agents={designAgents} department="backend" />,
     );
     expect(markup).toContain('data-testid="chart-empty-state"');
     expect(markup).not.toContain('data-testid="chart-matrix"');
     expect(markup).not.toContain('data-testid="chart-stat-line"');
-    expect(markup).toContain('No jobs mapped in Back Office yet.');
+    expect(markup).toContain('No jobs mapped in Backend yet.');
   });
 
   it('says so plainly when the library could not be read', () => {
     const markup = renderToStaticMarkup(
-      <ChartView agents={[]} department="marketing" error="agent library unreachable" />,
+      <ChartView agents={[]} department="design" error="agent library unreachable" />,
     );
     expect(markup).toContain('The agent library could not be read.');
     expect(markup).toContain('agent library unreachable');
@@ -72,10 +72,10 @@ describe('<ChartView> composition', () => {
 
   it('shows one department at a time — a tab is a filter, not a section', () => {
     const mixed = [
-      ...marketingAgents,
-      { ...marketingAgents[0], slug: 'sales/other', department: 'sales' as const, name: 'Other Job' },
+      ...designAgents,
+      { ...designAgents[0], slug: 'frontend/other', department: 'frontend' as const, name: 'Other Job' },
     ];
-    const markup = renderToStaticMarkup(<ChartView agents={mixed} department="marketing" />);
+    const markup = renderToStaticMarkup(<ChartView agents={mixed} department="design" />);
     expect(markup).not.toContain('Other Job');
     expect(markup).toContain('7 of 12 jobs');
   });
