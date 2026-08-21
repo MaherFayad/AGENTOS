@@ -1,54 +1,58 @@
 # status — shell-navigation-engineer
 
-**Updated:** 2026-08-21T16:32
-**Milestone:** M18 (audit fixes) · §2.0 · §3.6 · §2.2
+**Updated:** 2026-08-21T20:12
+**Milestone:** M18 (audit fixes) · §3.6 · §2.0
 **State:** review
 
 ## Now
-Nothing in flight. Five audit fixes landed in four commits — `145eda3` (the unbounded
-redirect loop that killed two of §3.6's three push types, plus two inert controls sharing
-`route.ts`), `795a11f` (search resolved **12 of 66** indexable things: `parsePanels` read
-`entry.title` off an envelope, `parseGraph` dropped `kind`), `b5db7a6` (`NOT CONFIGURED` in
-the status pill, monochrome), `c2f5ccd` (RTL ratchet 308→312, itemised, filed to its owner).
-Every fix planted red first, every plant verified present in the file, every one restored;
-zero `PLANT` strings remain. All three fixes re-confirmed in real Chrome at 1440×900.
+Nothing in flight. `0506ecf` — the service worker pinned every `next dev` chunk cache-first
+and made the app throw a hydration error on every route, surviving hard reloads. Four
+changes: dev guard inside `registerServiceWorker`, an inline eviction script in
+`PwaRegistrar` that rescues already-poisoned browsers, `isImmutableAsset` replacing the
+comment that caused it, `VERSION` v1→v2. `STATIC_CACHE` capped at 200. New gate
+`npm run smoke:sw` — the only thing here that has ever executed the worker's `fetch`
+handler. Three plants, each caught, each restored, zero `PLANT` strings left.
 
 ## Blocked on
 Nothing. Five open in my inbox, none blocking — the M15 pair (`ProjectSummary` narrowing,
 `inlineStep`), the `ProjectSwitcher` enum, the cost-ticker 400, and the switcher/badge
-dialect note. Two decision-requests sent out and open: `PanelSummary` naming
-(`dashboards-engineer` + `runner-engineer`) and the ratchet raise
-(`rtl-arabic-pdpl-specialist`).
+dialect note. Two decision-requests still open: `PanelSummary` naming and the RTL ratchet
+raise.
 
 ## Last handoff
-`comms/handoffs/M18-shell-navigation-engineer-audit-fixes-loop-search-status.md`
+`comms/handoffs/M18-shell-navigation-engineer-service-worker-poisoned-every-dev-session.md`
 
 ## The findings worth not rediscovering
-**An empty parse read as a successful parse defeats every honest-empty sentence you own.**
-`parsePanels` returned `[]`, `usePanelIndex` said `ready`, `message` stayed `null`, and the
-shell said what it would say about a project with no dashboards — while six existed. A
-checker that cannot tell *nothing matched* from *nothing was indexed* is blind in the way
-that matters. Now `malformedMessage`'s case.
+**A fresh browser profile is an instrument that cannot see caching.** `check-page-errors`
+spawns Chrome with `mkdtemp`, so no service worker has ever been registered under any gate
+here and the worker's `fetch` handler had **never once executed** in CI. Not a broken gate —
+a blind spot, and the most expensive costume of the standing finding yet, because it made
+the app look broken to its own author on every route.
 
-**A test that supplies the missing consumer cannot see the consumer is missing.** The
-`YOUR TREE` test subscribed to `shell:yourTree` itself and watched its own listener fire —
-green for months over a toggle that filtered nothing. *"A producer without a consumer"* with
-the test playing the consumer.
+**A guard that only stops *new* registrations rescues nobody.** The poisoned browser is
+running a pinned *old* bundle, so a `useEffect` unregister ships in a file that browser
+never executes. The rescue has to come from server-rendered HTML, which is fresh because
+navigations are network-only. Effect-based repair reaches exactly the browsers that did not
+need it.
 
-**Only the payload-membership half of the search gate catches the bug.** *"Every href
-resolves to a route the app defines"* **passed with the defect live** —
-`/map/sales/growth-signal-scorer` is a well-formed route. A route-shape check alone would
-have shipped it.
+**A test that development does not register is a declaration check** — it would pass with
+the bug fully live, because the bug is in what an *already registered* worker does. What
+proves something is poison-then-recover, with a step that demands the poisoning be
+reproducible first and reports **void, not pass** when it is not. That branch fired on its
+own first run.
 
-**The scratchpad is not session-isolated.** ~170 files from five agents across five days,
-including another agent's `plant.mjs`/`restore.mjs` that rewrite `drawer/JobDrawer.tsx`.
-Broadcast to `_all`; prefix scratch files with your slug.
+**A `content-hashed` assumption in a comment is a URL question the code can just ask.**
+`isImmutableAsset` turns "cache-first is safe here" from a claim into a predicate, and that
+is what makes the failure class impossible rather than guarded.
 
 ## Next
-1. §3.6 push subscription flow with `sessions-relay-engineer` — deep links now terminate
-   honestly but still reach no view; the payload still carries no project field.
+1. §3.6 push subscription flow with `sessions-relay-engineer`.
 2. The owed **REQ-SHELL-105** test — a `SearchPill.test.tsx` case at `pathname: '/map'`.
 3. `ProjectSwitcher.tsx:243`'s untranslated status enum, with an exhaustive check.
-4. Audit **F9** — `ViewMount` ships `§3.6` and `BUILT BY SHELL-NAVIGATION-ENGINEER` to users
-   on `/offline` and now on four resolver screens. My files, deliberately left for the
-   reviewer's eye rather than bundled into a fix round.
+4. Audit **F9** — `ViewMount` ships `§3.6` and `BUILT BY SHELL-NAVIGATION-ENGINEER` to
+   users on `/offline` and four resolver screens. Left for the reviewer's eye.
+
+## Not mine, seen in passing
+Three failures in `scripts/lib/layout.test.mjs` (seven-vs-eight branches) are another
+agent's in-flight departments change. Confirmed by stashing my files and watching all three
+persist. Untouched.
