@@ -564,9 +564,14 @@ export function layoutVersion(normalised, departments) {
  */
 export function computeLayout(agents, previousPositions = {}, options = {}) {
   const warn = options.warn ?? (() => {});
+  // The count comes from the table, never from a literal. It read `branchAngle(index, 7)`
+  // until ADR-041 added an eighth department, at which point this default would have spaced
+  // eight branches at 360/7 and put the last one on top of the first — while every caller
+  // that passes `options.departments` (build-graph, the watcher) stayed correct, so no gate
+  // would have seen it.
   const departments =
     options.departments ??
-    ADR_001_DEPARTMENTS.map((d, index) => ({ ...d, index, angle: branchAngle(index, 7) }));
+    ADR_001_DEPARTMENTS.map((d, index) => ({ ...d, index, angle: branchAngle(index, ADR_001_DEPARTMENTS.length) }));
   const departmentIds = new Set(departments.map((d) => d.id));
 
   const normalised = normalise(agents, departmentIds, warn);

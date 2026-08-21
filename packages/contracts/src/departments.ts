@@ -1,6 +1,6 @@
 /**
- * The seven canonical departments — ADR-001, spec §2.1 (7 radial branches),
- * §2.6.1 (CHART tab bar), Part IV (frontmatter enum).
+ * The eight canonical departments — ADR-001 (the seven, §2.1's radial branches and
+ * §2.6.1's CHART tab bar), amended by ADR-041 (`product`, appended at index 7).
  *
  * This file is the ONLY place a department slug, label, angle or neighbour may be
  * written down. The MAP's forceRadial angles, the CHART tab order, the frontmatter
@@ -10,8 +10,14 @@
  */
 
 /**
- * The seven slugs, in canonical order — the CHART tab order and the MAP branch angle
- * order. **This is the primary declaration**; everything else in this file derives from it.
+ * The slugs, in canonical order — the CHART tab order and the MAP branch angle order.
+ * **This is the primary declaration**; everything else in this file derives from it.
+ *
+ * `product` is **appended**, not inserted (ADR-041). Insertion would have renumbered every
+ * department after it, and `index` is what the layout engine's stability rule keys a
+ * branch's ray to; appending leaves all seven of ADR-001's indices exactly where they were.
+ * The *angles* move regardless — `360/8` is not `360/7` — which is why ADR-041 also records
+ * that stored positions are sticky and only the new branch is seeded fresh.
  *
  * `as const` is load-bearing rather than stylistic: `z.enum()` needs a literal tuple, and
  * a `readonly DepartmentSlug[]` does not satisfy it. Deriving this from a mapped array
@@ -25,6 +31,7 @@ export const DEPARTMENT_SLUGS = [
   'intelligence',
   'customer',
   'back-office',
+  'product',
 ] as const;
 
 export type DepartmentSlug = (typeof DEPARTMENT_SLUGS)[number];
@@ -44,6 +51,7 @@ export const DEPARTMENT_LABELS: Record<DepartmentSlug, string> = {
   intelligence: 'Intelligence',
   customer: 'Customer',
   'back-office': 'Back Office',
+  product: 'Product',
 };
 
 const ORDERED = DEPARTMENT_SLUGS.map((slug) => [slug, DEPARTMENT_LABELS[slug]] as const);
@@ -66,8 +74,8 @@ export interface DepartmentInfo {
   /** Position in the canonical order. 0 = sales. */
   readonly index: number;
   /**
-   * Radial branch angle in degrees, `-90 + index * 360 / 7`, so `sales` sits at twelve
-   * o'clock and the branches run clockwise (ADR-001 table, rounded to 1dp there).
+   * Radial branch angle in degrees, `-90 + index * 360 / COUNT`, so `sales` sits at twelve
+   * o'clock and the branches run clockwise (ADR-001's table, recomputed at eight by ADR-041).
    * Kept unrounded here — rounding is a display concern.
    */
   readonly angleDeg: number;
@@ -75,7 +83,7 @@ export interface DepartmentInfo {
   readonly angleRad: number;
   /**
    * Rail neighbours as `[previous, next]`, cyclic over the canonical order.
-   * §2.2's department rail steps through these; `back-office` wraps to `sales`.
+   * §2.2's department rail steps through these; the last department wraps to `sales`.
    */
   readonly neighbours: readonly [DepartmentSlug, DepartmentSlug];
 }
@@ -108,7 +116,7 @@ export function isDepartment(value: unknown): value is DepartmentSlug {
 /** Throws on an unknown slug — callers that have already validated should use this. */
 export function getDepartment(slug: DepartmentSlug): DepartmentInfo {
   const found = BY_SLUG.get(slug);
-  if (!found) throw new Error(`Unknown department "${slug}" (ADR-001 fixes the enum at seven).`);
+  if (!found) throw new Error(`Unknown department "${slug}" (ADR-001 + ADR-041 fix the enum at eight).`);
   return found;
 }
 

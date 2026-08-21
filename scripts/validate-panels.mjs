@@ -80,7 +80,14 @@ export const ENUMS = {
   PROGRESS_STATUSES: ['on-track', 'at-risk'],
   COLUMN_TYPES: ['text', 'chip', 'number'],
   FILTER_TYPES: ['segmented', 'range'],
-  /** ADR-001 department slugs — a panel may only claim real departments. */
+  /**
+   * ADR-001 + ADR-041 department slugs — a panel may only claim real departments.
+   *
+   * A mirror of `packages/contracts/src/departments.ts`, and `validate:frontmatter` fails on
+   * any disagreement with it (ADR-041). It is a literal rather than an import because this
+   * module's `ENUMS` is consumed as a static object by `validate-panels.test.mjs`; the gate
+   * is what makes the literal safe.
+   */
   DEPARTMENTS: [
     'sales',
     'deals',
@@ -89,6 +96,7 @@ export const ENUMS = {
     'intelligence',
     'customer',
     'back-office',
+    'product',
   ],
 };
 
@@ -492,7 +500,7 @@ export function validatePanel(panel, { fileName = '<inline>' } = {}) {
   else
     panel.department.forEach((d, i) => {
       if (!ENUMS.DEPARTMENTS.includes(d))
-        err(out, `${at}.department[${i}] "${d}" is not one of the seven departments (ADR-001)`);
+        err(out, `${at}.department[${i}] "${d}" is not one of the ${ENUMS.DEPARTMENTS.length} departments (ADR-001, ADR-041)`);
     });
 
   if (!Number.isInteger(panel.order) || panel.order < 1)

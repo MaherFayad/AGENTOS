@@ -47,5 +47,12 @@
     { "slug": "people", "label": "PEOPLE" },
     { "slug": "procurement", "label": "PROCUREMENT" },
     { "slug": "compliance", "label": "COMPLIANCE" }
+  ],
+  "product": [
+    { "slug": "discovery", "label": "DISCOVERY" },
+    { "slug": "design", "label": "DESIGN" },
+    { "slug": "build", "label": "BUILD" },
+    { "slug": "design-system", "label": "DESIGN SYSTEM" },
+    { "slug": "delivery", "label": "DELIVERY" }
   ]
 }

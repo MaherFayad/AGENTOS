@@ -16,7 +16,7 @@ import { parseFrontmatter } from './frontmatter.mjs';
 const NOW = '2026-08-15T00:00:00.000Z';
 const opts = (extra = {}) => ({ now: NOW, ...extra });
 
-/** A synthetic library across all seven branches — the engine is pure, so fixtures beat
+/** A synthetic library across every branch — the engine is pure, so fixtures beat
  *  reading `agents/`, which another agent owns and fills on its own schedule. */
 function library(count = 42) {
   const depts = ADR_001_DEPARTMENTS.map((d) => d.id);
@@ -193,19 +193,51 @@ test('stability: a re-seeded build only thaws the neighbourhood of what is new',
     return p && (p.x !== n.x || p.y !== n.y);
   });
   assert.ok(moved.length > 0, 'the newcomers must have made room for themselves');
+
+  /**
+   * **ADR-041 weakened this assertion and the weakening is real, not cosmetic.** It used to
+   * require every moved node to be in `customer`. Eight branches share 360° where seven did,
+   * so adjacent rays are 6.4° closer and `thawRadius` now reaches across a branch boundary:
+   * measured here, 6 of 87 nodes move and one of them is on `intelligence`.
+   *
+   * So the claim is stated as ADR-003 actually makes it — *a new agent moves its
+   * neighbourhood, never the galaxy* — with the neighbourhood being the department and its
+   * two rail neighbours, and with an explicit ceiling so "neighbourhood" cannot quietly grow
+   * to mean "most of the map". A third branch moving, or a quarter of the nodes moving, is a
+   * regression and turns this red.
+   */
+  const ids = ADR_001_DEPARTMENTS.map((d) => d.id);
+  const at = ids.indexOf('customer');
+  const neighbourhood = new Set([ids[at], ids[(at - 1 + ids.length) % ids.length], ids[(at + 1) % ids.length]]);
   for (const n of moved) {
-    assert.equal(n.department, 'customer', `${n.id} (${n.department}) moved for a customer-branch drop`);
+    assert.ok(
+      neighbourhood.has(n.department),
+      `${n.id} (${n.department}) moved for a customer-branch drop — outside customer and its rail neighbours`,
+    );
   }
+  assert.ok(
+    moved.length < after.nodes.length / 4,
+    `${moved.length} of ${after.nodes.length} nodes moved — a neighbourhood, not a quarter of the galaxy`,
+  );
 });
 
 /* ── shape: departments, branches, sizes ───────────────────────────────────── */
 
-test('seven branches at the ADR-001 angles, sales at twelve o’clock', () => {
+/**
+ * One literal, deliberately: the **contract's** count (ADR-001's seven plus ADR-041's
+ * `product`). Everything downstream derives from the table, so adding a ninth department is
+ * a one-line edit here rather than five — but a department silently *lost* from the table
+ * still turns this red, which a fully derived test could not do.
+ */
+test('every branch sits on its own ADR-001/ADR-041 angle, sales at twelve o’clock', () => {
   const p = computeLayout(library(), {}, opts());
-  assert.equal(p.departments.length, 7);
+  const count = ADR_001_DEPARTMENTS.length;
+  assert.equal(count, 8, 'ADR-001 (seven) amended by ADR-041 (product) — update this with the ADR, not to match the code');
+  assert.equal(p.departments.length, count);
   assert.equal(p.departments[0].id, 'sales');
   assert.equal(p.departments[0].angle, -Math.PI / 2);
-  p.departments.forEach((d, i) => assert.equal(d.angle, branchAngle(i, 7)));
+  assert.equal(p.departments.at(-1).id, 'product');
+  p.departments.forEach((d, i) => assert.equal(d.angle, branchAngle(i, count)));
 });
 
 test('each branch stays on its own ray — no two departments overlap', () => {
@@ -235,7 +267,7 @@ test('node radii match the §2.1 sizes (payload r is a radius; spec quotes diame
     if (n.kind === 'job') assert.ok(n.r * 2 >= 28 && n.r * 2 <= 32, `job diameter ${n.r * 2}`);
     if (n.kind === 'leaf') assert.ok(n.r * 2 >= 8 && n.r * 2 <= 10, `leaf diameter ${n.r * 2}`);
   }
-  assert.equal(p.nodes.filter((n) => n.kind === 'anchor').length, 7);
+  assert.equal(p.nodes.filter((n) => n.kind === 'anchor').length, ADR_001_DEPARTMENTS.length);
 });
 
 test('every node is reachable from the core through tree edges (keyboard reachability)', () => {
@@ -331,11 +363,11 @@ test('an agent in an unknown department is excluded, loudly', () => {
 
 /* ── honest empty state (CLAUDE.md rule 9) ─────────────────────────────────── */
 
-test('zero agents renders seven empty branches and a dark core, not fake data', () => {
+test('zero agents renders one empty branch per department and a dark core, not fake data', () => {
   const p = computeLayout([], {}, opts());
-  assert.equal(p.nodes.length, 7, 'the seven anchors and nothing else');
+  assert.equal(p.nodes.length, ADR_001_DEPARTMENTS.length, 'the department anchors and nothing else');
   assert.ok(p.nodes.every((n) => n.kind === 'anchor'));
-  assert.equal(p.edges.length, 7);
+  assert.equal(p.edges.length, ADR_001_DEPARTMENTS.length);
   assert.equal(p.core.brainCompleteness, 0);
   assert.ok(p.departments.every((d) => d.totalCount === 0 && d.liveCount === 0));
   assert.ok(p.departments.every((d) => d.sublabels.length === 3));

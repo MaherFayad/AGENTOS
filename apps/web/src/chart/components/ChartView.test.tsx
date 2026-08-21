@@ -9,14 +9,20 @@ import { marketingAgents } from '../model/__fixtures__/agents';
  *
  * This test imports the real `DEPARTMENTS` table on purpose: the tab bar's contents and
  * ORDER are ADR-001's, and the only way to prove CHART did not quietly hardcode its own
- * seven is to compare against the contract at runtime.
+ * list is to compare against the contract at runtime.
+ *
+ * Two assertions, deliberately not one (ADR-041 raised the count from seven to eight):
+ * the **rendered** count derives from the contract, so a department added there appears here
+ * without an edit; the **contract's own** count is a literal, so a department silently lost
+ * from `departments.ts` still turns this red. Deriving both would make the test agree with
+ * itself about an empty list.
  */
 describe('<ChartView> department tabs', () => {
   const markup = renderToStaticMarkup(<ChartView agents={marketingAgents} department="marketing" />);
 
-  it('renders all seven departments', () => {
-    expect(DEPARTMENTS).toHaveLength(7);
-    expect(markup.match(/role="tab"/g) ?? []).toHaveLength(7);
+  it('renders every department the contract declares', () => {
+    expect(DEPARTMENTS).toHaveLength(8);
+    expect(markup.match(/role="tab"/g) ?? []).toHaveLength(DEPARTMENTS.length);
   });
 
   it('renders them in the ADR-001 order, left to right', () => {

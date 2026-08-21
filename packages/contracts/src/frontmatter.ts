@@ -317,7 +317,8 @@ export interface ClusterDefinition {
 }
 
 /**
- * Keyed by department slug, exactly seven keys. The **first three** entries of each list
+ * Keyed by department slug — one key per `DEPARTMENT_SLUGS` entry, so the count follows
+ * the enum rather than being restated (eight since ADR-041). The **first three** entries of each list
  * are the department's three sub-labels under the branch caption in the galaxy view
  * (§2.1) — order is therefore meaningful, not alphabetical.
  */

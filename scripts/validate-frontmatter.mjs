@@ -33,7 +33,7 @@ const AGENTS_DIR = join(ROOT, 'agents');
 const REGISTRY = join(ROOT, 'agents', '_registry', 'clusters.json');
 const CONNECTORS = join(ROOT, 'agents', '_registry', 'connectors.json');
 const CONTRACT_TS = join(ROOT, 'packages', 'contracts', 'src', 'frontmatter.ts');
-/** ADR-001/ADR-035 — the department enum's one declaration site. */
+/** ADR-001/ADR-035/ADR-041 — the department enum's one declaration site. */
 const DEPARTMENTS_TS = join(ROOT, 'packages', 'contracts', 'src', 'departments.ts');
 
 /* ------------------------------------------------------------------ *
@@ -42,7 +42,8 @@ const DEPARTMENTS_TS = join(ROOT, 'packages', 'contracts', 'src', 'departments.t
  * cannot rot silently (ADR-002: "the validators check that they agree").
  * ------------------------------------------------------------------ */
 
-const DEPARTMENTS = ['sales', 'deals', 'marketing', 'operations', 'intelligence', 'customer', 'back-office'];
+/** ADR-001's seven, plus ADR-041's `product` **appended** at index 7. Order is the CHART tab order. */
+const DEPARTMENTS = ['sales', 'deals', 'marketing', 'operations', 'intelligence', 'customer', 'back-office', 'product'];
 const TIERS = ['human-led', 'assisted', 'autonomous'];
 const PHASES = ['1-foundation', '2-capture', '3-generate', '4-orchestrate'];
 const STATUSES = ['live', 'draft', 'failing'];
@@ -63,6 +64,13 @@ const DEFAULT_PRODUCES = 'md';
  * `output.md` its own system prompt demanded.
  */
 const ARTIFACT_WRITE_TOOLS = ['Write', 'Edit', 'Bash'];
+
+/**
+ * The connector registry's `writes` enum (ADR-041), mirrored from `Connector` in
+ * `apps/runner/src/lib/allowlist.ts`. Filesystem confinement on *this host* — not a
+ * read-only flag, and not a claim about what the connector mutates elsewhere.
+ */
+const CONNECTOR_WRITES = ['gated', 'none', 'ungated'];
 
 const REQUIRED = ['name', 'description', 'department', 'cluster', 'icon', 'tier', 'phase', 'status', 'replaces', 'ladder', 'the_human'];
 const OPTIONAL = ['breaks_into', 'builds_on', 'wired_into', 'produces', 'inputs', 'schedule', 'approval', 'deliver'];
@@ -446,9 +454,14 @@ function checkDeliver(fm, err) {
 /**
  * Invariant 5: `wired_into` names must exist in this registry. Keys starting with `$`
  * are comments (JSON has no comment syntax) and are ignored. Shape is
- * `{ [slug]: { label, tools[], note?, available?, since? } }` — the same shape the runner's
- * CONNECTOR_REGISTRY uses, so a name that validates here is a name the runner can actually
- * grant.
+ * `{ [slug]: { label, tools[], writes, note?, available?, since? } }` — the same shape the
+ * runner's CONNECTOR_REGISTRY uses, so a name that validates here is a name the runner can
+ * actually grant.
+ *
+ * `writes` is **required** (ADR-041), and required for the reason the runner's own interface
+ * gives: the worktree refusal reads it, and a field that may be omitted is an include-list
+ * blind to whatever is added next. It is not a read-only flag — `none` means *nothing on this
+ * host's filesystem*, and `slack` is `none` while writing to a channel.
  *
  * `available: false` / `since: "M9"` are optional and owned by `runner-engineer` (ADR-009
  * decision 5): a connector whose backing server is not wired yet. They are read defensively
@@ -456,7 +469,7 @@ function checkDeliver(fm, err) {
  * own before the check can exist.
  *
  * @param {unknown} value
- * @returns {{ names: Set<string>, defs: Map<string, {tools: string[], available: boolean, since: string|null}>, errors: string[] }}
+ * @returns {{ names: Set<string>, defs: Map<string, {tools: string[], writes: string|null, available: boolean, since: string|null}>, errors: string[] }}
  */
 export function parseConnectorRegistry(value) {
   const errors = [];
@@ -472,11 +485,11 @@ export function parseConnectorRegistry(value) {
       continue;
     }
     if (!def || typeof def !== 'object' || Array.isArray(def)) {
-      errors.push(`${name} must be {label, tools, note?}`);
+      errors.push(`${name} must be {label, tools, writes, note?}`);
       continue;
     }
     for (const k of Object.keys(def)) {
-      if (!['label', 'tools', 'note', 'available', 'since'].includes(k)) errors.push(`${name}: unknown field "${k}"`);
+      if (!['label', 'tools', 'writes', 'note', 'available', 'since'].includes(k)) errors.push(`${name}: unknown field "${k}"`);
     }
     if (!isStr(def.label)) errors.push(`${name}.label is required`);
     if (!Array.isArray(def.tools) || def.tools.length === 0) {
@@ -484,12 +497,19 @@ export function parseConnectorRegistry(value) {
     } else {
       for (const t of def.tools) if (!isStr(t)) errors.push(`${name}.tools contains a non-string`);
     }
+    if (!CONNECTOR_WRITES.includes(def.writes)) {
+      errors.push(
+        `${name}.writes is required and must be one of ${CONNECTOR_WRITES.join(' | ')} — the runner's worktree refusal reads it (ADR-041), ` +
+          `and an omitted value is a connector the confinement check is blind to. \`none\` means nothing on this host's filesystem, not read-only`,
+      );
+    }
     if (def.note !== undefined && !isStr(def.note)) errors.push(`${name}.note must be a string`);
     if (def.available !== undefined && typeof def.available !== 'boolean') errors.push(`${name}.available must be true or false`);
     if (def.since !== undefined && !isStr(def.since)) errors.push(`${name}.since must be a milestone string like "M9"`);
     names.add(name);
     defs.set(name, {
       tools: Array.isArray(def.tools) ? def.tools.filter(isStr) : [],
+      writes: CONNECTOR_WRITES.includes(def.writes) ? def.writes : null,
       available: def.available !== false,
       since: isStr(def.since) ? def.since : null,
     });
@@ -593,6 +613,37 @@ async function checkContractDrift(err) {
     }
   }
 
+  /**
+   * The two **Node-side** mirrors of the same enum, added by ADR-041.
+   *
+   * Neither is a type, so `tsc` cannot see them and the drift check above never looked at
+   * them. Both were found stale-by-construction while landing `product`:
+   * `scripts/lib/departments.mjs` carries the table the MAP's branch angles come from, and
+   * `scripts/validate-panels.mjs` carries the list a panel's `department` is checked
+   * against. A department present in `departments.ts` and missing from the first is drawn
+   * at the wrong angle; missing from the second, it is a panel field nobody may declare.
+   *
+   * Deliberately compares **membership and order**, not a count — a count is the assertion
+   * that let `departments.mjs` fall back to seven while parsing a file with eight in it.
+   */
+  for (const [file, re] of [
+    ['scripts/lib/departments.mjs', /const ADR_001 = \[([\s\S]*?)\];/],
+    ['scripts/validate-panels.mjs', /DEPARTMENTS: \[([\s\S]*?)\]/],
+  ]) {
+    const path = join(ROOT, file);
+    if (!(await exists(path))) continue;
+    const block = re.exec(await readFile(path, 'utf8'));
+    if (!block) {
+      err(null, `${file} no longer declares a department list this validator can read — it mirrors the enum and nothing else checks it`);
+      continue;
+    }
+    const mirrored = [...block[1].matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]).filter((v) => DEPARTMENTS.includes(v) || !/^[A-Z]/.test(v));
+    const slugs = mirrored.filter((v, i, a) => a.indexOf(v) === i);
+    if (slugs.join('|') !== DEPARTMENTS.join('|')) {
+      err(null, `contract drift: ${file} mirrors the departments as [${slugs.join(', ')}] but the enum is [${DEPARTMENTS.join(', ')}] (ADR-041)`);
+    }
+  }
+
   // ADR-035, the specific regression that caused the 2026-08-17 outage. Narrow on purpose:
   // the general rule is `scripts/check-barrel-exports.mjs`, and this is the one instance
   // that has already cost a day, asserted where a curator will actually see it.
@@ -631,7 +682,7 @@ export async function validateAll() {
   if (registry) {
     const keys = Object.keys(registry);
     for (const d of DEPARTMENTS) if (!keys.includes(d)) globalErr('agents/_registry/clusters.json', `no clusters registered for department "${d}"`);
-    for (const k of keys) if (!DEPARTMENTS.includes(k)) globalErr('agents/_registry/clusters.json', `"${k}" is not one of the seven departments (ADR-001)`);
+    for (const k of keys) if (!DEPARTMENTS.includes(k)) globalErr('agents/_registry/clusters.json', `"${k}" is not one of the ${DEPARTMENTS.length} departments (ADR-001, ADR-041)`);
     for (const [dept, list] of Object.entries(registry)) {
       const set = new Set();
       if (!Array.isArray(list)) { globalErr('agents/_registry/clusters.json', `${dept} must be a list of {slug,label}`); continue; }
@@ -709,7 +760,7 @@ export async function validateAll() {
       if (fm[f] !== undefined && !isStr(fm[f])) err(`${f} must be a non-empty string`);
     }
 
-    if (!DEPARTMENTS.includes(fm.department)) err(`department "${fm.department}" is not one of the seven (ADR-001): ${DEPARTMENTS.join(', ')}`);
+    if (!DEPARTMENTS.includes(fm.department)) err(`department "${fm.department}" is not one of the ${DEPARTMENTS.length} (ADR-001, ADR-041): ${DEPARTMENTS.join(', ')}`);
     if (fm.department !== undefined && fm.department !== pathDept) err(`department "${fm.department}" disagrees with the path segment "${pathDept}" — the MAP branch comes from the field, the watcher finds the file by path, and they must be the same branch`);
     if (!TIERS.includes(fm.tier)) err(`tier "${fm.tier}" is not one of ${TIERS.join(' | ')} — it is a CHART row`);
     if (!PHASES.includes(fm.phase)) err(`phase "${fm.phase}" is not one of ${PHASES.join(' | ')} — it is a CHART column`);
