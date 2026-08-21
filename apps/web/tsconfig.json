@@ -37,7 +37,8 @@
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-pagecheck/types/**/*.ts"
+    ".next-pagecheck/types/**/*.ts",
+    ".next-swprobe/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

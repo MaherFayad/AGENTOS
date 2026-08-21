@@ -2,9 +2,20 @@
 /**
  * Command Center service worker — spec §3.6.
  *
- * The rule this file exists to enforce: **the app shell caches, the data does not.**
- * `/api/*` is network-only. If the tailnet is gone you get an honest "no tailnet" page,
- * never yesterday's cost ticker with today's date on it.
+ * What this file actually does, stated so the next reviewer does not have to read it to
+ * find out (the retired headline promised a precached app shell while `PRECACHE` held no
+ * app route at all — a header that is not the file is a header that gets granted, and the
+ * gate in scripts/__tests__/shell-pwa.test.mjs now refuses that exact sentence):
+ *
+ *  - **No route HTML is ever cached.** Navigations are network-only; the only fallback is
+ *    the precached `/offline` page, shown when the fetch fails outright.
+ *  - **`/api/*` and `/ws/*` are never cached and never replayed.** If the tailnet is gone
+ *    you get the honest "no tailnet" page, not yesterday's cost ticker under today's date.
+ *  - **Precached at install:** `/offline`, the manifest, and two icons. That is the whole
+ *    list. The badge is on it because it is needed while the app is closed, when the
+ *    device may well be off the tailnet.
+ *  - **Cached on demand:** only build output whose URL is *content-addressed*, plus
+ *    `/icons/`. See `isImmutableAsset` — the assumption is now a predicate, not a comment.
  *
  * Owner: shell-navigation-engineer — caching, offline fallback, versioning.
  * **Push lives in `/sw-push.js`, owned by `sessions-relay-engineer`** (§3.1 E2E: the
@@ -27,10 +38,26 @@ try {
   // Nothing to report to — no client is listening at install time.
 }
 
-const VERSION = 'cc-shell-v1';
+/**
+ * **Bumping this is the rescue lever.** `activate` deletes every cache key that does not
+ * start with `VERSION`, then claims open clients — so a bump makes an already-poisoned
+ * browser heal itself on the next load, without anyone opening DevTools.
+ *
+ * v1 -> v2 on 2026-08-21 for exactly that: v1 pinned non-hashed `next dev` chunks
+ * cache-first and served them forever. Every `cc-shell-v1-*` cache is now purged on sight.
+ */
+const VERSION = 'cc-shell-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = '/offline';
+
+/**
+ * Cap on `STATIC_CACHE` entries. `VERSION` is a hardcoded constant that no deploy changes,
+ * so without a cap this cache accumulates every chunk of every build for the life of the
+ * installation. Every entry is content-addressed and therefore disposable: evicting the
+ * oldest costs one re-fetch and nothing else.
+ */
+const STATIC_MAX_ENTRIES = 200;
 
 const PRECACHE = [
   OFFLINE_URL,
@@ -40,6 +67,42 @@ const PRECACHE = [
   // device may well be off the tailnet by then.
   '/icons/badge-72.png',
 ];
+
+/**
+ * Is this URL safe to serve cache-first *forever*?
+ *
+ * Only when the URL is content-addressed: a different build produces a different URL, so
+ * a hit can never be stale. Two shapes qualify, both produced by Next's production build:
+ *
+ *   1. a content hash in the filename — `…/layout-8f2a1b3c4d5e6f70.js`, `…/css/<hash>.css`
+ *   2. a build-id directory — `/_next/static/<buildId>/_buildManifest.js`
+ *
+ * **Everything else under `/_next/static/` is network-only**, which is the whole point.
+ * `next dev` serves stable, non-hashed paths (`/_next/static/chunks/app/layout.js`) whose
+ * *content changes on every rebuild*. v1 cache-first'd those, so a developer's browser
+ * pinned one build's JavaScript against every later render of the HTML — React threw a
+ * hydration error on every route, and a hard reload did not clear it, because a hard
+ * reload bypasses the HTTP cache and the service worker answers before it.
+ *
+ * That was a comment ("build output is content-hashed or stable: cache-first is safe")
+ * asserting something no code checked, in a file that had no way to know it was in dev.
+ * It is a predicate now, so the claim is enforced rather than believed.
+ */
+function isImmutableAsset(pathname) {
+  if (pathname.startsWith('/icons/')) return true;
+  if (!pathname.startsWith('/_next/static/')) return false;
+  // 2. build-id directory. `development` is Next's dev build id and is explicitly not one.
+  if (/^\/_next\/static\/(?!chunks\/|css\/|media\/|development\/)[^/]+\//.test(pathname)) return true;
+  // 1. content hash in the filename: >= 8 hex characters immediately before the extension.
+  return /(?:^|[-/.])[0-9a-f]{8,}\.[a-z0-9]+$/i.test(pathname);
+}
+
+/** Keep `STATIC_CACHE` bounded. `cache.keys()` is insertion-ordered, so this is FIFO. */
+async function trimStatic(cache) {
+  const keys = await cache.keys();
+  const excess = keys.length - STATIC_MAX_ENTRIES;
+  for (let i = 0; i < excess; i += 1) await cache.delete(keys[i]);
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -81,21 +144,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Build output and icons are content-hashed or stable: cache-first is safe and is what
-  // makes the shell open instantly on a phone.
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/')) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ??
-          fetch(request).then((response) => {
-            const copy = response.clone();
-            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
-            return response;
-          }),
-      ),
-    );
-  }
+  // Cache-first, but only for URLs a rebuild cannot reuse. Anything else — including every
+  // `next dev` chunk — is left to the browser: no respondWith, no cache read, no cache write.
+  if (!isImmutableAsset(url.pathname)) return;
+
+  event.respondWith(
+    caches.match(request).then(
+      (cached) =>
+        cached ??
+        fetch(request).then((response) => {
+          const copy = response.clone();
+          caches
+            .open(STATIC_CACHE)
+            .then((cache) => cache.put(request, copy).then(() => trimStatic(cache)))
+            .catch(() => undefined);
+          return response;
+        }),
+    ),
+  );
 });
 
 /**

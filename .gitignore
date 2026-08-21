@@ -7,6 +7,9 @@ node_modules/
 .next-smoke/
 # `scripts/check-page-errors.mjs` boots a third one, for the same reason.
 .next-pagecheck/
+# `scripts/check-sw-poisoning.mjs` boots a fourth: it needs a browser profile that keeps a
+# service worker across loads, which the other gates deliberately never have.
+.next-swprobe/
 dist/
 build/
 out/

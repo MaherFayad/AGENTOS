@@ -12,6 +12,7 @@ import {
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '../../public');
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator as unknown as Record<string, unknown>, 'serviceWorker');
 });
@@ -33,6 +34,18 @@ describe('registerServiceWorker', () => {
     withServiceWorker(register);
     await registerServiceWorker();
     expect(register).toHaveBeenCalledWith('/sw.js', { scope: '/' });
+  });
+
+  it('never registers in development, whatever the caller does', async () => {
+    // The costume this bug wore: a service worker under `next dev` pins one build's
+    // non-hashed chunk URLs, so the server renders today's HTML against last rebuild's
+    // JavaScript and React throws a hydration error on every route. The guard is inside
+    // this function rather than at its one call site so a second caller cannot undo it.
+    vi.stubEnv('NODE_ENV', 'development');
+    const register = vi.fn().mockResolvedValue({ scope: '/' });
+    withServiceWorker(register);
+    await expect(registerServiceWorker()).resolves.toBeNull();
+    expect(register).not.toHaveBeenCalled();
   });
 
   it('swallows a registration failure — a dead SW must not break the app', async () => {

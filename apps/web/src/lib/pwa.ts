@@ -43,10 +43,28 @@ const supportsServiceWorker = (): boolean =>
   typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 
 /**
+ * True when this bundle came out of `next dev`. Next inlines `process.env.NODE_ENV` into
+ * the client bundle at build time, so in the browser this is a constant, not a lookup.
+ */
+export const isDevelopment = (): boolean => process.env.NODE_ENV === 'development';
+
+/**
  * Register the service worker. Safe to call more than once; the browser dedupes.
  * Failure is swallowed to a resolved `null` — a dead SW must never break the app.
+ *
+ * **Never in development.** A service worker under `next dev` is a browser-side pin on one
+ * build's JavaScript: dev chunk URLs are stable and non-hashed, so a cached entry keeps
+ * answering for a file whose content changed on the last rebuild. The visible symptom is a
+ * hydration error on *every* route — the shell is on every route — and it survives a hard
+ * reload, because a hard reload bypasses the HTTP cache while the service worker still
+ * intercepts `fetch` and answers from `caches`.
+ *
+ * The guard sits here rather than only at the call site so a second caller cannot
+ * reintroduce it. Stopping *new* registrations is not the rescue, though — that is
+ * `DEV_SERVICE_WORKER_EVICTION`, which repairs a browser already holding one.
  */
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (isDevelopment()) return null;
   if (!supportsServiceWorker()) return null;
   try {
     return await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope: '/' });
@@ -54,6 +72,45 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     return null;
   }
 }
+
+/**
+ * The dev rescue, as a string, because it has to run from server-rendered HTML.
+ *
+ * **Why not a `useEffect`.** The browser that needs rescuing is running a *pinned old
+ * bundle*. Code added to the bundle today does not exist in the copy its service worker is
+ * serving, so an effect-based unregister reaches only the browsers that never needed it.
+ * Navigations are network-only in `sw.js`, so the **HTML is always fresh** even when every
+ * chunk it references is stale — an inline script is the one thing on the page guaranteed
+ * to be today's code.
+ *
+ * It unregisters every worker on the origin, deletes every cache, and reloads **once**
+ * (guarded by `sessionStorage`, so a failure cannot become a reload loop). The reload is
+ * the point: unregistering does not re-fetch the chunks this page already took from the
+ * cache, so without it the very load that performed the rescue still renders stale.
+ *
+ * Every cache is deleted, not just `cc-shell-*`: a prefix list goes blind the day the
+ * prefix changes, and on a dev origin there is nothing here worth keeping.
+ *
+ * Injected only when `isDevelopment()`. Contains no `</` sequence, so it is safe as the
+ * body of a `<script>` element.
+ */
+export const DEV_SERVICE_WORKER_EVICTION = `(function () {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  var flag = 'agnetos:dev-sw-evicted';
+  navigator.serviceWorker.getRegistrations().then(function (regs) {
+    var had = regs.length > 0;
+    return Promise.all(regs.map(function (r) { return r.unregister(); }))
+      .then(function () { return typeof caches === 'undefined' ? [] : caches.keys(); })
+      .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+      .then(function () {
+        if (!had) return;
+        console.warn('[agnetos] dev: removed a service worker and its caches; reloading once for fresh chunks.');
+        if (sessionStorage.getItem(flag)) return;
+        sessionStorage.setItem(flag, '1');
+        location.reload();
+      });
+  }).catch(function () {});
+})();`;
 
 /* -----------------------------------------------------------------------------
  * Install flow (§3.6 "installs to home screen").
