@@ -122,7 +122,13 @@ describe('LAST RUNS — the honest empty states are content, not decoration', ()
     const states: RunsState[] = [
       { kind: 'loading' },
       { kind: 'ready', rows: [] },
-      { kind: 'failed', message: 'ECONNREFUSED' },
+      // All four failure shapes, because the defect this section shipped was that ALL of
+      // them rendered the first one's sentence — including the 503 this stack answers on
+      // every load. One entry here would have proved nothing about which lead-in was picked.
+      { kind: 'failed', failure: { kind: 'not-sent', detail: 'This address does not name a project.' } },
+      { kind: 'failed', failure: { kind: 'unreachable', detail: null } },
+      { kind: 'failed', failure: { kind: 'refused', detail: 'This runner has no run ledger configured.' } },
+      { kind: 'failed', failure: { kind: 'unreadable', detail: null } },
     ];
     for (const state of states) {
       const { container, unmount } = render(<LastRuns state={state} />);

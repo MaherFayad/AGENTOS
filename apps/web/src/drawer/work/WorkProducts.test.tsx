@@ -92,9 +92,24 @@ describe('the empty state', () => {
   });
 
   it('is empty rather than wrong when the runner could not be reached', () => {
-    const { container } = draw({ kind: 'failed', message: 'The runner answered 503.' });
-    expect(container.textContent).toContain(en['work.failed']);
-    expect(container.textContent).toContain('The runner answered 503.');
+    const { container } = draw({ kind: 'failed', failure: { kind: 'unreachable', detail: null } });
+    expect(container.textContent).toContain(en['drawer.failure.unreachable']);
+  });
+
+  /**
+   * The branch that actually ships. `GET /api/p/:project/work-products` is fronted by
+   * `requireThreadStore`, so on a stack with no Postgres it answers **503
+   * `thread_store_unavailable`** with its own sentence — and this section opened every
+   * failure with "could not reach the runner", then printed that sentence underneath it.
+   */
+  it('does not blame the network for a runner that answered and refused', () => {
+    const { container } = draw({
+      kind: 'failed',
+      failure: { kind: 'refused', detail: 'This runner has no thread store.' },
+    });
+    expect(container.textContent).toContain(en['drawer.failure.refused']);
+    expect(container.textContent).toContain('This runner has no thread store.');
+    expect(container.textContent).not.toContain(en['drawer.failure.unreachable']);
   });
 
   it('says it is looking rather than showing nothing while it looks', () => {
@@ -139,12 +154,12 @@ describe('a body this build cannot read is its own state', () => {
     // throws out of the render, which is how this drawer took a whole app down once.
     const state = readList({} as never);
     expect(state.kind).toBe('failed');
-    expect(state.kind === 'failed' && state.message).toBe(en['work.unreadable']);
+    expect(state.kind === 'failed' && state.failure).toEqual({ kind: 'unreadable', detail: null });
   });
 
   it('is not a network fault either — those send a reader somewhere else', () => {
     const state = readList({ workProducts: 'nope', reviewQueue: false } as never);
-    expect(state.kind === 'failed' && state.message).not.toBe(en['work.failed']);
+    expect(state.kind === 'failed' && state.failure.kind).not.toBe('unreachable');
   });
 
   it('reads a well-formed empty list as an empty list', () => {

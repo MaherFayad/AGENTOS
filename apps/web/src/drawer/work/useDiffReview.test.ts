@@ -37,12 +37,12 @@ describe('the codes this screen renders as refusals exist in the contract', () =
 
 describe('by code, not by message', () => {
   it('maps a moved tree to the reload sentence', () => {
-    const error = new ApiCallError('anything at all', undefined, 'work_product_moved');
+    const error = new ApiCallError('anything at all', undefined, 'work_product_moved', 'answered');
     expect(refusalOf(error)).toEqual({ kind: 'refused', refusal: 'moved' });
   });
 
   it('maps a removed tree to the gone sentence', () => {
-    const error = new ApiCallError('anything at all', undefined, 'work_product_unavailable');
+    const error = new ApiCallError('anything at all', undefined, 'work_product_unavailable', 'answered');
     expect(refusalOf(error)).toEqual({ kind: 'refused', refusal: 'unavailable' });
   });
 
@@ -54,6 +54,7 @@ describe('by code, not by message', () => {
       'The worktree moved and was then removed.',
       undefined,
       'work_product_unavailable',
+      'answered',
     );
     expect(refusalOf(error)).toEqual({ kind: 'refused', refusal: 'unavailable' });
   });
@@ -61,13 +62,15 @@ describe('by code, not by message', () => {
   it('does not invent a refusal for an error that carried no code', () => {
     // A proxy 502 is not a removed worktree. Collapsing them would put a confident
     // explanation on a fault nobody diagnosed.
-    const result = refusalOf(new ApiCallError('The runner answered 502.'));
+    const result = refusalOf(new ApiCallError('The runner answered 502.', undefined, undefined, 'answered'));
     expect(result.kind).toBe('failed');
     expect(result.kind === 'failed' && result.message).toBe('The runner answered 502.');
   });
 
   it('keeps the runner’s hint, which is the half written for a human on a phone', () => {
-    const result = refusalOf(new ApiCallError('Something failed.', 'Try again in a minute.'));
+    const result = refusalOf(
+      new ApiCallError('Something failed.', 'Try again in a minute.', undefined, 'answered'),
+    );
     expect(result.kind === 'failed' && result.message).toBe('Something failed. Try again in a minute.');
   });
 

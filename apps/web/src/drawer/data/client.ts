@@ -41,44 +41,23 @@ import {
 import { NO_PROJECT_SENTENCE, projectApiUrl } from '@/components/shell/useSearchIndex';
 import { API_BASE } from '../run/transport';
 import type { ComposableLevel } from '../threads/mailbox';
+import { ApiCallError } from './failure';
 import { normalizeAgentDoc, normalizeRuns } from './normalize';
 import type { AgentDoc, RunRow } from './types';
 
-export interface ApiFailure {
-  message: string;
-  hint?: string;
-}
-
-export class ApiCallError extends Error {
-  readonly hint?: string;
-  /**
-   * The runner's own `ApiErrorCode`, when it sent one.
-   *
-   * Added for M17: the diff screen has to tell `work_product_moved` (409) from
-   * `work_product_unavailable` (410), and those are two completely different pieces of
-   * news for the reader — *the tree changed under you, load it again* versus *the tree is
-   * gone and there is nothing left to read*. Deciding that from the message string would
-   * be a substring claim, which is the failure family this repo keeps paying for; the code
-   * is the field the contract put there for it.
-   *
-   * `undefined` when the runner sent no JSON body (a proxy 502, a transport failure). That
-   * is not a code and must not be turned into one.
-   */
-  readonly code?: string;
-  constructor(message: string, hint?: string, code?: string) {
-    super(message);
-    this.name = 'ApiCallError';
-    this.hint = hint;
-    this.code = code;
-  }
-}
+/**
+ * `ApiCallError` and its `reach` live in `./failure`, which also turns one into the four
+ * shapes of news a section can render. Re-exported here because every caller in the drawer
+ * already imports its failures from this module and there is no reason to move them.
+ */
+export { ApiCallError, type Reach } from './failure';
 
 async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, { signal, headers: { accept: 'application/json' } });
   } catch {
-    throw new ApiCallError('Could not reach the runner.');
+    throw new ApiCallError('Could not reach the runner.', undefined, undefined, 'no-answer');
   }
   if (!response.ok) {
     let message = `The runner answered ${response.status}.`;
@@ -94,7 +73,7 @@ async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
     } catch {
       /* keep the status-line message */
     }
-    throw new ApiCallError(message, hint, code);
+    throw new ApiCallError(message, hint, code, 'answered');
   }
   return response.json();
 }
@@ -108,7 +87,7 @@ async function postJson(path: string, payload: unknown): Promise<unknown> {
       body: JSON.stringify(payload),
     });
   } catch {
-    throw new ApiCallError('Could not reach the runner.');
+    throw new ApiCallError('Could not reach the runner.', undefined, undefined, 'no-answer');
   }
   if (!response.ok) {
     let message = `The runner answered ${response.status}.`;
@@ -124,7 +103,7 @@ async function postJson(path: string, payload: unknown): Promise<unknown> {
     } catch {
       /* keep the status-line message */
     }
-    throw new ApiCallError(message, hint, code);
+    throw new ApiCallError(message, hint, code, 'answered');
   }
   return response.json().catch(() => ({}));
 }
@@ -160,7 +139,9 @@ function slugPath(slug: string): string {
  */
 function scopedPath(template: string, project: string | null): string {
   const path = projectApiUrl(template, project);
-  if (path === null) throw new ApiCallError(NO_PROJECT_SENTENCE);
+  // `not-sent`: no request leaves the browser on this path, so nothing out there may be
+  // blamed for it. The three reaches are the whole reason `failureOf` can pick a lead-in.
+  if (path === null) throw new ApiCallError(NO_PROJECT_SENTENCE, undefined, undefined, 'not-sent');
   return path;
 }
 

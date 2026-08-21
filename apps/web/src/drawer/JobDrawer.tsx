@@ -23,6 +23,7 @@ import {
   postSchedule,
   postThreadMessage,
 } from './data/client';
+import { failureOf } from './data/failure';
 import { scheduleSentence } from './data/format';
 import { initialValues, toRunPayload, validateInputs, type InputValues } from './data/inputs';
 import { projectAgent, type DrawerModel } from './data/project';
@@ -36,7 +37,7 @@ import { useRunnerAvailability } from './run/useRunnerAvailability';
 import { AutonomyToggleRow, SkillCards } from './sections/ChartSections';
 import { BreaksIntoChips, BuildsOnChips, ToolChips } from './sections/Chips';
 import { DrawerHeader } from './sections/Header';
-import { InputsForm } from './sections/InputsForm';
+import { InputsForm, inputFieldId } from './sections/InputsForm';
 import { Ladder } from './sections/Ladder';
 import { LastRuns, type RunsState } from './sections/LastRuns';
 import { Paragraph, QuoteBox, WiredIntoList } from './sections/Prose';
@@ -102,6 +103,14 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
    */
   const [reviewFilter, setReviewFilter] = useState(false);
   const [reviewing, setReviewing] = useState<WorkProductSummary | null>(null);
+  /**
+   * The field `▶ Run` refused, waiting to be shown to the person who pressed it.
+   *
+   * Written by `onRun` and cleared by the effect that acts on it, so a second refusal of the
+   * same field still moves the reader — a plain "did it change" guard would move them once
+   * and then sit still while they pressed the button again.
+   */
+  const [refusedField, setRefusedField] = useState<string | null>(null);
 
   const workProducts: WorkProductsState = useWorkProducts(project, {
     enabled: Boolean(slug) && open,
@@ -164,7 +173,13 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        const failure = error instanceof ApiCallError ? error : new ApiCallError('This agent could not be loaded.');
+        // `answered`: the only way a non-`ApiCallError` reaches here is `normalizeAgentDoc`
+        // throwing on a body that already arrived, so something did reply. `getJson` owns
+        // every other outcome and labels its own.
+        const failure =
+          error instanceof ApiCallError
+            ? error
+            : new ApiCallError('This agent could not be loaded.', undefined, undefined, 'answered');
         setAgent({ kind: 'failed', message: failure.message, hint: failure.hint });
       });
     return () => controller.abort();
@@ -181,10 +196,12 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
       .then((rows) => setRuns({ kind: 'ready', rows }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setRuns({
-          kind: 'failed',
-          message: error instanceof Error ? error.message : 'The runs list could not be read.',
-        });
+        // `failureOf`, not `error.message`. This branch used to keep only the message and
+        // the section opened it with "Couldn't reach the runner" — so a 503
+        // `metrics_unavailable`, which is what this stack answers every time, was rendered
+        // as a network fault with the runner's own contradicting words after it. The hint
+        // was dropped on the floor here too.
+        setRuns({ kind: 'failed', failure: failureOf(error) });
       });
     return () => controller.abort();
   }, [slug, open, project]);
@@ -193,18 +210,50 @@ export function JobDrawer({ slug, side = 'left', open, onClose }: JobDrawerProps
     if (run.active || run.state.phase === 'done' || run.state.phase === 'error') setConsoleHeld(true);
   }, [run.active, run.state.phase]);
 
+  /**
+   * `▶ Run now`, and the two-screen gap it used to fail into.
+   *
+   * `INPUTS` is one of *our* additions to §2.3, and it sat **1,375px** below the button that
+   * feeds it — `▶ Run now` at y=303, the first required field at y=1,678 in an 1,782px scroll
+   * body, measured in Chrome at 1440×900. Nine spec sections in between. So the whole of this
+   * failure path wrote field errors onto a part of the page nobody was looking at: press a
+   * button, watch nothing happen, and there is no way to find out why without scrolling past
+   * the ladder. The section moved directly under the card (`RunBlock`), and this moves the
+   * reader to the first field that was actually refused.
+   *
+   * The first refused field is taken **in field order**, not in `Object.keys(errors)` order: a
+   * validator that reports out of order would otherwise send the reader to the second problem
+   * and let them find the first one themselves.
+   */
   const onRun = useCallback(() => {
     if (!slug || agent.kind !== 'ready') return;
     const { fields } = agent.model.inputs;
     const result = validateInputs(fields, values);
     if (!result.ok) {
       setErrors(result.errors);
+      setRefusedField(fields.find((field) => result.errors[field.key])?.key ?? null);
       return;
     }
     setErrors({});
+    setRefusedField(null);
     setConsoleHeld(true);
     run.start({ agent: slug, inputs: toRunPayload(fields, values) });
   }, [agent, run, slug, values]);
+
+  /**
+   * An effect and not a `requestAnimationFrame` inside the handler: the error paragraph this
+   * is scrolling to does not exist until React has committed `setErrors`, and an effect is the
+   * only place the DOM is guaranteed to be there. `scrollIntoView` is called optionally
+   * because jsdom does not implement it — the browser centres the field, the suite proves the
+   * focus moved, and neither instrument is asked for what it cannot see.
+   */
+  useEffect(() => {
+    if (refusedField === null) return;
+    const field = panelRef.current?.ownerDocument.getElementById(inputFieldId(refusedField));
+    field?.scrollIntoView?.({ block: 'center' });
+    field?.focus({ preventScroll: true });
+    setRefusedField(null);
+  }, [refusedField]);
 
   /**
    * §2.3 item 4's ⏰ Schedule, and the sentence it is allowed to say afterwards.
@@ -510,16 +559,18 @@ function MapAnatomy({
         closeLabel={t('drawer.action.close')}
       />
 
-      <SkillFileCard
-        fileCount={model.skillFileCount}
-        downloadHref={downloadHref}
+      <RunBlock
+        model={model}
         capabilities={capabilities}
-        schedule={model.schedule}
+        values={values}
+        errors={errors}
+        onChange={onChange}
         onRun={onRun}
         onSchedule={onSchedule}
         running={running}
         scheduleBusy={scheduleBusy}
         scheduleResult={scheduleResult}
+        downloadHref={downloadHref}
       />
 
       <Section label={t('drawer.section.breaksInto')} when={model.breaksInto.length > 0}>
@@ -542,24 +593,12 @@ function MapAnatomy({
       </Section>
 
       <Additions
-        model={model}
-        capabilities={capabilities}
-        values={values}
-        errors={errors}
-        onChange={onChange}
-        onRun={onRun}
-        onSchedule={onSchedule}
-        running={running}
-        scheduleBusy={scheduleBusy}
-        scheduleResult={scheduleResult}
-        downloadHref={downloadHref}
         runs={runs}
         workProducts={workProducts}
         reviewFilter={reviewFilter}
         onReviewFilter={onReviewFilter}
         onOpenDiff={onOpenDiff}
         threadHref={threadHref}
-        includeSkillCard={false}
       />
     </>
   );
@@ -629,7 +668,7 @@ function ChartAnatomy({
         <Paragraph text={model.howToRun ?? ''} />
       </Section>
 
-      <Additions
+      <RunBlock
         model={model}
         capabilities={capabilities}
         values={values}
@@ -641,19 +680,32 @@ function ChartAnatomy({
         scheduleBusy={scheduleBusy}
         scheduleResult={scheduleResult}
         downloadHref={downloadHref}
+      />
+
+      <Additions
         runs={runs}
         workProducts={workProducts}
         reviewFilter={reviewFilter}
         onReviewFilter={onReviewFilter}
         onOpenDiff={onOpenDiff}
         threadHref={threadHref}
-        includeSkillCard
       />
     </>
   );
 }
 
-function Additions({
+/**
+ * The button and the form it feeds, as one block, in both anatomies.
+ *
+ * `INPUTS` is ours, not §2.3's — items 1–10 are the spec's order and do not move — so its
+ * position was ours to choose, and it was chosen badly: nine sections and 1,375px below the
+ * `▶ Run now` it fills. Two drawers, one component set: the map places this at item 4, the
+ * chart places it where its own card already was, and neither owns a second copy of the pair.
+ *
+ * The section still collapses silently when an agent declares no `inputs:` — a card with an
+ * empty header under it would be worse than the distance was.
+ */
+function RunBlock({
   model,
   capabilities,
   values,
@@ -665,34 +717,62 @@ function Additions({
   scheduleBusy,
   scheduleResult,
   downloadHref,
+}: Pick<
+  AnatomyProps,
+  | 'model'
+  | 'capabilities'
+  | 'values'
+  | 'errors'
+  | 'onChange'
+  | 'onRun'
+  | 'onSchedule'
+  | 'running'
+  | 'scheduleBusy'
+  | 'scheduleResult'
+  | 'downloadHref'
+>) {
+  const hasInputs = model.inputs.fields.length > 0 || model.inputs.unsupported.length > 0;
+  return (
+    <>
+      <SkillFileCard
+        fileCount={model.skillFileCount}
+        downloadHref={downloadHref}
+        capabilities={capabilities}
+        schedule={model.schedule}
+        onRun={onRun}
+        onSchedule={onSchedule}
+        running={running}
+        scheduleBusy={scheduleBusy}
+        scheduleResult={scheduleResult}
+      />
+      <Section label={t('drawer.section.inputs')} when={hasInputs}>
+        <InputsForm
+          fields={model.inputs.fields}
+          unsupported={model.inputs.unsupported}
+          values={values}
+          errors={errors}
+          onChange={onChange}
+        />
+      </Section>
+    </>
+  );
+}
+
+function Additions({
   runs,
   workProducts,
   reviewFilter,
   onReviewFilter,
   onOpenDiff,
   threadHref,
-  includeSkillCard,
   // `provenance` is omitted, not passed and ignored: it belongs to the header and the
   // sections below it must not grow a second opinion about where the agent came from.
-}: Omit<AnatomyProps, 'titleId' | 'onClose' | 'provenance'> & { includeSkillCard: boolean }) {
-  const hasInputs = model.inputs.fields.length > 0 || model.inputs.unsupported.length > 0;
-
+}: Pick<
+  AnatomyProps,
+  'runs' | 'workProducts' | 'reviewFilter' | 'onReviewFilter' | 'onOpenDiff' | 'threadHref'
+>) {
   return (
     <>
-      {includeSkillCard ? (
-        <SkillFileCard
-          fileCount={model.skillFileCount}
-          downloadHref={downloadHref}
-          capabilities={capabilities}
-          schedule={model.schedule}
-          onRun={onRun}
-          onSchedule={onSchedule}
-          running={running}
-          scheduleBusy={scheduleBusy}
-          scheduleResult={scheduleResult}
-        />
-      ) : null}
-
       <Section label={t('drawer.section.lastRuns')}>
         <LastRuns state={runs} />
       </Section>
@@ -705,15 +785,6 @@ function Additions({
           onReviewFilter={onReviewFilter}
           onOpenDiff={onOpenDiff}
           threadHref={threadHref}
-        />
-      </Section>
-      <Section label={t('drawer.section.inputs')} when={hasInputs}>
-        <InputsForm
-          fields={model.inputs.fields}
-          unsupported={model.inputs.unsupported}
-          values={values}
-          errors={errors}
-          onChange={onChange}
         />
       </Section>
     </>

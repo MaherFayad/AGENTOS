@@ -236,6 +236,22 @@ export const en = {
   'drawer.empty.loading': 'Loading this agent…',
   'drawer.empty.missing': 'This agent could not be loaded.',
 
+  /* The three lead-ins a failed section may use, and the reason there are three.
+   *
+   * Both `LAST RUNS` and `WORK PRODUCTS` used to open with the `unreachable` sentence for
+   * every failure. On this stack the runner ANSWERS — 503 `metrics_unavailable`,
+   * 503 `thread_store_unavailable` — so the drawer asserted a network fault and then
+   * printed the runner's own words under it. `drawer/data/failure.ts` carries the account.
+   *
+   * There is deliberately no fourth key for "the address names no project": that refusal is
+   * already a complete sentence (`NO_PROJECT_SENTENCE`) and nothing out there failed, so it
+   * renders alone. */
+  'drawer.failure.unreachable': 'Could not reach the runner, so this list is empty rather than wrong.',
+  'drawer.failure.refused':
+    'The runner answered, but it could not produce this list. Nothing is shown rather than something invented.',
+  'drawer.failure.unreadable':
+    'The runner answered, but not in a shape this build could read. Nothing is shown rather than something invented.',
+
   /* Provenance the drawer does not have (`Plan §23.6`, ADR-014).
    *
    * The five states of `provenance.badge.*` are answers; this is the admission
@@ -689,13 +705,10 @@ export const en = {
   'work.empty':
     'No run has left a work product behind. Nothing has executed and no project has a repository checked out, so this list is empty rather than filtered.',
   'work.emptyReview': 'Nothing is waiting for review.',
-  'work.failed': 'Could not reach the runner, so this list is empty rather than wrong.',
-  /* Reached, and answered with something that is not a list. Distinct from `work.failed` on
-     purpose: "could not reach" and "answered wrongly" send a reader to different places, and
-     a shape mismatch that renders as a network problem wastes the hour spent looking at the
-     network. Nothing is invented to fill the gap. */
-  'work.unreadable':
-    'The runner answered, but not with a list of work products. Nothing is shown rather than something invented.',
+  /* `work.failed` and `work.unreadable` retired here and moved to `drawer.failure.*`. They
+     were right, and they were WORK PRODUCTS' alone — LAST RUNS carried its own uncatalogued
+     copies of the same two sentences and got the branch wrong. One set of keys, one
+     component (`sections/FailureNote.tsx`), both sections, both anatomies. */
   'work.commits': { one: '{count} commit', other: '{count} commits' },
   'work.files': { one: '{count} file', other: '{count} files' },
   'work.lines': '+{insertions} −{deletions}',

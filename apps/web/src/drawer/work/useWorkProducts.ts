@@ -13,9 +13,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { DEFAULT_LOCALE, translate } from '@/i18n';
 import type { WorkProductListResponse } from '@agnetos/contracts';
-import { ApiCallError, fetchWorkProducts } from '../data/client';
+import { fetchWorkProducts } from '../data/client';
+import { failureOf } from '../data/failure';
 import type { WorkProductsState } from './WorkProducts';
 
 /**
@@ -33,7 +33,7 @@ import type { WorkProductsState } from './WorkProducts';
  */
 export function readList(response: WorkProductListResponse): WorkProductsState {
   if (!Array.isArray(response?.workProducts)) {
-    return { kind: 'failed', message: translate(DEFAULT_LOCALE, 'work.unreadable') };
+    return { kind: 'failed', failure: { kind: 'unreadable', detail: null } };
   }
   return {
     kind: 'ready',
@@ -65,14 +65,10 @@ export function useWorkProducts(
       .then((response) => setState(readList(response)))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        // The runner's own sentence, or nothing. `work.failed` is the catalogued half and
-        // the component always renders it; appending an English fallback here would put
-        // untranslatable copy on an Arabic screen for a fault that already has a sentence.
-        setState({
-          kind: 'failed',
-          message:
-            error instanceof ApiCallError ? [error.message, error.hint].filter(Boolean).join(' ') : '',
-        });
+        // `failureOf` picks which of the four this is; the lead-in is catalogued and the
+        // detail is the runner's own words. Nothing English is composed here, so an Arabic
+        // screen shows an Arabic sentence for a fault that has one.
+        setState({ kind: 'failed', failure: failureOf(error) });
       });
     return () => controller.abort();
   }, [project, enabled, review]);

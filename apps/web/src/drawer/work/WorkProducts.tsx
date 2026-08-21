@@ -8,8 +8,12 @@
  * `ops.review` and there will not be one (§5.2). A roster assembled from one route per row
  * is a spinner, and every part of it is individually correct so no test catches it (§7).
  *
- * **The empty state is the state a human will actually see**, and it is written for that
- * rather than around it. Two preconditions are missing, not one: no agent run has ever
+ * **The empty state is written for the reader who will see it — and nobody has yet.** Every
+ * failure used to open with *"could not reach the runner"*, and this route is fronted by
+ * `requireThreadStore`, which answers **503 `thread_store_unavailable`** on a stack with no
+ * Postgres. So the sentence below is the one a person reaches the day the database is up, and
+ * not before; the lead-in fix does not change that, it only stops the drawer lying about why.
+ * It is written for that reader Two preconditions are missing, not one: no agent run has ever
  * executed, and no project has a checked-out repository a run could work in. So this list is
  * empty because nothing has happened — not because a filter narrowed it — and the sentence
  * says which. An honest empty state beats a plausible fake one (rule 9), and here the
@@ -26,7 +30,9 @@
 
 import { DEFAULT_LOCALE, translate, type StringKey, type Vars } from '@/i18n';
 import type { ThreadState, WorkProductSummary } from '@agnetos/contracts';
+import type { DrawerFailure } from '../data/failure';
 import s from '../drawer.module.css';
+import { FailureNote } from '../sections/FailureNote';
 import { RosterLine } from './RosterLine';
 
 const t = (key: StringKey, vars?: Vars): string => translate(DEFAULT_LOCALE, key, vars);
@@ -34,7 +40,8 @@ const t = (key: StringKey, vars?: Vars): string => translate(DEFAULT_LOCALE, key
 export type WorkProductsState =
   | { kind: 'loading' }
   | { kind: 'ready'; rows: WorkProductSummary[]; reviewQueue: boolean }
-  | { kind: 'failed'; message: string };
+  /** Four shapes, one component, shared with `LAST RUNS` — see `data/failure.ts`. */
+  | { kind: 'failed'; failure: DrawerFailure };
 
 export interface WorkProductsProps {
   state: WorkProductsState;
@@ -92,9 +99,7 @@ export function WorkProducts({
     return (
       <>
         {filters}
-        <p className={s.empty}>
-          {t('work.failed')} {state.message}
-        </p>
+        <FailureNote failure={state.failure} />
       </>
     );
   }

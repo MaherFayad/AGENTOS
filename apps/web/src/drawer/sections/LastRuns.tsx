@@ -9,22 +9,39 @@
  *
  * Every number here is a real number from a real run, or it is absent. There is no
  * placeholder row, no "—", and no zero standing in for "we don't know" (Part VII.3). The
- * three not-yet states are sentences someone wrote:
+ * The not-yet states are sentences someone wrote:
  *   loading   — "Looking for recent runs…"
  *   empty     — "No runs yet. …"
- *   failed    — "Couldn't reach the runner …"
+ *   failed    — one of four, chosen by what actually happened (`sections/FailureNote.tsx`).
+ *
+ * **The empty sentence above has never been on a screen.** It needs a ledger that answers,
+ * and every failure used to render as "couldn't reach the runner" regardless — including the
+ * 503 this build always returns. Fixing the branch does not make it reachable; a connected
+ * Postgres does. Said here so the next reader does not count it as shipped.
  *
  * Owner: drawer-engineer
  */
 
+import type { DrawerFailure } from '../data/failure';
 import { formatCost, formatDuration, relativeTime } from '../data/format';
 import type { RunRow } from '../data/types';
 import s from '../drawer.module.css';
+import { FailureNote } from './FailureNote';
 
 export type RunsState =
   | { kind: 'loading' }
   | { kind: 'ready'; rows: RunRow[] }
-  | { kind: 'failed'; message: string };
+  /**
+   * A failure, in the four shapes the drawer can tell apart — **not a message string**.
+   *
+   * This was `{ message: string }` and the component opened every one of them with
+   * *"Couldn't reach the runner"*. `GET /api/p/:project/metrics/runs` answers
+   * **503 `metrics_unavailable`** whenever the ledger is not `connected`, which is every
+   * moment of this build, so the one branch a person could actually reach was the one that
+   * named the wrong fault — and the runner's own sentence printed after it, contradicting
+   * it. `data/failure.ts` has the account.
+   */
+  | { kind: 'failed'; failure: DrawerFailure };
 
 /**
  * M8 NOTE — these are now **rendered** strings, not just `title` text. They moved into the
@@ -75,7 +92,7 @@ export function LastRuns({ state }: { state: RunsState }) {
   }
 
   if (state.kind === 'failed') {
-    return <p className={s.empty}>Couldn’t reach the runner, so this list is empty rather than wrong. {state.message}</p>;
+    return <FailureNote failure={state.failure} />;
   }
 
   if (state.rows.length === 0) {

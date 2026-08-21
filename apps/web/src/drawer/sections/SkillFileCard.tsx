@@ -8,7 +8,13 @@
  *
  * `Take it ↓` downloads the SKILL.md folder as a zip. ▶ Run now and Schedule are the
  * reason this product exists (§3.2), so they are never decorative: each is either wired or
- * disabled with the reason in its tooltip.
+ * disabled **with the reason rendered as text under the row**.
+ *
+ * It used to say "in its tooltip", and it did exactly that: a correct, specific sentence in a
+ * `title` and a 1×1 `sr-only` span. That reaches a hovering mouse and a screen reader and
+ * nobody else — not a phone, which §3.6 makes the point of this PWA, and not a keyboard, where
+ * `title` does not open on focus in any browser. `sections/InertReasons.tsx` carries the full
+ * account and the measurements.
  *
  * The Schedule glyph is a **lucide `Clock`**, not U+23F0. That codepoint has no
  * text-presentation variant, so every platform paints it as a full-colour emoji that no
@@ -25,6 +31,15 @@ import { Pill } from '../primitives';
 import { describeCron } from '../data/format';
 import type { Capabilities } from '../run/useRunnerAvailability';
 import s from '../drawer.module.css';
+import { InertReasonNotes, useInertReasons } from './InertReasons';
+
+/**
+ * Hoisted out of the `title=` it used to be typed into, so that one sentence can be both the
+ * hover text and the visible paragraph. Two spellings of a reason is one edit away from a
+ * tooltip and a note that disagree.
+ */
+const DOWNLOAD_REASON =
+  'The download route is not agreed with the runner yet, so this would 404. It turns on with GET /api/agents/:slug/download.';
 
 export function SkillFileCard({
   fileCount,
@@ -55,6 +70,17 @@ export function SkillFileCard({
 
   const runnerReady = capabilities.runner === 'ready';
   const inWords = describeCron(schedule);
+  const canDownload = capabilities.download && downloadHref !== null;
+  /**
+   * Two reasons, not one, and in the order the buttons appear. `Take it ↓` is disabled by an
+   * unagreed route; `▶ Run now` and `⏰ Schedule` by whatever `GET /api/status` said. They are
+   * separate facts with separate fixes, and one merged sentence would have said "the runner
+   * is down" about a button that stays disabled with it up.
+   */
+  const inert = useInertReasons([
+    canDownload ? null : DOWNLOAD_REASON,
+    runnerReady ? null : capabilities.reason,
+  ]);
 
   return (
     <div className={s.skillCard}>
@@ -78,7 +104,7 @@ export function SkillFileCard({
       ) : null}
 
       <div className={s.actions}>
-        {capabilities.download && downloadHref ? (
+        {canDownload ? (
           // A real <a download>, not a button with a click handler: it must survive
           // middle-click, right-click-save and a long-press on a phone. `Pill` is
           // button-only today (design-system-guardian owns it — an `as` prop is requested
@@ -87,13 +113,14 @@ export function SkillFileCard({
             Take it ↓
           </a>
         ) : (
-          <Pill
-            variant="secondary"
-            disabled
-            title="The download route is not agreed with the runner yet, so this would 404. It turns on with GET /api/agents/:slug/download."
-          >
-            Take it ↓
-          </Pill>
+          // The `title` stays for the mouse. What changed is that it is no longer the ONLY
+          // carrier: `aria-describedby` points at the visible paragraph below, which every
+          // reader gets — including the phone, which `title` has never reached.
+          <span className={s.disabledAction} title={DOWNLOAD_REASON}>
+            <Pill variant="secondary" disabled aria-describedby={inert.idFor(DOWNLOAD_REASON)}>
+              Take it ↓
+            </Pill>
+          </span>
         )}
 
         {runnerReady ? (
@@ -106,18 +133,14 @@ export function SkillFileCard({
             {running ? '▶ Running…' : '▶ Run now'}
           </Pill>
         ) : (
-          // Disabled Pill uses pointer-events-none, so the runner-down reason must live
-          // on a hoverable/focusable carrier — do not put title only on the disabled button.
-          <span
-            className={s.disabledAction}
-            title={capabilities.reason ?? undefined}
-            tabIndex={0}
-            aria-describedby="drawer-run-disabled-reason"
-          >
-            <span id="drawer-run-disabled-reason" className={s.srOnly}>
-              {capabilities.reason}
-            </span>
-            <Pill variant="primary" disabled>
+          // Disabled Pill sets pointer-events-none, so the hover text still needs a carrier.
+          // What the carrier no longer has is `tabIndex={0}`: it was there to make the reason
+          // reachable by keyboard, and it never was — `title` does not open on focus in any
+          // browser, so the only observable effect of that stop was that it existed. Measured
+          // with real Tab key events, not `.focus()`, which does not even match
+          // `:focus-visible`.
+          <span className={s.disabledAction} title={capabilities.reason ?? undefined}>
+            <Pill variant="primary" disabled aria-describedby={inert.idFor(capabilities.reason)}>
               ▶ Run now
             </Pill>
           </span>
@@ -133,21 +156,20 @@ export function SkillFileCard({
             Schedule
           </Pill>
         ) : (
-          <span
-            className={s.disabledAction}
-            title={capabilities.reason ?? undefined}
-            tabIndex={0}
-            aria-describedby="drawer-schedule-disabled-reason"
-          >
-            <span id="drawer-schedule-disabled-reason" className={s.srOnly}>
-              {capabilities.reason}
-            </span>
-            <Pill variant="secondary" disabled leading={<Clock size={12} aria-hidden="true" />}>
+          <span className={s.disabledAction} title={capabilities.reason ?? undefined}>
+            <Pill
+              variant="secondary"
+              disabled
+              aria-describedby={inert.idFor(capabilities.reason)}
+              leading={<Clock size={12} aria-hidden="true" />}
+            >
               Schedule
             </Pill>
           </span>
         )}
       </div>
+
+      <InertReasonNotes notes={inert.notes} />
 
       {editing && runnerReady ? (
         <div className={`${s.field} ${s.fieldBlock}`}>

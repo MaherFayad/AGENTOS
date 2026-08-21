@@ -15,13 +15,24 @@
 import type { InputField, InputValues, UnsupportedField } from '../data/inputs';
 import s from '../drawer.module.css';
 
+/**
+ * The one spelling of a generated field's DOM id.
+ *
+ * `▶ Run now` has to be able to move the reader to the first field it refused, and the only
+ * handle it has is this id. Two spellings of it is one rename away from a Run button that
+ * silently focuses nothing — the failure mode being fixed, rebuilt.
+ */
+export const INPUT_ID_PREFIX = 'drawer-input';
+export const inputFieldId = (key: string, prefix: string = INPUT_ID_PREFIX): string =>
+  `${prefix}-${key}`;
+
 export function InputsForm({
   fields,
   unsupported,
   values,
   errors,
   onChange,
-  idPrefix = 'drawer-input',
+  idPrefix = INPUT_ID_PREFIX,
 }: {
   fields: InputField[];
   unsupported: UnsupportedField[];
@@ -33,7 +44,7 @@ export function InputsForm({
   return (
     <div className={s.fields}>
       {fields.map((field) => {
-        const id = `${idPrefix}-${field.key}`;
+        const id = inputFieldId(field.key, idPrefix);
         const errorId = `${id}-error`;
         const error = errors[field.key];
         const shared = {
