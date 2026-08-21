@@ -1,30 +1,30 @@
 {
-  "version": "sha256:33ba6252a542bfce6859803ebaba49c1009126b4f9cbd0a3ed2dc2f89b1011ad",
-  "computedAt": "2026-08-15T16:42:36.290Z",
+  "version": "sha256:ad7b0cf5c05a95f8a31c14e3b281466efb8a0144b210a6f39836e6b550fa832f",
+  "computedAt": "2026-08-21T16:50:18.096Z",
   "positions": {
     "back-office/_anchor": {
-      "x": -262.4,
-      "y": -209.5
+      "x": -273.2,
+      "y": -147.5
     },
     "back-office/invoice-chaser": {
-      "x": -436.2,
-      "y": -348.7
+      "x": -442.5,
+      "y": -304.3
     },
     "back-office/invoice-chaser/ageing-builder": {
-      "x": -469.5,
-      "y": -411
+      "x": -467.9,
+      "y": -385.6
     },
     "back-office/invoice-chaser/escalation-ladder": {
-      "x": -504.3,
-      "y": -369.3
+      "x": -505.3,
+      "y": -344.4
     },
     "back-office/invoice-chaser/reminder-drafter": {
-      "x": -492.1,
-      "y": -394.4
+      "x": -490.8,
+      "y": -369.3
     },
     "customer/_anchor": {
-      "x": -329.9,
-      "y": 75.3
+      "x": -304.1,
+      "y": 119
     },
     "customer/support-triage": {
       "x": -557.2,
@@ -206,24 +206,124 @@
       "x": 307,
       "y": 547.2
     },
-    "sales/_anchor": {
-      "x": 0,
+    "product/_anchor": {
+      "x": -324.9,
+      "y": -326.2
+    },
+    "product/frontend-engineer": {
+      "x": -372.5,
+      "y": -505.8
+    },
+    "product/frontend-engineer/accessibility-pass": {
+      "x": -397.2,
+      "y": -571.1
+    },
+    "product/frontend-engineer/component-scaffolder": {
+      "x": -351.6,
+      "y": -571.4
+    },
+    "product/frontend-engineer/diff-narrator": {
+      "x": -331.4,
+      "y": -557.6
+    },
+    "product/frontend-engineer/state-wirer": {
+      "x": -433.3,
+      "y": -485.9
+    },
+    "product/frontend-engineer/token-conformer": {
+      "x": -374.4,
+      "y": -578.7
+    },
+    "product/product-designer": {
+      "x": -530.3,
+      "y": -515.5
+    },
+    "product/product-designer/component-auditor": {
+      "x": -585.4,
+      "y": -566.4
+    },
+    "product/product-designer/flow-mapper": {
+      "x": -600.1,
+      "y": -522.2
+    },
+    "product/product-designer/screen-speccer": {
+      "x": -544.1,
+      "y": -585.4
+    },
+    "product/product-designer/state-coverage-checker": {
+      "x": -598.2,
+      "y": -546.2
+    },
+    "product/product-designer/token-conformer": {
+      "x": -567.9,
+      "y": -583
+    },
+    "product/project-orchestrator": {
+      "x": -549.6,
+      "y": -404.4
+    },
+    "product/project-orchestrator/blocker-finder": {
+      "x": -620.7,
+      "y": -427.2
+    },
+    "product/project-orchestrator/brief-writer": {
+      "x": -618.9,
+      "y": -403.3
+    },
+    "product/project-orchestrator/dependency-sequencer": {
+      "x": -607.7,
+      "y": -447.4
+    },
+    "product/project-orchestrator/launch-checklist": {
+      "x": -615.4,
       "y": -379.5
     },
+    "product/project-orchestrator/scope-splitter": {
+      "x": -594.4,
+      "y": -354.2
+    },
+    "product/project-orchestrator/status-reporter": {
+      "x": -589.4,
+      "y": -462.9
+    },
+    "product/ux-researcher": {
+      "x": -436.7,
+      "y": -533.6
+    },
+    "product/ux-researcher/evidence-linker": {
+      "x": -454.4,
+      "y": -605.5
+    },
+    "product/ux-researcher/interview-guide-writer": {
+      "x": -490.4,
+      "y": -578
+    },
+    "product/ux-researcher/opportunity-ranker": {
+      "x": -477.3,
+      "y": -598.1
+    },
+    "product/ux-researcher/transcript-synthesiser": {
+      "x": -430.4,
+      "y": -605.1
+    },
+    "sales/_anchor": {
+      "x": 2.5,
+      "y": -378.7
+    },
     "sales/account-enrichment": {
-      "x": -30.2,
-      "y": -587.7
+      "x": -28.3,
+      "y": -587.6
     },
     "sales/account-enrichment/firmographic-appender": {
-      "x": -30.8,
+      "x": -28.8,
       "y": -661.2
     },
     "sales/account-enrichment/growth-signal-scorer": {
-      "x": -55.3,
-      "y": -660.3
+      "x": -52.7,
+      "y": -659.5
     },
     "sales/account-enrichment/tech-stack-detector": {
-      "x": -78.3,
+      "x": -73.9,
       "y": -645.8
     },
     "sales/database-mining": {
