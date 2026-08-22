@@ -292,9 +292,22 @@ export const ar: Catalog = {
     'الجلسة محسوبة على اشتراكك في Claude. أمّا عمليات تشغيل محادثة الوكيل فمحسوبة على مساحة المشغّل المحدودة بسقف. حسابان مختلفان.',
 
   'threads.group.agent': 'محادثات الوكلاء',
-  'threads.agent.unreadableTitle': 'غير قابلة للقراءة في هذه النسخة',
-  'threads.agent.unreadable':
-    'الناقص شيئان لا شيء واحد: المشغّل لا يقدّم مسارًا يسرد المحادثات، والجدول الذي كانت ستأتي منه لم يعمل قطّ على قاعدة بيانات حيّة. هذا غياب قراءة، لا عدد يساوي صفرًا.',
+  /* ADR-042 session: the thread list route landed, so `threads.agent.unreadable` — which
+     said no such route existed — is gone from both catalogues. These describe states that
+     can now actually occur. No plural key: see the English catalogue on why a label and a
+     bare numeral are used instead of an inflected count. */
+  'threads.agent.empty':
+    '\u2068لا توجد محادثات وكلاء بعد. وجّه واحدة أدناه — \u2068@design/product-designer\u2069 لوكيل واحد، أو \u2068#design\u2069 للقسم كله.\u2069',
+  'threads.agent.loading': 'جارٍ قراءة المحادثات…',
+  'threads.agent.notBuilt':
+    'الخادم لا يقدّم قائمة المحادثات على هذا الجهاز. لم يُفقد شيء — المحادثات مخزّنة في Postgres، وهذه مشكلة وصول لا محادثة مفقودة.',
+  'threads.agent.malformed':
+    'أجابت قائمة المحادثات بصيغة لا يعرفها هذا الإصدار. هذا اختلاف في العقد بين الخادم والتطبيق، وليس خطأً منك.',
+  'threads.agent.offline':
+    'تعذّر الوصول إلى الخادم، لذلك لا يمكن سرد محادثات الوكلاء. قد يكون هذا الجهاز خارج شبكة tailnet.',
+  'threads.agent.noProject': 'لم يُحدَّد أي مشروع، فلا توجد محادثات لعرضها.',
+  'threads.agent.turnsLabel': 'الأدوار',
+  'threads.agent.truncated': 'يُعرض \u2068{shown}\u2069 من \u2068{total}\u2069.',
 
   'threads.compose.label': 'محادثة جديدة',
   /* THE SIGIL RUN IS ISOLATED, AND THE PREVIOUS NOTE HERE WAS WRONG TWICE.
@@ -307,7 +320,7 @@ export const ar: Catalog = {
    * MEASURED IN CHROME, per character, with `Range.getBoundingClientRect()` —
    * not derived from UAX #9 and not assumed. Written bare, the visual line is:
    *
-   *     … أو اكتب من دون عنوان — sales/account-enrichment · #sales · @@sales@
+   *     … أو اكتب من دون عنوان — design/product-designer · #design · @@design@
    *
    * The leading `@` is a bidi-NEUTRAL at the start of the paragraph (sor = R),
    * so it takes the paragraph's own direction and detaches — it lands at the far
@@ -323,7 +336,7 @@ export const ar: Catalog = {
    * invisibly they are the characters a later editor deletes without seeing.
    * `i18n.test.ts` → "isolates a sigil that starts a Latin run" is the gate. */
   'threads.compose.placeholder':
-    '\u2068@sales/account-enrichment · #sales · @@sales\u2069 — أو اكتب من دون عنوان',
+    '\u2068@design/product-designer · #design · @@design\u2069 — أو اكتب من دون عنوان',
   'threads.compose.send': 'إرسال',
   'threads.compose.review': 'مراجعة الإرسال الجماعي',
   /* Nominal, not interrogative (§1.4: MSA labels stay noun-form). Its sibling in

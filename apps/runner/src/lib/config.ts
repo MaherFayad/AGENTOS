@@ -204,7 +204,7 @@ export function isAgentSlug(value: string): boolean {
 export function agentSkillPath(config: RunnerConfig, slug: string): string {
   if (!isAgentSlug(slug)) {
     throw new ApiError('bad_request', `"${slug}" is not a valid agent id.`, {
-      hint: 'Use department/agent-slug, exactly as it appears in the repo — for example sales/account-enrichment.',
+      hint: 'Use department/agent-slug, exactly as it appears in the repo — for example design/product-designer.',
     });
   }
   const path = join(config.agentsDir, slug, 'SKILL.md');

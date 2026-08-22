@@ -12,11 +12,18 @@
  *   SESSIONS       relay sessions, decrypted in this browser and nowhere else.
  *                  Real today. This is the screen that used to live at
  *                  `/sessions`, mounted here unchanged.
- *   AGENT THREADS  `ops.thread` rows. **Not readable in this build** — the runner
- *                  declares no collection route and the table has never met a
- *                  running Postgres. Said in as many words rather than drawn as an
- *                  empty list: an unreadable list and an empty one are different
- *                  claims and only one of them is true (BOARD rule 9).
+ *   AGENT THREADS  `ops.thread` rows, read from `GET /api/p/:project/threads`.
+ *                  **Readable as of the ADR-042 session**, when that route landed and
+ *                  `0008_threads.sql` met a running Postgres for the first time. Both
+ *                  halves of the old notice — "no collection route" and "no database
+ *                  that has ever run" — are now false, so the notice is gone rather
+ *                  than softened: a view explaining an absence that ended is the same
+ *                  defect as a view inventing data (BOARD rule 9), pointed backwards.
+ *
+ *                  What replaced it still distinguishes the four states the old
+ *                  sentence collapsed: loading, unreachable, drifted, and a real
+ *                  zero. `unknown` is not `zero`, and only one of those four is a
+ *                  count.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHY THE TWO GROUPS ARE MERGED IN THE BROWSER AND NEVER ON THE SERVER
@@ -44,16 +51,24 @@
  * ========================================================================== */
 
 import { useMemo } from 'react';
-import { useShell } from '@/components/shell';
+import Link from 'next/link';
+import { projectPath } from '@agnetos/contracts';
+import { useProjectSegment, useShell } from '@/components/shell';
+import { useEndpoint } from '@/components/shell/useEndpoint';
 import { useT } from '@/i18n';
 import { SessionsTab } from '@/sessions';
 import { AddressComposer } from './AddressComposer';
+import { parseThreadList, type ThreadList, type ThreadListRow } from './lib/list';
 import { rosterFrom } from './lib/roster';
 import s from './threads.module.css';
+
+/** Matches the drawer's LAST RUNS cadence — a thread list is not a live console. */
+const POLL_MS = 15_000;
 
 export function ThreadsView({ composeRequested = false }: { composeRequested?: boolean }): React.JSX.Element {
   const t = useT();
   const { search } = useShell();
+  const project = useProjectSegment();
 
   /**
    * Counted only when the index actually loaded.
@@ -67,6 +82,27 @@ export function ThreadsView({ composeRequested = false }: { composeRequested?: b
     () => rosterFrom(search.items, search.message === null && search.items.length > 0),
     [search.items, search.message],
   );
+
+  const url = useMemo(() => {
+    if (project === null) return null;
+    try {
+      return projectPath('/api/p/:project/threads', project);
+    } catch {
+      return null;
+    }
+  }, [project]);
+
+  const list = useEndpoint<ThreadList>(url, {
+    intervalMs: POLL_MS,
+    noTargetMessage: t('threads.agent.noProject'),
+    parse: parseThreadList,
+    // A 404 here is the runner not serving the route on THIS box — the route is declared
+    // in the contract, so it is a reachability fact, not a missing feature. Saying
+    // "not built" would send a reader to look for work that is already done.
+    notBuiltMessage: t('threads.agent.notBuilt'),
+    malformedMessage: t('threads.agent.malformed'),
+    offlineMessage: t('threads.agent.offline'),
+  });
 
   return (
     <div className={s.view}>
@@ -82,16 +118,56 @@ export function ThreadsView({ composeRequested = false }: { composeRequested?: b
               {t('threads.group.agent')}
             </span>
           </div>
-          {/* No fetch behind this. See `lib/threadListRoute.ts`: the runner
-              declares no collection route, and calling one that was never
-              declared would put a permanent 404 excuse into `smoke:browser`. The
-              sentence names BOTH reasons — no route, and no database that has ever
-              run — because fixing either alone leaves the list empty and the next
-              reader gets told a new story. */}
-          <p className={s.notice}>
-            <span className={s.noticeTitle}>{t('threads.agent.unreadableTitle')}</span>
-            {t('threads.agent.unreadable')}
-          </p>
+          {/* Four states, kept apart on purpose. The one that used to be missing is
+              the last: a real zero, which only the `ready` branch can produce, and
+              which reads differently from every failure above it. */}
+          {list.state === 'loading' && <p className={s.notice}>{t('threads.agent.loading')}</p>}
+          {list.state === 'unavailable' && <p className={s.notice}>{list.message}</p>}
+          {list.state === 'ready' && list.data.threads.length === 0 && (
+            <p className={s.notice}>{t('threads.agent.empty')}</p>
+          )}
+          {list.state === 'ready' && list.data.threads.length > 0 && (
+            <>
+              {/* `.rows` / `.row` / `.rowBody` are the classes this stylesheet already
+                  carries for exactly this list, hover and focus states included. Adding a
+                  parallel set would give the two thread groups two different row designs
+                  on one screen. */}
+              <ul className={s.rows}>
+                {list.data.threads.map((row: ThreadListRow) => (
+                  <li key={row.id}>
+                    <Link
+                      className={s.row}
+                      href={project === null ? '#' : `${projectPath('/p/:project/threads', project)}/${row.id}`}
+                    >
+                      <span className={s.rowBody}>
+                        {/* The address IS the label. No title, no first-message excerpt —
+                            `lib/list.ts` records why nothing a person typed crosses this
+                            boundary, and composing the label here is what
+                            `thread-model.md` §9.6 meant by "a label is a view concern". */}
+                        <span className={s.rowName}>{row.addressedTo}</span>
+                        <span className={s.rowMeta}>
+                          <span className={`u-label ${s.eyebrow}`}>{row.state}</span>
+                          {/* Decorative. `--ink-3` fails AA, so the contrast gate requires it be hidden
+                              from the accessibility tree rather than merely small. */}
+                          <span className={s.sep} aria-hidden="true">·</span>
+                          <span className={`u-label ${s.eyebrow}`}>{t('threads.agent.turnsLabel')}</span>
+                          <span>{row.messageCount}</span>
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {list.data.total > list.data.threads.length && (
+                <p className={s.notice}>
+                  {t('threads.agent.truncated', {
+                    shown: String(list.data.threads.length),
+                    total: String(list.data.total),
+                  })}
+                </p>
+              )}
+            </>
+          )}
         </section>
 
         <section className={s.group}>

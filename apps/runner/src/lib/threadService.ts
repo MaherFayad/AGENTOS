@@ -31,6 +31,7 @@ import {
   type ThreadDetail,
   type ThreadMessageRef,
   type ThreadSummary,
+  type ThreadListResponse,
 } from '@agnetos/contracts';
 import { ApiError, badRequest } from './errors.ts';
 import { MID_RUN_STEER } from './mailbox.ts';
@@ -38,7 +39,7 @@ import { listResolvedAgents } from './cascade.ts';
 import type { RunnerConfig } from './config.ts';
 import type { MountedProject } from './project.ts';
 import { appendMessage, createThread } from '../db/threads.ts';
-import { mailboxDepth, readMessages, readThread, type ThreadRow } from '../db/thread-reads.ts';
+import { listThreads, mailboxDepth, readMessages, readThread, type ThreadRow } from '../db/thread-reads.ts';
 import type { DbClient } from '../observability/types.ts';
 
 /**
@@ -287,7 +288,7 @@ export async function createThreadFromLine(
   request: CreateThreadRequest,
 ): Promise<CreateThreadResponse> {
   if (typeof request?.line !== 'string') {
-    throw badRequest('A thread needs a line.', 'Send {"line": "@sales/account-enrichment do the thing"}.');
+    throw badRequest('A thread needs a line.', 'Send {"line": "@design/product-designer do the thing"}.');
   }
 
   const parsed = parseThreadAddress(request.line);
@@ -459,6 +460,23 @@ export async function postThreadMessage(
 }
 
 /** `GET /api/p/:project/thread/:id`. */
+/** `GET /api/p/:project/threads`. Summaries only — see `listThreads` on what is not selected. */
+export async function readThreadList(
+  db: DbClient,
+  project: MountedProject,
+  limit?: number,
+): Promise<ThreadListResponse> {
+  const { threads, total } = await listThreads(db, project.id, limit);
+  return {
+    threads: threads.map((row) => ({
+      ...toSummary(row),
+      messageCount: row.messageCount,
+      lastActivityAt: row.lastActivityAt,
+    })),
+    total,
+  };
+}
+
 export async function readThreadDetail(
   db: DbClient,
   project: MountedProject,

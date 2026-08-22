@@ -101,7 +101,27 @@ const ROUTES = [
   // an HTML marker, and the cost of that choice is exactly this — a route added to one gate
   // is not covered by the other until someone copies it.
   '/p/agentos/threads',
-  '/p/agentos/threads/3f9a0000-0000-0000-0000-000000000000',
+  {
+    path: '/p/agentos/threads/3f9a0000-0000-0000-0000-000000000000',
+    /**
+     * **The one route here whose 404 is the answer, not the bug.**
+     *
+     * This id is fabricated on purpose: the route exists to prove the thread detail view
+     * renders its not-found state without throwing, and the only way to reach that state
+     * is to ask for a thread that is not there. Until the ADR-042 session the runner had
+     * no ledger, so the read came back 503 and `isBackendAbsence` excused it — the gate
+     * was passing this route for a reason that had nothing to do with what it tests.
+     * Connect a database and the honest answer arrives, and the honest answer is fatal
+     * under the file's own rule that *a 404 is a wrong URL*.
+     *
+     * Declared per-route rather than widened in `isBackendAbsence`, which is the whole
+     * point: excusing 404s globally would blind this gate to every genuinely wrong URL
+     * in the app, which is most of what it is for. The allowance is scoped to this path
+     * and to `/api/p/:project/thread/:id`, so a 404 from any *other* request made by
+     * this page still fails.
+     */
+    expect404: '/api/p/agentos/thread/',
+  },
   '/p/agentos/sessions',
   '/p/agentos/sessions/abc123',
   '/offline',
@@ -344,6 +364,21 @@ export function describeError(method, params) {
  * @param {string} line   a line from `describeError`
  * @param {string} base   the origin under test, e.g. `http://127.0.0.1:4401`
  */
+/**
+ * Is this the 404 a route explicitly declared it expects?
+ *
+ * Three conditions, all required, so the allowance cannot spread: the route declared a
+ * prefix, the failing request is a 404 (not a 5xx wearing the excuse), and the URL is on
+ * our own origin under exactly that prefix. A 404 from a different request on the same
+ * page is still a finding.
+ */
+export function isExpected404(line, base, expectPrefix) {
+  if (expectPrefix === null || expectPrefix === undefined) return false;
+  if (!line.startsWith('browser network error')) return false;
+  if (!/status of 404/.test(line)) return false;
+  return line.includes(`${base}${expectPrefix}`);
+}
+
 export function isBackendAbsence(line, base) {
   if (!line.startsWith('browser network error')) return false;
 
@@ -625,11 +660,17 @@ async function main() {
 
   let routesChecked = 0;
   let pathsObserved = 0;
-  for (const route of ROUTES) {
+  const expected404s = [];
+  for (const entry of ROUTES) {
+    // A route is a string, or `{path, expect404}` for the one case where an absent
+    // resource IS the subject of the test. Anything else stays fatal.
+    const route = typeof entry === 'string' ? entry : entry.path;
+    const expect404 = typeof entry === 'string' ? null : entry.expect404;
     const { errors, finalPath } = await visit(cdp, base + route, settleMs);
     routesChecked++;
     for (const e of errors) {
       if (isBackendAbsence(e, base)) backendGaps.push(`${route}\n    ${e}`);
+      else if (isExpected404(e, base, expect404)) expected404s.push(`${route}\n    ${e}`);
       else fail(`${route}\n    ${e}`);
     }
 
@@ -716,12 +757,26 @@ async function main() {
     for (const g of backendGaps) console.log(`  ${g}\n`);
   }
 
+  // Printed for the same reason the absences are, and on a pass as well as a fail:
+  // an allowance nobody sees is an allowance that grows. If this list ever holds a
+  // route you did not expect, the fix is to remove that route's `expect404`, not to
+  // stop printing it.
+  if (expected404s.length) {
+    console.log(
+      `\nExpected 404s — declared per route, not fatal (${expected404s.length}):\n` +
+        `  A route that names expect404 is testing a not-found state, so the 404 IS the\n` +
+        `  subject of the test. Every other 404 in this run stayed fatal.\n`,
+    );
+    for (const g of expected404s) console.log(`  ${g}\n`);
+  }
+
   if (findings.length === 0) {
     console.log(
       `Page errors  ${base}  [${browser.label}]\n` +
         `  ${routesChecked} routes loaded in a real browser · ${settleMs}ms settle after load ·\n` +
         `  no uncaught exceptions, no console.error, no browser-level errors` +
-        (backendGaps.length ? ` · ${backendGaps.length} backend absence(s) above` : ''),
+        (backendGaps.length ? ` · ${backendGaps.length} backend absence(s) above` : '') +
+        (expected404s.length ? ` · ${expected404s.length} expected 404(s) above` : ''),
     );
     // Say what the green covers when the backend was absent throughout.
     //

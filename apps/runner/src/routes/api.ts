@@ -32,6 +32,7 @@ import {
   postThreadMessage,
   readThreadDetail,
   requireThreadStore,
+  readThreadList,
 } from '../lib/threadService.ts';
 import { sendApiError } from './http.ts';
 import { registerMetricsRoutes } from './register-metrics.ts';
@@ -427,6 +428,28 @@ export async function registerApi(app: FastifyInstance, ctx: ApiContext): Promis
    * red anywhere. A route with no consumer is not a defect; a route with no consumer that
    * nobody wrote down is.
    */
+  /**
+   * The project's threads, newest activity first.
+   *
+   * Registered BEFORE `thread/:id` is not required here — the paths differ in their last
+   * segment (`/threads` vs `/thread/:id`), not in arity — but the two are deliberately kept
+   * adjacent so a reader sees that one serves summaries and the other serves bodies.
+   */
+  app.get(RUNNER_ROUTES.threads.path, async (request, reply) => {
+    try {
+      const project = projectOf(ctx, request);
+      const db = requireThreadStore(ctx.ledger.current()?.db ?? null);
+      const raw = (request.query as { limit?: string } | undefined)?.limit;
+      const limit = raw === undefined ? undefined : Number(raw);
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 500)) {
+        throw badRequest('limit must be an integer between 1 and 500.', `Got "${raw}".`);
+      }
+      return await readThreadList(db, project, limit);
+    } catch (err) {
+      return sendApiError(reply, err);
+    }
+  });
+
   app.get(RUNNER_ROUTES.thread.path, async (request, reply) => {
     try {
       const project = projectOf(ctx, request);

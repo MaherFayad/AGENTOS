@@ -120,6 +120,59 @@ export async function readThread(
 }
 
 /**
+ * Every thread in this project, newest activity first.
+ *
+ * ## What this deliberately does not select
+ *
+ * `THREAD_COLUMNS` and two aggregates. **No column from `ops.message` reaches the caller** —
+ * not `body`, not an excerpt, not a first line. `thread-model.md` §9.6 ruled that a thread
+ * label is a view concern precisely because deriving one server-side puts a copy of the
+ * highest-PII value in the database into every list payload, and a list payload is the one
+ * shape that gets logged, cached and pushed. The aggregates are a `count` and a `max(...)`
+ * of a timestamp: neither can carry a sentence somebody typed.
+ *
+ * ## Why the sort key is activity and not creation
+ *
+ * A thread matters because it moved. `COALESCE(max(m.created_at), t.created_at)` keeps a
+ * brand-new thread with no turns at the top where it belongs, rather than sorting it as
+ * `NULL` — which Postgres would place first or last depending on a `NULLS` clause nobody
+ * would remember to write.
+ *
+ * `project_id` is in the predicate rather than checked afterwards, for the same reason
+ * `readThread` does it: from outside its project a thread does not exist.
+ */
+export async function listThreads(
+  db: DbClient,
+  projectId: string,
+  limit = 100,
+): Promise<{ threads: Array<ThreadRow & { messageCount: number; lastActivityAt: string }>; total: number }> {
+  const { rows } = await db.query<RawThread & { message_count: string; last_activity_at: string; total: string }>(
+    `SELECT ${THREAD_COLUMNS.split(', ').map((c) => 't.' + c).join(', ')},
+            COUNT(m.id)                                        AS message_count,
+            COALESCE(MAX(m.created_at), t.created_at)          AS last_activity_at,
+            COUNT(*) OVER ()                                   AS total
+       FROM ops.thread t
+       LEFT JOIN ops.message m ON m.thread_id = t.id AND m.project_id = t.project_id
+      WHERE t.project_id = $1
+      GROUP BY t.id
+      ORDER BY COALESCE(MAX(m.created_at), t.created_at) DESC
+      LIMIT $2`,
+    [projectId, limit],
+  );
+  return {
+    threads: rows.map((row) => ({
+      ...toThread(row),
+      messageCount: Number(row.message_count),
+      lastActivityAt: new Date(row.last_activity_at).toISOString(),
+    })),
+    // `COUNT(*) OVER ()` counts the grouped rows, so it is the number of threads before
+    // LIMIT — not the number of messages. Zero rows means zero threads, and the caller
+    // gets 0 rather than a missing field it would have to guess at.
+    total: rows.length > 0 ? Number(rows[0]!.total) : 0,
+  };
+}
+
+/**
  * A thread's turns, oldest first.
  *
  * `limit` is a ceiling on how much conversation a single payload — or a single seeded

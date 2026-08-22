@@ -827,6 +827,38 @@ export interface PostThreadMessageResponse {
 }
 
 /** `GET /api/p/:project/thread/:id` — the thread and its turns, oldest first. */
+/**
+ * One row of `GET /api/p/:project/threads`.
+ *
+ * `ThreadSummary` and nothing else from the row, plus two counts the list needs and the
+ * detail route already computes per thread. **No `body`, no `title`, no first-message
+ * excerpt** — see `ThreadSummary` for why, and `RUNNER_ROUTES.threads` for why that decision
+ * survived the route landing rather than being traded away for a nicer list.
+ */
+export interface ThreadListItem extends ThreadSummary {
+  /** Turns in the thread. A count, never a preview. */
+  messageCount: number;
+  /**
+   * The newest turn's timestamp, or `createdAt` for a thread nobody has answered.
+   * This is the list's sort key: a thread is interesting because it moved, not because
+   * it was created.
+   */
+  lastActivityAt: string;
+}
+
+/**
+ * `GET /api/p/:project/threads` — the project's threads, newest activity first.
+ *
+ * Carries the ledger status for the same reason every other read does: an empty `threads`
+ * array means *no threads*, and a missing ledger means *no answer*, and a view that cannot
+ * tell those apart prints "0" over an outage (BOARD rule 9 — `unknown` is not `zero`).
+ */
+export interface ThreadListResponse {
+  threads: readonly ThreadListItem[];
+  /** Total matching threads before `limit`, so a truncated list can say it is truncated. */
+  total: number;
+}
+
 export interface ThreadDetail {
   thread: ThreadSummary;
   messages: Array<
@@ -1158,11 +1190,37 @@ export const RUNNER_ROUTES = {
 
   /**
    * Threads (ADR-023, `Plan §12`). Singular `thread` for one thread's sub-resources, which
-   * is the same shape `run/:runId/stream` already uses; the plural collection route is
-   * deliberately absent — see the runner spec's *Deliberately not done*.
+   * is the same shape `run/:runId/stream` already uses.
    */
   threadCreate: { method: 'POST', path: '/api/p/:project/thread', scope: 'project' },
   thread: { method: 'GET', path: '/api/p/:project/thread/:id', scope: 'project' },
+  /**
+   * **The collection route, absent since M16 on a reason that has now been met.**
+   *
+   * M16 recorded it as deliberately not done, and the reason was specific rather than a
+   * shrug: *"a list needs a label, and `thread-model.md` §9.6 answered that a label is a
+   * view concern — authoring one is a field nobody fills; deriving one puts a second copy of
+   * the highest-PII value in every list payload. Building the payload before its renderer
+   * exists produces a plausible spec."*
+   *
+   * Both halves are now settled, and neither by waiving the objection:
+   *
+   *   - **The label never enters the payload.** This route serves `ThreadSummary`, which
+   *     already carries no `title` and says at its own definition why. The list is addressed
+   *     by `addressedTo` and ordered by `lastActivityAt`; the *label* is composed by the view
+   *     out of fields it already has. §9.6's answer is honoured rather than routed around —
+   *     no message body crosses this boundary, so nothing here is a second copy of anything.
+   *   - **The renderer exists.** THREADS shipped in M16 and has been printing
+   *     `threads.agent.unreadable` since. `threads/lib/threadListRoute.ts` is a self-expiring
+   *     stub whose test asserts this route is absent *and names the view to wire when it
+   *     lands* — declaring it here is what turns that test red, on purpose.
+   *
+   * One half of that view's sentence is already false: it says the table "has never met a
+   * running database", and `ops.thread` now holds real rows on a migrated Postgres. A view
+   * explaining an absence that ended is the same defect running backwards, which is exactly
+   * what the stub was built to catch.
+   */
+  threads: { method: 'GET', path: '/api/p/:project/threads', scope: 'project' },
   /**
    * **`Plan §12` spells this `POST /api/thread/:id/message`, and that route cannot be
    * implemented — the correction is a consequence of an accepted decision, not a style

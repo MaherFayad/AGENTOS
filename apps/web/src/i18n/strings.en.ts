@@ -335,15 +335,36 @@ export const en = {
     'A session is billed to your Claude subscription. An agent thread’s runs are billed to the runner’s capped workspace. Two different pots.',
 
   'threads.group.agent': 'Agent threads',
-  'threads.agent.unreadableTitle': 'Not readable in this build',
+  /* The list route landed (ADR-042 session). `threads.agent.unreadable` described an
+     absence that has ended and is gone; these five describe states that can actually
+     occur now. `empty` is a real zero — the ledger answered and there are no threads —
+     and is worded so it cannot be mistaken for the old "unreadable". */
+  'threads.agent.empty':
+    'No agent threads yet. Address one below — @design/product-designer for a single agent, #design for the department.',
+  'threads.agent.loading': 'Reading threads…',
+  'threads.agent.notBuilt':
+    'The runner is not serving the thread list on this box. Nothing is lost — threads live in Postgres, and this is a reachability problem, not a missing thread.',
+  'threads.agent.malformed':
+    'The thread list answered with a shape this build does not recognise. That is a contract drift between the runner and this app, not something you did.',
+  'threads.agent.offline':
+    'Can’t reach the runner, so agent threads can’t be listed. This box may be off the tailnet.',
+  'threads.agent.noProject': 'No project is selected, so there are no threads to list.',
+  /* A count, never a preview of the turns — see lib/list.ts on why no message body
+     crosses this boundary.
+
+     Deliberately a LABEL plus a bare numeral rather than "{count} turns". A plural key
+     would be the first in either catalogue, and English's two classes oblige Arabic to
+     declare six (zero · one · two · few · many · other) — `i18n.test.ts` enforces exactly
+     that, and the dual is not the singular. A label and a numeral inflect in neither
+     language, and the rail-label + value pairing is already this design's idiom. */
+  'threads.agent.turnsLabel': 'Turns',
+  'threads.agent.truncated': 'Showing {shown} of {total}.',
   /* Deliberately NOT "no threads yet". Both halves are named because fixing
    * either one alone leaves this list empty, and the next reader would then be
    * told a new story about the same blank space. */
-  'threads.agent.unreadable':
-    'Two things are missing, not one: the runner serves no route that lists threads, and the table they would come from has never met a running database. This is an absence of a reading, not a count of zero.',
 
   'threads.compose.label': 'New thread',
-  'threads.compose.placeholder': '@sales/account-enrichment, #sales, @@sales — or just type',
+  'threads.compose.placeholder': '@design/product-designer, #design, @@design — or just type',
   'threads.compose.send': 'Send',
   /* `@@` never sends on submit; the button opens the confirm instead, and says so. */
   'threads.compose.review': 'Review fan-out',

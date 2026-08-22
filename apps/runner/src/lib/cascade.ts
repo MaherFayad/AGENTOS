@@ -344,7 +344,7 @@ export async function resolveForDispatch(
 ): Promise<DispatchAgent> {
   if (!isAgentSlug(slug)) {
     throw new ApiError('bad_request', `"${slug}" is not a valid agent id.`, {
-      hint: 'Use department/agent-slug, exactly as it appears in the repo — for example sales/account-enrichment.',
+      hint: 'Use department/agent-slug, exactly as it appears in the repo — for example design/product-designer.',
       retryable: false,
     });
   }

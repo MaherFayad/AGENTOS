@@ -13,7 +13,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { describeError, isBackendAbsence } from '../check-page-errors.mjs';
+import { describeError, isBackendAbsence, isExpected404 } from '../check-page-errors.mjs';
 
 const BASE = 'http://127.0.0.1:4401';
 
@@ -102,6 +102,47 @@ test('our own /api/ answering 5xx is a backend absence, not a failure', () => {
 test('a 404 stays fatal — that is a wrong URL, not an absent backend', () => {
   assert.equal(isBackendAbsence(networkLine(404, `${BASE}/api/p/agentos/threads`), BASE), false);
   assert.equal(isBackendAbsence(networkLine(403, `${BASE}/api/p/agentos/x`), BASE), false);
+});
+
+/* ------------------------------------------------------------------ *
+ * isExpected404 — the per-route allowance, and the four ways it must refuse
+ *
+ * One route in this gate asks for a thread id that is deliberately absent, because the
+ * only way to render a not-found state is to not find something. Before the ledger
+ * existed that read came back 503 and `isBackendAbsence` excused it, so the route was
+ * passing for a reason unrelated to what it tests. The allowance below replaces that
+ * accident with a declaration — and the value of a declaration is entirely in what it
+ * still refuses.
+ * ------------------------------------------------------------------ */
+
+const THREAD = '/api/p/agentos/thread/';
+
+test('a declared 404 on the declared prefix is allowed', () => {
+  const line = networkLine(404, `${BASE}${THREAD}3f9a0000-0000-0000-0000-000000000000`);
+  assert.equal(isExpected404(line, BASE, THREAD), true);
+});
+
+test('a route that declared nothing gets no allowance', () => {
+  const line = networkLine(404, `${BASE}${THREAD}3f9a0000`);
+  assert.equal(isExpected404(line, BASE, null), false);
+  assert.equal(isExpected404(line, BASE, undefined), false);
+});
+
+test('the allowance is scoped to its prefix — another 404 on the same page still fails', () => {
+  // The failure this prevents: one declared not-found turning the whole page into a
+  // 404-free zone, which is how an include-list becomes a blindfold.
+  assert.equal(isExpected404(networkLine(404, `${BASE}/api/p/agentos/agents`), BASE, THREAD), false);
+  assert.equal(isExpected404(networkLine(404, `${BASE}/_next/static/chunks/main.js`), BASE, THREAD), false);
+});
+
+test('the allowance is scoped to 404 — a 5xx cannot wear it', () => {
+  assert.equal(isExpected404(networkLine(503, `${BASE}${THREAD}abc`), BASE, THREAD), false);
+  assert.equal(isExpected404(networkLine(500, `${BASE}${THREAD}abc`), BASE, THREAD), false);
+});
+
+test('the allowance is scoped to our origin — another host cannot borrow the prefix', () => {
+  const line = networkLine(404, `https://cdn.example.com${THREAD}abc`);
+  assert.equal(isExpected404(line, BASE, THREAD), false);
 });
 
 test('a 5xx outside /api/ stays fatal', () => {
